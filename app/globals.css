@@ -42,3 +42,14 @@ h1, h2, h3 { font-weight: 480; letter-spacing: -0.01em; }
 .flash { animation: flash 1.8s ease-out; }
 @keyframes blink { 50% { opacity: .25; } }
 .live-dot { width: 7px; height: 7px; border-radius: 99px; background: var(--accent); display: inline-block; animation: blink 1.4s infinite; }
+
+/* Digital twin */
+.tw-label { font-size: 12px; line-height: 1.2; padding: 5px 10px; border-radius: 999px; white-space: nowrap; box-shadow: 0 6px 18px rgba(12,10,8,.18); user-select: none; }
+.tw-label b { font-weight: 560; }
+.tw-room { font-family: var(--font-mono), monospace; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: #6f675f; background: rgba(255,255,255,.75); padding: 1px 5px; border-radius: 3px; pointer-events: none; white-space: nowrap; }
+.tw-range { -webkit-appearance: none; appearance: none; background: transparent; height: 22px; cursor: pointer; }
+.tw-range::-webkit-slider-runnable-track { height: 2px; background: var(--line); }
+.tw-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 99px; background: var(--text); border: 3px solid #fff; box-shadow: 0 0 0 1px var(--text); margin-top: -6px; }
+.tw-range::-moz-range-track { height: 2px; background: var(--line); }
+.tw-range::-moz-range-thumb { width: 10px; height: 10px; border-radius: 99px; background: var(--text); border: 3px solid #fff; }
+details > summary::-webkit-details-marker { display: none; }
