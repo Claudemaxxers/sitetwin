@@ -58,6 +58,9 @@ def eintrag_zeile(
 ) -> Zeile:
     zeile = e.model_dump()
     bauteil = zeile.pop("bauteil", None)
+    zeile["taetigkeit"] = zeile.get("taetigkeit") or None
+    zeile["einheit"] = zeile.get("einheit") or None
+    zeile["menge"] = zeile.get("menge") or None
     zeile.update(
         projekt=projekt,
         quelle_hash=quelle["content_hash"],
@@ -88,7 +91,7 @@ def _ohne_llm(quelle: Zeile) -> list[Eintrag] | None:
             art="sonstiges",
             zusammenfassung="Sprachnachricht ohne Transkript, Inhalt unbekannt.",
             person=quelle.get("absender"), gewerk=None, top=None, raum=None, element=None,
-            lv_pos_nr=None, plan_nr=None, plan_index=None,
+            taetigkeit="", menge=0, einheit="", lv_pos_nr=None, plan_nr=None, plan_index=None,
             entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, konfidenz=0.0, unklar=True,
             rueckfrage="Sprachnachricht konnte nicht transkribiert werden – bitte Inhalt schriftlich nachreichen.",
         )]

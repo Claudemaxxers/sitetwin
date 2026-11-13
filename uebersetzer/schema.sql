@@ -376,16 +376,63 @@ from soll_aenderungen sa
 where sa.status = 'vorgeschlagen' or (sa.status = 'freigegeben' and sa.nachweis_status = 'fehlt');
 
 -- Einträge mit ihrer Rohquelle (Kanal, Absender, Anhang) für Zwilling und Timeline.
-create or replace view eintraege_mit_quelle with (security_invoker = true) as
+-- talona_tag = Tag im Project record von Talona (siehe TALONA.md §3).
+-- drop + create, weil sich e.* mit neuen Spalten in eintraege ändert.
+drop view if exists eintraege_mit_quelle;
+create view eintraege_mit_quelle with (security_invoker = true) as
 select
   e.*,
   q.typ         as quelle_typ,
   q.kanal       as quelle_kanal,
   q.absender    as quelle_absender,
   q.anhang_pfad as quelle_anhang_pfad,
-  q.text        as quelle_text
+  q.text        as quelle_text,
+  case e.art
+    when 'arbeit_erledigt' then 'Reported done'
+    when 'arbeit_geplant'  then 'Planned'
+    when 'abnahme'         then 'Verified'
+    when 'lieferung'       then 'Delivery'
+    when 'planaenderung'   then 'Change order'
+    when 'soll_aenderung'  then 'Change order'
+    when 'anweisung'       then 'Decided'
+    when 'freigabe'        then 'Decided'
+    when 'nachweis'        then 'Sign-off'
+    when 'behinderung'     then 'Issue'
+    when 'frage'           then 'Request'
+    when 'problem_behoben' then 'Fix reported'
+    else 'Progress'
+  end as talona_tag
 from eintraege e
 left join quellen q on q.content_hash = e.quelle_hash;
+
+-- "Check first" (Talona): was als Nächstes verdeckt wird (Wand zumachen/beplanken) und ob das sicher ist.
+--   At risk   = offenes Reihenfolge-Signal (Installation fehlt laut Plan)
+--   Resolved  = es gab ein Signal, inzwischen gelöst (Installation nachgeholt)
+--   Clear     = kein Signal
+create or replace view check_first with (security_invoker = true) as
+select
+  e.projekt,
+  e.id            as eintrag_id,
+  e.zeitpunkt,
+  e.art,                                   -- arbeit_geplant = angekündigt, arbeit_erledigt = schon zu
+  e.top, e.raum, e.element,
+  e.person, e.gewerk,
+  e.zusammenfassung,
+  case
+    when s.id is null then 'Clear'
+    when s.status = 'geloest' then 'Resolved'
+    else 'At risk'
+  end             as status,
+  s.id            as signal_id,
+  s.titel         as signal_titel,
+  s.zustaendig    as signal_zustaendig
+from eintraege e
+left join lateral (
+  select x.id, x.status, x.titel, x.zustaendig from signale x
+  where x.art = 'reihenfolge' and e.id = any(x.eintrag_ids)
+  order by x.erstellt_am desc limit 1
+) s on true
+where e.schritt = 'beplankung' and e.art in ('arbeit_geplant', 'arbeit_erledigt');
 
 -- ---------------------------------------------------------------------------
 -- Realtime: Zwilling bekommt Änderungen live (nur serverseitig mit Secret-Key,

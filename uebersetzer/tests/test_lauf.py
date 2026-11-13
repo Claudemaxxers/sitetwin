@@ -17,7 +17,7 @@ PROJEKT = "BV Simmering"
 def eintrag(**kw) -> Eintrag:
     basis = dict(
         art="arbeit_erledigt", zusammenfassung="x", person=None, gewerk=None, top=None, raum=None,
-        element=None, lv_pos_nr=None, plan_nr=None, plan_index=None,
+        element=None, taetigkeit="", menge=0, einheit="", lv_pos_nr=None, plan_nr=None, plan_index=None,
         entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, konfidenz=0.9, unklar=False, rueckfrage=None,
     )
     return Eintrag(**{**basis, **kw})
@@ -117,3 +117,12 @@ def test_zeitachse_enthaelt_nur_fruehere_datierte_quellen(db):
     assert achse and all(a["zeitpunkt"] and a["zeitpunkt"] <= q["zeitpunkt"] for a in achse)
     assert q not in achse
     assert len(zeitachse_vor(q, alle, 5)) == 5
+
+
+def test_leere_mehrkosten_felder_werden_null():
+    from uebersetzer.lauf import eintrag_zeile
+    q = {"content_hash": "h", "zeitpunkt": None}
+    leer = eintrag_zeile("P", q, 1, eintrag(), [])
+    assert leer["taetigkeit"] is None and leer["menge"] is None and leer["einheit"] is None
+    voll = eintrag_zeile("P", q, 1, eintrag(taetigkeit="Steckdosen setzen", menge=3, einheit="Stk"), [])
+    assert (voll["taetigkeit"], voll["menge"], voll["einheit"]) == ("Steckdosen setzen", 3, "Stk")
