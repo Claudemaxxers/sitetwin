@@ -39,8 +39,11 @@ class Eintrag(BaseModel):
     menge: Optional[float]
     einheit: Optional[str]
     lv_pos_nr: Optional[str] = Field(description="Passende LV-Position, nur wenn eindeutig.")
-    plan_nr: Optional[str]
-    plan_index: Optional[str] = Field(description="Plan-Index, nach dem gearbeitet wird oder der genannt ist, z. B. 'B'.")
+    plan_nr: Optional[str] = Field(description="Plan, nach dem gearbeitet wurde/wird, z. B. 'E-05'. Nur zusammen mit plan_index.")
+    plan_index: Optional[str] = Field(
+        description="NUR der Index, nach dem diese Arbeit ausgeführt wurde oder ausgeführt werden soll, z. B. 'B'. "
+        "Ein Plan, der nur erwähnt, ausgegeben oder für ungültig erklärt wird, gehört NICHT hierher (→ null)."
+    )
     entschieden_von: Optional[str] = Field(description="Bei Anweisungen und Planänderungen: wer hat es entschieden.")
     wartet_auf: Optional[str] = Field(description="Worauf/auf wen gewartet wird, z. B. 'Trockenbau', 'Freigabe GU'.")
     zitat: Optional[str] = Field(description="Die relevante Stelle aus der Quelle, wörtlich und kurz.")

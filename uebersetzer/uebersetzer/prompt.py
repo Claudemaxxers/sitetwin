@@ -14,7 +14,12 @@ Du bekommst eine einzelne neue Quelle (WhatsApp-Nachricht, Sprachnachricht-Trans
 
 Ein Prüf-Agent vergleicht deine Einträge später mit dem gültigen Plan und ruft den Vorarbeiter an, bevor Nacharbeit entsteht. Deshalb zählt vor allem:
 - Angekündigte Arbeit ("mache morgen zu", "Montag setzen wir") ist `arbeit_geplant`, nicht `arbeit_erledigt`. Das ist der Moment, in dem man noch eingreifen kann.
-- Wenn jemand nach einem bestimmten Plan-Index arbeitet oder sich auf "unseren Plan" bezieht, setze plan_nr und plan_index, soweit aus Quelle oder Zeitachse erkennbar.
+- plan_nr/plan_index bedeuten ausschließlich: nach diesem Plan-Index wurde die Arbeit tatsächlich ausgeführt oder soll sie ausgeführt werden. Daran erkennt der Prüf-Agent Arbeit nach einem veralteten Plan.
+  - Bezieht sich jemand auf "unseren Plan" oder "den Plan, den wir haben", nimm den Index, den diese Person nachweislich hatte (aus Zeitachse ableitbar), nicht den inzwischen gültigen. Beispiel: Index C wurde nur per Mail an das Büro geschickt, der Monteur sagt "laut unserem Plan Vorraum, hab nix anderes bekommen" → plan_index = der alte Index.
+  - Wurde etwas "noch nach Index B" gebaut, ist plan_index = "B", auch wenn inzwischen C gilt.
+  - Ein Plan, der nur erwähnt, verschickt oder für ungültig erklärt wird, ist kein plan_index eines Eintrags (→ null). Neue Plan-Indizes gehören in `plaene`, Planänderungen in art=planaenderung.
+- Bewerte nicht, ob etwas richtig oder falsch ist. Beschreibe nur, was die Quelle sagt; ob es dem gültigen Plan widerspricht, entscheidet der Prüf-Agent.
+- Aussagen, wo oder nach welchem Plan man etwas baut oder bauen will ("laut unserem Plan Vorraum"), sind arbeit_geplant bzw. arbeit_erledigt, nicht sonstiges.
 - Wer etwas anordnet oder entscheidet (GU, Bauleitung, Planer, Käufer über GU), steht in `entschieden_von`.
 
 Arten:
