@@ -25,13 +25,14 @@ Schnittstelle zwischen Ablage und Übersetzer ist die Tabelle `quellen` (`ablage
 
 - **Code-Freeze: Samstag 14.11., 15:00 scharf.** Späte Abgaben zählen nicht.
 - **Runde 1 (15:00–16:00, Talona-Jury):** bis 5 Minuten Live-Demo, 3 Minuten Fragen.
-- **Runde 2 (ab 16:00, nur Track-Sieger):** 4 Minuten Live-Demo, 2 Minuten Fragen.
-- **Abgabe pro Team:**
+- **Runde 2 (ab 16:00, nur Track-Sieger):** 4 Minuten Live-Demo, 2 Minuten Fragen. Externe Jury, die Track-Punkte zählen dort nicht mehr: Wirkung und Relevanz 30, technische Leistung 30, Innovation 20, Live-Demo und Pitch 20. Bei Gleichstand entscheidet die stärkere Live-Demo.
+- **Talona-Jury:** Kacper Nowakowski (auch Mentor) und Ignacy Ruszkowski.
+- **Abgabe pro Team, eine Abgabe über das Formular (Link auf Discord):**
   - Repository mit echtem README (Setup, Start, Umgebung, Architektur, Annahmen) und `.env.example`
   - 3-Minuten-Demo-Video, das die Lösung von Anfang bis Ende zeigt
   - schriftlicher Teil: Titel, Pitch in einem Satz, Team, Problem, Lösung, Tech-Stack, Links
   - optional: Live-Link, Pitch-Deck als PDF
-- **Talona-Sonderregel:** Das Repo ist **privat**, **keine MIT-Lizenz**, alle Arbeit gehört Talona. Keine `LICENSE`-Datei anlegen.
+- **Talona-Sonderregel:** Das Repo ist **privat**, **keine MIT-Lizenz**, alle Arbeit gehört Talona (ausschließliches Nutzungsrecht). Keine `LICENSE`-Datei anlegen. Teilnahme und Rolle darf man im Lebenslauf nennen.
 - **Die Jury muss den Code aus dem README starten können.** Sonst kostet es Punkte.
 - **Ehrlichkeit zählt:** gebaut schlägt versprochen, Simulationen kennzeichnen, Grenzen nennen. Ein simulierter Effekt ist keine Messung.
 - **Keine Secrets committen.** Zugangsdaten kommen nur über Discord und stehen nur in `.env`-Dateien.
