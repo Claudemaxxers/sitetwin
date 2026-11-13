@@ -66,6 +66,17 @@ Das Soll steht nicht nur im Plan: Auf der Baustelle wird umentschieden („Kelle
 
 Offene Aufgaben fürs Frontend liefert die Sicht **`offene_aufgaben`**: „Soll-Änderung bestätigen“ (vorgeschlagen) und „Schriftlichen Nachweis einreichen“ (freigegeben, Nachweis fehlt), mit `zustaendig`.
 
+## Sichten fürs Frontend (Abgleich mit `TALONA.md`)
+
+| Talona | Sicht / Tabelle |
+|---|---|
+| Project record (Zeile + Tag) | `eintraege_mit_quelle`, Spalte **`talona_tag`**: Reported done, Planned, Verified, Delivery, Change order, Decided, Sign-off, Issue, Request, Fix reported, Progress |
+| Changes, „No client sign-off“, „Photo needed“ | `soll_aenderungen` + **`offene_aufgaben`** (bestätigen / Nachweis einreichen) |
+| Alerts („If work is already built · Alert PM/SU“) | `signale` (+ Anruf über den Telefon-Agenten), Verlauf in `signal_verlauf` |
+| Check first („was morgen verdeckt wird“) | **`check_first`**: jede angekündigte/gemeldete Beplankung mit Status *At risk* (offenes Reihenfolge-Signal), *Resolved* oder *Clear* |
+| Sheets / Drawing | `plaene_aktuell`, Bauteile in `element_stand` |
+| Mehrkosten (lib/twin-model.ts) | `eintraege.taetigkeit`, `menge`, `einheit`, `lv_pos_nr` |
+
 ## Prüf-Agent (Schritt 4)
 
 `pruefung.py` prüft jeden neuen Eintrag gegen den gültigen Plan und legt **Signale** an, solange noch jemand eingreifen kann. `lauf` übersetzt und prüft in einem Durchgang; einzeln geht's mit:

@@ -89,6 +89,11 @@ class Eintrag(BaseModel):
     top: Optional[str] = Field(description="Exakt wie in der Liste der Tops, z. B. 'Top 5' oder 'TG'.")
     raum: Optional[str]
     element: Optional[str] = Field(description="Bauteil, z. B. 'Wohnungsverteiler', 'Deckenauslass', 'Steckdose'.")
+    # Für die Mehrkosten im Frontend (lib/twin-model.ts). Pflichtfelder statt optional, sonst wird das
+    # Ausgabeformat für Structured Outputs zu groß: leer = "" bzw. 0.
+    taetigkeit: str = Field(description="Normalisiert, z. B. 'Steckdosen setzen', 'Verteiler versetzen'. Sonst \"\".")
+    menge: float = Field(description="Menge, falls genannt (z. B. 3 Stück, 35 m, 6 h). Sonst 0.")
+    einheit: str = Field(description="Einheit zur Menge: Stk, lfm, m, h. Sonst \"\".")
     lv_pos_nr: Optional[str] = Field(description="Passende LV-Position, nur wenn eindeutig.")
     plan_nr: Optional[str] = Field(description="Plan, nach dem gearbeitet wurde/wird, z. B. 'E-05'. Nur zusammen mit plan_index.")
     plan_index: Optional[str] = Field(
