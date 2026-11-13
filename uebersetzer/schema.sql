@@ -141,6 +141,11 @@ create table if not exists eintraege (
 create index if not exists eintraege_projekt_zeit_idx on eintraege (projekt, zeitpunkt);
 create index if not exists eintraege_ort_idx on eintraege (projekt, top, raum);
 
+-- Prüf-Agent: wann dieser Eintrag geprüft wurde (null = noch nicht). Der Übersetzer
+-- schreibt Einträge bei Neuverarbeitung neu → sie werden automatisch erneut geprüft.
+alter table eintraege add column if not exists geprueft_am timestamptz;
+create index if not exists eintraege_ungeprueft_idx on eintraege (projekt) where geprueft_am is null;
+
 -- ---------------------------------------------------------------------------
 -- Signale (Schritt 4 + Lebenszyklus aus KONZEPT.md)
 -- ---------------------------------------------------------------------------

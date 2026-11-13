@@ -78,10 +78,39 @@ def _ausgabe(bericht: Bericht) -> None:
         )
 
 
-def cmd_lauf(args, k: konfig_mod.Konfig) -> None:
+def _supabase(k: konfig_mod.Konfig) -> SupabaseDB:
     if not (k.supabase_url and k.supabase_key):
         sys.exit("SUPABASE_URL und SUPABASE_SERVICE_KEY fehlen in uebersetzer/.env")
-    db = SupabaseDB(k.supabase_url, k.supabase_key, k.bucket)
+    return SupabaseDB(k.supabase_url, k.supabase_key, k.bucket)
+
+
+def _claude_pruefer(k: konfig_mod.Konfig):
+    import anthropic
+
+    from .pruefung import pruefe_mit_claude
+
+    client = anthropic.Anthropic()
+    return lambda system, messages: pruefe_mit_claude(client, k.modell, k.effort, system, messages)
+
+
+def _pruef_ausgabe(b) -> None:
+    print(
+        f"\nPrüf-Agent: {b.eintraege} Einträge geprüft · neue Signale: {len(b.neu)} · ergänzt: {b.ergaenzt} · "
+        f"wieder offen: {b.wieder_offen} · gelöst: {len(b.geloest)} · Claude-Prüfungen: {b.claude_aufrufe} · Fehler: {len(b.fehler)}"
+    )
+    for s in b.neu:
+        print("  ⚑", s)
+    for s in b.geloest:
+        print("  ✓", s)
+    for f in b.fehler:
+        print("  ✗", f)
+
+
+def cmd_lauf(args, k: konfig_mod.Konfig) -> None:
+    """Übersetzen und danach prüfen – die ganze Kette für die Demo."""
+    from .pruefung import pruefe
+
+    db = _supabase(k)
     aufrufe = _claude_aufrufe(db, args.projekt)
     if aufrufe:
         _kostensperre(args, aufrufe)
@@ -89,9 +118,63 @@ def cmd_lauf(args, k: konfig_mod.Konfig) -> None:
         print("Keine neuen Quellen, die Claude brauchen.")
     if not args.mit_claude and args.dauerhaft:
         sys.exit("Kostensperre: --dauerhaft nur zusammen mit --mit-claude.")
-    extrahierer = _claude_extrahierer(k)
+    extrahierer = _claude_extrahierer(k) if args.mit_claude else None
+    pruefer = _claude_pruefer(k) if args.mit_claude else None
     while True:
-        _ausgabe(verarbeite(db, extrahierer, args.projekt, k.kontext_quellen))
+        if extrahierer:
+            _ausgabe(verarbeite(db, extrahierer, args.projekt, k.kontext_quellen))
+        _pruef_ausgabe(pruefe(db, args.projekt, pruefer))
+        if not args.dauerhaft:
+            return
+        time.sleep(args.dauerhaft)
+
+
+class _NurLesen:
+    """Liest aus Supabase, schreibt nichts: Schreibzugriffe werden nur protokolliert."""
+
+    def __init__(self, db: SupabaseDB):
+        self._db = db
+        self._signale: list[dict] = []
+
+    def __getattr__(self, name):
+        return getattr(self._db, name)
+
+    def signale(self, projekt):
+        return self._db.signale(projekt) + [s for s in self._signale if s["projekt"] == projekt]
+
+    def signal_einfuegen(self, zeile):
+        neu = {"status": "offen", **zeile, "id": f"trocken-{len(self._signale)}"}
+        self._signale.append(neu)
+        return neu
+
+    def signal_aendern(self, signal_id, felder):
+        pass
+
+    def als_geprueft(self, ids):
+        pass
+
+
+def cmd_pruefen(args, k: konfig_mod.Konfig) -> None:
+    from .pruefung import PRUEF_ARTEN, pruefe
+
+    db = _supabase(k)
+    if args.trocken:
+        db = _NurLesen(db)
+        print("Trocken: es wird nichts in die Datenbank geschrieben.")
+    pruefer = None
+    if args.mit_claude:
+        from itertools import groupby
+
+        gruppen = sum(
+            1 for _, g in groupby(db.ungepruefte_eintraege(args.projekt), key=lambda e: e["quelle_hash"])
+            if any(e["art"] in PRUEF_ARTEN for e in g)
+        )
+        _kostensperre(args, gruppen)
+        pruefer = _claude_pruefer(k)
+    else:
+        print("Nur feste Regeln (kostenlos). Claude-Prüfung mit --mit-claude.")
+    while True:
+        _pruef_ausgabe(pruefe(db, args.projekt, pruefer))
         if not args.dauerhaft:
             return
         time.sleep(args.dauerhaft)
@@ -139,7 +222,7 @@ def cmd_trockenlauf(args, k: konfig_mod.Konfig) -> None:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    for laut in ("httpx", "httpcore", "anthropic"):
+    for laut in ("httpx", "httpx2", "httpcore", "httpcore2", "anthropic"):
         logging.getLogger(laut).setLevel(logging.WARNING)
     k = konfig_mod.laden()
 
@@ -150,13 +233,17 @@ def main() -> None:
     l.add_argument("--dauerhaft", type=int, metavar="SEK", help="in Schleife laufen, alle SEK Sekunden")
     t = sub.add_parser("trockenlauf", help="fake_data übersetzen, ohne in die DB zu schreiben")
     t.add_argument("--fake-data", default=str(REPO / "fake_data"))
-    for befehl in (l, t):  # HACKATHON-KOSTENSPERRE
+    pr = sub.add_parser("pruefen", help="Prüf-Agent: neue Einträge gegen den gültigen Plan prüfen, Signale anlegen")
+    pr.add_argument("--projekt")
+    pr.add_argument("--trocken", action="store_true", help="aus Supabase lesen, nichts schreiben")
+    pr.add_argument("--dauerhaft", type=int, metavar="SEK")
+    for befehl in (l, t, pr):  # HACKATHON-KOSTENSPERRE
         befehl.add_argument("--mit-claude", action="store_true", help="Claude wirklich aufrufen (kostet Geld)")
     t.add_argument("--limit", type=int, help="nur die ersten N datierten Quellen")
     t.add_argument("--json", help="Ergebnis zusätzlich als JSON speichern")
     args = p.parse_args()
 
-    {"lauf": cmd_lauf, "trockenlauf": cmd_trockenlauf}[args.cmd](args, k)
+    {"lauf": cmd_lauf, "trockenlauf": cmd_trockenlauf, "pruefen": cmd_pruefen}[args.cmd](args, k)
 
 
 if __name__ == "__main__":
