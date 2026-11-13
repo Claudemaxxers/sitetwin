@@ -23,6 +23,7 @@ class RegisterBericht:
     neu: int = 0
     aktualisiert: int = 0
     deaktiviert: int = 0
+    element_ids: list = None  # neu angelegte oder aktualisierte Bauteile (nur bei Soll-Änderungen gefüllt)
 
 
 def _top(top: str | None, bekannte: list[str]) -> str | None:
@@ -47,6 +48,13 @@ def soll_uebernehmen(
         neuester = max((e.get("soll_plan_index") or "" for e in vorhanden.values() if e.get("soll_plan_nr") == plan_nr), default="")
         if neuester > index:
             log.info("  Plan %s Index %s ist älter als bereits übernommener Index %s – ignoriert", plan_nr, index, neuester)
+            return bericht
+        schon_da = any(
+            e.get("soll_plan_nr") == plan_nr and e.get("soll_plan_index") == index and e.get("quelle_hash") != quelle_hash
+            for e in vorhanden.values()
+        )
+        if schon_da:
+            log.info("  Plan %s Index %s ist bereits aus einem anderen Dokument übernommen – ignoriert", plan_nr, index)
             return bericht
     in_diesem_plan: dict[str, Zeile] = {}
 
@@ -119,7 +127,7 @@ def soll_aenderungen_liste(aenderungen: list[Zeile]) -> str:
 def soll_aenderung_anwenden(db: DB, projekt: str, sa: Zeile, tops: list[str]) -> RegisterBericht:
     """Eine freigegebene Soll-Änderung ins Bauteil-Register übernehmen.
     Neue Bauteile bekommen soll_plan_nr = 'Änderung', entfallene werden soll_aktiv = false."""
-    bericht = RegisterBericht()
+    bericht = RegisterBericht(element_ids=[])
     vorhanden = {e["schluessel"]: e for e in db.elemente(projekt)}
     for s in sa.get("bauteile_neu") or []:
         el = SollElement.model_validate(s)
@@ -131,10 +139,12 @@ def soll_aenderung_anwenden(db: DB, projekt: str, sa: Zeile, tops: list[str]) ->
         }
         if schluessel in vorhanden:
             db.element_aendern(vorhanden[schluessel]["id"], felder)
+            vorhanden[schluessel].update(felder)
             bericht.aktualisiert += 1
         else:
             vorhanden[schluessel] = db.element_einfuegen({"projekt": projekt, "schluessel": schluessel, **felder})
             bericht.neu += 1
+        bericht.element_ids.append(vorhanden[schluessel]["id"])
     for schluessel in sa.get("bauteile_entfallen") or []:
         e = vorhanden.get(" ".join(schluessel.lower().split()))
         if e and e.get("soll_aktiv", True):

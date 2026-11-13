@@ -56,8 +56,10 @@ def ist_dokument(quelle: Zeile | None) -> bool:
 class SollAblauf:
     """Verarbeitet Einträge der Arten soll_aenderung, freigabe und nachweis eines Projekts."""
 
-    def __init__(self, db: DB, projekt: str, signale, quellen: dict[str, Zeile], tops: list[str], bericht):
+    def __init__(self, db: DB, projekt: str, signale, quellen: dict[str, Zeile], tops: list[str], bericht,
+                 alle_eintraege: list[Zeile] | None = None):
         self.db, self.projekt, self.signale, self.quellen, self.tops, self.bericht = db, projekt, signale, quellen, tops, bericht
+        self.alle = alle_eintraege if alle_eintraege is not None else []
         self.personen = db.personen(projekt)
         self.nach_schluessel = {a["schluessel"]: a for a in db.soll_aenderungen(projekt)}
 
@@ -83,11 +85,43 @@ class SollAblauf:
         sa.update(felder)
         rb = register.soll_aenderung_anwenden(self.db, self.projekt, sa, self.tops)
         self.bericht.soll.append(f"freigegeben: {sa['titel']} (Bauteile {rb.neu} neu, {rb.deaktiviert} entfallen)")
+        self._ist_nachtragen(rb.element_ids or [], sa)
         log.info("✓ Soll-Änderung freigegeben: %s", sa["titel"])
         for s in self._betroffene_signale(sa, e):
             self.signale.loesen(s, e, "Soll-Änderung von der Bauleitung freigegeben")
         if sa.get("nachweis_status") != "vorhanden":
             log.info("  → offene Aufgabe: schriftlicher Nachweis fehlt")
+
+    def _ist_nachtragen(self, element_ids: list[str], sa: Zeile) -> None:
+        """Meldungen, die vor dem Anlegen des Bauteils übersetzt wurden ("3 Stk zusätzlich gesetzt"), nachträglich
+        zuordnen: gleiches Top und gleicher Raum, ab der Soll-Änderung, eindeutig ein neues Bauteil dort."""
+        neue = [x for x in self.db.elemente(self.projekt) if x["id"] in set(element_ids)]
+        for el in neue:
+            gleicher_ort = [x for x in neue if _norm(x.get("top")) == _norm(el.get("top")) and _norm(x.get("raum")) == _norm(el.get("raum"))]
+            if len(gleicher_ort) != 1:
+                continue
+            for e in self.alle:
+                if (
+                    not e.get("element_id") and e.get("schritt") and e["art"] in ("arbeit_erledigt", "arbeit_geplant")
+                    and _norm(e.get("top")) == _norm(el.get("top")) and _norm(e.get("raum")) == _norm(el.get("raum"))
+                    and str(e.get("zeitpunkt") or "") >= str(sa.get("vorgeschlagen_am") or "")
+                ):
+                    self.db.eintrag_element_setzen(e["id"], el["id"])
+                    e["element_id"] = el["id"]
+                    log.info("  Meldung nachträglich zugeordnet: %s → %s", e["zusammenfassung"][:60], el["bezeichnung"])
+
+    def _gleiche_aenderung(self, e: Zeile) -> Zeile | None:
+        """Bereits erfasste Soll-Änderung am selben Ort (z. B. Anordnung GU + "ok machen wir" des Vorarbeiters)."""
+        if not e.get("top"):
+            return None
+        for a in self.nach_schluessel.values():
+            if a["status"] == "abgelehnt" or _norm(a.get("top")) != _norm(e.get("top")):
+                continue
+            if e.get("raum") and a.get("raum") and _norm(a["raum"]) == _norm(e["raum"]):
+                return a
+            if e.get("element_id") and e["element_id"] in (a.get("element_ids") or []):
+                return a
+        return None
 
     # --- Arten ------------------------------------------------------------------
     def verarbeiten(self, e: Zeile) -> None:
@@ -100,6 +134,13 @@ class SollAblauf:
         if e["art"] == "soll_aenderung":
             schluessel = f"sa|{e['quelle_hash']}|{e['nr']}"
             if schluessel in self.nach_schluessel:
+                return
+            gleich = self._gleiche_aenderung(e)
+            if gleich:
+                if berechtigt and gleich["status"] == "vorgeschlagen":
+                    self._freigeben(gleich, e, quelle)  # Bauleitung bestätigt eine vorgeschlagene Änderung
+                else:
+                    log.info("  Soll-Änderung am selben Ort schon erfasst (%s) – keine zweite", gleich["titel"])
                 return
             elemente = {x["schluessel"]: x["id"] for x in self.db.elemente(self.projekt)}
             element_ids = [x for x in [e.get("element_id")] if x] + [

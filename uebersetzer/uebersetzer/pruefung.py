@@ -286,8 +286,11 @@ def loest_bauteil_signal(signal: Zeile, e: Zeile, elemente: dict[str, Zeile], al
         return bool(betrifft and bereich and not offene_installation(bereich, ist_stand(alle, e.get("zeitpunkt"))))
     if signal["art"] == "plan_veraltet":
         alt, neu = elemente.get(el_id), elemente.get(e.get("element_id") or "")
+        fertig = e["art"] == "arbeit_erledigt" and e.get("schritt") in VOR_DEM_SCHLIESSEN.get((neu or {}).get("art"), set())
+        if alt and alt["art"] in ("verteiler", "dose", "auslass", "schalter"):
+            fertig = fertig and e.get("schritt") in ("gesetzt", "angeschlossen")  # Verrohrung allein reicht nicht
         return bool(
-            alt and neu and not alt.get("soll_aktiv", True) and neu.get("soll_aktiv", True)
+            fertig and alt and neu and not alt.get("soll_aktiv", True) and neu.get("soll_aktiv", True)
             and neu["id"] != alt["id"] and neu["art"] == alt["art"] and neu.get("top") == alt.get("top")
         )
     return False
@@ -344,6 +347,8 @@ Nicht melden (wird anderweitig erledigt oder ist keine Abweichung):
 - Arbeit nach einem veralteten Plan-Index (eigene feste Regel).
 - Unklare Nachrichten (eigene feste Regel).
 - Normaler Fortschritt, Lieferungen, Wartezeiten.
+- Termin- und Ablaufpläne allein ("Trockenbau ab Mittwoch", Protokoll-Termine): kein Signal, solange niemand konkret etwas baut, zumacht oder ankündigt.
+- Wände oder Räume schließen/zumachen/beplanken, obwohl Installation fehlt: prüft eine feste Regel anhand der Pläne – nicht melden.
 - Kosten, Aufträge, Angebote, Freigaben, Abrechnung, Regieberichte – das ist kaufmännisch, keine Abweichung auf der Baustelle.
 - Zusatz- oder Mehrleistungen, die GU, Bauleitung, Planer oder Käufer (über den GU) angeordnet haben – auch wenn Auftrag oder Angebot noch fehlen.
 - Dinge, die in den offenen Signalen schon gemeldet sind.
@@ -434,7 +439,11 @@ class _Signale:
             "eintrag_ids": list(dict.fromkeys([*(alt.get("eintrag_ids") or []), *ids])),
             "quelle_hashes": sorted({*(alt.get("quelle_hashes") or []), *hashes}),
         }
-        if felder["eintrag_ids"] == list(alt.get("eintrag_ids") or []) and alt["status"] != "geloest":
+        rang = {"mittel": 0, "hoch": 1, "kritisch": 2}
+        if rang.get(vorschlag.get("schwere"), 0) > rang.get(alt.get("schwere"), 0):
+            # Die schwerere Meldung beschreibt die Lage besser (z. B. "will Samstag zumachen" → noch Zeit zu handeln)
+            felder.update({k: vorschlag[k] for k in ("schwere", "titel", "begruendung", "anruf_text", "zustaendig") if vorschlag.get(k)})
+        if felder["eintrag_ids"] == list(alt.get("eintrag_ids") or []) and alt["status"] != "geloest" and "schwere" not in felder:
             return  # nichts Neues (z. B. erneute Prüfung)
         if alt["status"] == "geloest":
             felder.update(status="offen", geloest_am=None, geloest_durch=None)
@@ -470,7 +479,7 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
         eigene = [e for e in ungeprueft if e["projekt"] == projekt]
         tops = [t["top"] for t in db.stammdaten(projekt)[0]]
         quellen = {q["content_hash"]: q for q in db.projekt_quellen(projekt)}
-        soll_ablauf = SollAblauf(db, projekt, signale, quellen, tops, bericht)
+        soll_ablauf = SollAblauf(db, projekt, signale, quellen, tops, bericht, alle)
         personen = soll_ablauf.personen
 
         for quelle_hash, gruppe_iter in groupby(eigene, key=lambda e: e["quelle_hash"]):

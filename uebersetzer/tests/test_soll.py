@@ -130,3 +130,25 @@ def test_zweite_pruefung_legt_soll_aenderung_nicht_doppelt_an():
     db.eintraege[0]["geprueft_am"] = None
     pruefe(db, None, None)
     assert len(db.soll_liste) == 1
+
+
+def test_falle_f1_zusatzsteckdosen_top4_keine_dublette_und_kein_fehlalarm():
+    """Gesamtlauf 13.11.: GU ordnet 3 Zusatz-Steckdosen Top 4 Küche an (Soll-Änderung), Vorarbeiter sagt 'ok machen wir',
+    Monteur meldet 'gesetzt' (vor dem Anlegen des Bauteils übersetzt), Trockenbau will Montag zumachen → kein Signal."""
+    db = SpeicherDB([], [{"projekt": P, "top": "Top 4"}], [])
+    db.personen_liste = [dict(p) for p in PERSONEN]
+    neu = {"bezeichnung": "Steckdosen Arbeitsplatte zusätzlich", "art": "dose", "top": "Top 4", "raum": "Küche",
+           "lage": "h=110 cm", "anzahl": 3, "gehoert_zu": None}
+    a = {**aenderung(), "titel": "3 zusätzliche Steckdosen Küche Top 4", "bauteile_neu": [neu], "bauteile_entfallen": []}
+    db.quellen = [quelle(f"h-{i}") for i in range(1, 5)]
+    db.eintraege = [
+        e("1", "2026-11-12T07:08:00+01:00", "soll_aenderung", "Thomas Meier (Krenn Bau)", a, top="Top 4", raum="Küche"),
+        e("2", "2026-11-12T07:10:00+01:00", "soll_aenderung", "Stefan Huber", a, top="Top 4", raum="Küche"),
+        e("3", "2026-11-12T13:05:00+01:00", "arbeit_erledigt", "Ali Demir", None, top="Top 4", raum="Küche", schritt="gesetzt"),
+        e("4", "2026-11-13T17:22:00+01:00", "arbeit_geplant", "Marko Novak", None, top="Top 4", raum="Küche", schritt="beplankung"),
+    ]
+    pruefe(db, None, None)
+    assert len(db.soll_liste) == 1 and db.soll_liste[0]["status"] == "freigegeben"
+    dose = next(x for x in db.elemente_liste if x["raum"] == "Küche")
+    assert db.eintraege[2]["element_id"] == dose["id"]  # nachträglich zugeordnet
+    assert db.signale_liste == []

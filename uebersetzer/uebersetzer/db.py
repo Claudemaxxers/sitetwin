@@ -46,6 +46,7 @@ class DB(Protocol):
     def soll_aenderungen(self, projekt: str) -> list[Zeile]: ...
     def soll_aenderung_einfuegen(self, zeile: Zeile) -> Zeile: ...
     def soll_aenderung_aendern(self, sa_id: str, felder: Zeile) -> None: ...
+    def eintrag_element_setzen(self, eintrag_id: str, element_id: str) -> None: ...
 
 
 def element_schluessel(top: str | None, raum: str | None, bezeichnung: str) -> str:
@@ -191,6 +192,9 @@ class SupabaseDB:
         felder = {**felder, "aktualisiert_am": datetime.now(timezone.utc).isoformat()}
         self.client.table("soll_aenderungen").update(felder).eq("id", sa_id).execute()
 
+    def eintrag_element_setzen(self, eintrag_id: str, element_id: str) -> None:
+        self.client.table("eintraege").update({"element_id": element_id}).eq("id", eintrag_id).execute()
+
     def als_geprueft(self, eintrag_ids: list[str]) -> None:
         from datetime import datetime, timezone
 
@@ -314,6 +318,11 @@ class SpeicherDB:
         for x in self.soll_liste:
             if x["id"] == sa_id:
                 x.update(felder)
+
+    def eintrag_element_setzen(self, eintrag_id: str, element_id: str) -> None:
+        for e in self.eintraege:
+            if e.get("id") == eintrag_id:
+                e["element_id"] = element_id
 
     def als_geprueft(self, eintrag_ids: list[str]) -> None:
         ids = set(eintrag_ids)

@@ -147,3 +147,34 @@ def test_szenario_wand_top5_abstellraum_ohne_wand_im_plan():
     assert s["anruf_text"].startswith("Servus Stefan") and "Wohnungsverteiler (Plan E-05 C)" in s["anruf_text"]
     assert "Marko Novak" in s["anruf_text"]
     assert s["status"] == "geloest" and s["geloest_durch"] == "4"  # 06:05 ("ziehen jetzt ein") löst noch nicht
+
+
+def test_gleicher_index_aus_zweitem_dokument_legt_keine_dubletten_an():
+    """Gesamtlauf 13.11.: Plan E-05 C kam als Drive-PDF und als Mail-Anhang, Claude benannte den Verteiler unterschiedlich."""
+    db = SpeicherDB([], [], [])
+    soll_uebernehmen(db, P, [soll("Wohnungsverteiler UP 3-reihig", "verteiler", raum="Abstellraum", top="Top 5")], plan("E-05", "C"), "drive", TOPS)
+    b = soll_uebernehmen(db, P, [soll("WV 3-reihig", "verteiler", raum="Abstellraum", top="Top 5")], plan("E-05", "C"), "mail", TOPS)
+    assert b.neu == 0 and len(db.elemente(P)) == 1
+
+
+def test_plan_veraltet_erst_geloest_wenn_ersatz_gesetzt_und_s1_wird_kritisch():
+    """Golden Set S1/S2: 06:05 'ziehen jetzt die Verrohrung ein' löst nichts, 06:52 'Verteilerkasten gesetzt' löst beide.
+    S1 entsteht um 17:19 ('eine Seite beplankt', hoch) und wird um 17:20 ('Samstag machen wir zu') kritisch."""
+    db = SpeicherDB([], [], [])
+    db.personen_liste = [{"projekt": P, "name": "Stefan Huber", "aliase": [], "firma": "Elektro Gruber GmbH", "rolle": "vorarbeiter", "darf_soll_aendern": False}]
+    soll_uebernehmen(db, P, [soll("Wohnungsverteiler", "verteiler", raum="Vorraum", top="Top 5")], plan("E-05", "B"), "hB", TOPS)
+    soll_uebernehmen(db, P, [soll("Wohnungsverteiler", "verteiler", raum="Abstellraum", top="Top 5")], plan("E-05", "C"), "hC", TOPS)
+    raum = {x["raum"]: x["id"] for x in db.elemente(P)}
+    db.eintraege = [
+        e("1", "2026-11-12T16:02:00+01:00", "arbeit_erledigt", raum["Vorraum"], "gesetzt", top="Top 5", raum="Vorraum", person="Stefan Huber"),
+        e("2", "2026-11-13T17:19:00+01:00", "arbeit_erledigt", None, "beplankung", top="Top 5", raum="Abstellraum", person="Marko Novak"),
+        e("3", "2026-11-13T17:20:00+01:00", "arbeit_geplant", None, "beplankung", top="Top 5", raum="Abstellraum", person="Marko Novak"),
+        e("4", "2026-11-14T06:05:00+01:00", "arbeit_erledigt", raum["Abstellraum"], "verrohrung", top="Top 5", raum="Abstellraum", person="Stefan Huber"),
+        e("5", "2026-11-14T06:52:00+01:00", "arbeit_erledigt", raum["Abstellraum"], "gesetzt", top="Top 5", raum="Abstellraum", person="Ali Demir"),
+    ]
+    pruefe(db, None, None)
+    nach_art = {s["art"]: s for s in db.signale_liste}
+    s2, s1 = nach_art["plan_veraltet"], nach_art["reihenfolge"]
+    assert s2["status"] == "geloest" and s2["geloest_durch"] == "5"
+    assert s1["schwere"] == "kritisch" and "noch Zeit" not in s1["anruf_text"] and "zumachen" in s1["anruf_text"]
+    assert s1["status"] == "geloest" and s1["geloest_durch"] == "5"
