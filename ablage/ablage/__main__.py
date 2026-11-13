@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from . import config, store
@@ -34,7 +35,33 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(__file__).resolve().parents[2] / "fake_data",
         help="Originale zum Abgleich; Ordner fehlt → Abgleich entfällt",
     )
+    zeig = sub.add_parser("zeige", help="die zuletzt importierten Zeilen aus quellen anzeigen")
+    zeig.add_argument("--projekt", default=cfg.default_projekt)
+    zeig.add_argument("--limit", type=int, default=10)
     args = parser.parse_args(argv)
+
+    if args.befehl == "zeige":
+        backend = store.supabase_backend()
+        zeilen = (
+            backend.client.table(store.TABELLE)
+            .select("zeitpunkt,typ,absender,anhang_typ,anhang_name,text,status,importiert_am")
+            .eq("projekt", args.projekt)
+            .order("importiert_am", desc=True)
+            .order("zeitpunkt", desc=True)
+            .limit(args.limit)
+            .execute()
+            .data
+        )
+        for z in reversed(zeilen):
+            zeit = ""
+            if z["zeitpunkt"]:
+                wert = datetime.fromisoformat(z["zeitpunkt"].replace("Z", "+00:00"))
+                zeit = wert.astimezone(cfg.tz).strftime("%d.%m.%y %H:%M")
+            anhang = f"[{z['anhang_typ']}: {z['anhang_name']}] " if z["anhang_typ"] else ""
+            text = " ".join((z["text"] or "").split())
+            print(f"{zeit:16} {z['typ']:8} {z['status']:11} {z['absender'] or '-'}: {anhang}{text[:90]}")
+        print(f"{len(zeilen)} Zeilen in Projekt '{args.projekt}'")
+        return 0
 
     if args.befehl == "audit":
         from . import audit

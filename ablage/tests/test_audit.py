@@ -17,7 +17,7 @@ def sauber():
     backend = store.FakeBackend()
     quelle = audit.originale(FAKE_DATA, CTX)
     ergebnis = store.speichern(quelle, backend)
-    assert ergebnis.neu == 53
+    assert ergebnis.neu == 64  # 53 Basis + 11 Szenario wand_top5
     return list(backend.zeilen.values()), dict(backend.dateien), quelle
 
 

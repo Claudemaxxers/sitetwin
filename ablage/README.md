@@ -25,6 +25,13 @@ Tabelle `quellen` (SQL in SPEC §5) und privater Bucket `ablage` müssen in Supa
 .venv\Scripts\python -m ablage import ordner   ..\fake_data\drive    --projekt "BV Simmering"
 .venv\Scripts\python -m ablage import call     ..\fake_data\calls    --projekt "BV Simmering"
 
+# Szenario "Wand Top 5" (Kernbeispiel aus KONZEPT.md) zusätzlich einspielen
+.venv\Scripts\python -m ablage import whatsapp ..\fake_data\szenarien\wand_top5\whatsapp --projekt "BV Simmering"
+.venv\Scripts\python -m ablage import call     ..\fake_data\szenarien\wand_top5\calls    --projekt "BV Simmering"
+
+# Die zuletzt importierten Zeilen ansehen
+.venv\Scripts\python -m ablage zeige --projekt "BV Simmering" --limit 10
+
 # Datenqualität von quellen + Bucket prüfen (liest nur, 22 Prüfungen, Abgleich mit ..\fake_data)
 .venv\Scripts\python -m ablage audit --projekt "BV Simmering"
 
@@ -40,6 +47,19 @@ curl.exe -X POST localhost:8000/import/call -H "Content-Type: application/json" 
 | `POST /import/whatsapp/nachricht` | eine Live-Nachricht (SPEC §7.5) | `wa_id` |
 
 Antwort jeweils `{"gelesen", "neu", "duplikate", "fehler"}`. Interaktive Doku: `http://localhost:8000/docs`.
+
+## Eigenen WhatsApp-Chat testen
+
+1. In WhatsApp einen Test-Chat öffnen (am besten eine neue Gruppe nur mit Testnachrichten) → Menü → **Chat exportieren → Medien einschließen**. Die `.zip` auf den Rechner legen.
+2. Erst ohne Schreiben prüfen, dann unter eigenem Projektnamen importieren und ansehen:
+
+```powershell
+.venv\Scripts\python -m ablage import whatsapp "C:\Pfad\WhatsApp Chat - Testgruppe.zip" --projekt "Test Santino" --dry-run
+.venv\Scripts\python -m ablage import whatsapp "C:\Pfad\WhatsApp Chat - Testgruppe.zip" --projekt "Test Santino"
+.venv\Scripts\python -m ablage zeige --projekt "Test Santino"
+```
+
+Gelesen werden Android- und iPhone-Exporte (`WhatsApp Chat mit ….txt` bzw. `_chat.txt` im Zip), deutsch und englisch. Sprachnachrichten landen als Datei im Bucket; `text` bleibt leer, solange keine Transkription läuft. Ein eigener Projektname hält die Testzeilen von „BV Simmering“ getrennt. Alles in `quellen` kann vom Übersetzer gelesen und an Claude geschickt werden, deshalb keine privaten Chats importieren.
 
 ## Architektur
 

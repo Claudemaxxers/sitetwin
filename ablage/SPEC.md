@@ -171,9 +171,10 @@ Adapter sind **reine Funktionen**: lesen Dateien, geben Items zurück, schreiben
 ### 7.1 WhatsApp (`adapters/whatsapp.py`)
 Input: Ordner mit Export + Mediendateien (flach oder in `media/`), oder `.zip` desselben.
 
-- Als Export zählt nur `WhatsApp Chat mit *.txt`. Andere `.txt`/`.md` im Ordner (Sidecars, `SPRACHNACHRICHTEN.md`) werden nicht geparst.
+- Als Export zählt nur `WhatsApp Chat mit *.txt` (englisch `… with *.txt`) und beim iPhone `_chat.txt`. Andere `.txt`/`.md` im Ordner (Sidecars, `SPRACHNACHRICHTEN.md`) werden nicht geparst.
 - **Android/DE-Format (Pflicht):** `DD.MM.YY, HH:MM - Absender: Text`
-- **iOS-Format (Stretch):** `[DD.MM.YY, HH:MM:SS] Absender: Text`
+- **iPhone-Format:** `[DD.MM.YY, HH:MM:SS] Absender: Text`, Anhang als `<Anhang: DATEI>`; `kanal` kommt aus dem Namen der Zip bzw. des Ordners (`WhatsApp Chat - <Gruppe>`).
+- Ebenfalls gelesen: `/` statt `.` im Datum, 12-Stunden-Zeit (`10:31 pm`), englische Marker (`(file attached)`, `<attached: …>`, `<Media omitted>`, `This message was deleted`).
 - Zeile ohne Datums-Präfix = Fortsetzung der vorherigen Nachricht (mit `\n` anhängen).
 - Zeile mit Datum, aber ohne `Absender: ` = **Systemzeile** → überspringen (Gruppe erstellt, hinzugefügt, Verschlüsselungshinweis).
 - `<DATEINAME> (Datei angehängt)` → `anhang` aus gleichnamiger Datei; Text bleibt leer. Datei fehlt → Item trotzdem anlegen, `meta.anhang_fehlt = true`.
@@ -263,6 +264,7 @@ TZ=Europe/Vienna
   - Call: Transkript-Zeilen, Zeitzone korrekt, `projekt` aus Payload
   - Hash: gleicher Input → gleicher Hash; anderer Exportdateiname → gleicher Hash; Drive-Datei mit geänderter mtime → gleicher Hash; Audio-Item mit und ohne Sidecar → gleicher Hash; Call mit geänderter Zusammenfassung → gleicher Hash
   - Store (mit Fake-Client): zweiter Import → `neu = 0`
+  - Szenario `fake_data/szenarien/wand_top5/` (Kernbeispiel aus `KONZEPT.md`): 10 WhatsApp-Nachrichten + 1 Call, zusätzlich zu den Basisdaten importiert → 11 neu, zusammen 64. Die Basisdaten bleiben unverändert, weil auch die Tests des Übersetzers an ihren Zahlen hängen.
 - Adapter-Tests laufen **ohne** Supabase. Store bekommt den Client per Dependency Injection.
 - Dependencies in `ablage/pyproject.toml`, darunter `pypdf` und **`tzdata`** (Windows hat keine Zeitzonendatenbank, ohne `tzdata` wirft `ZoneInfo("Europe/Vienna")`).
 - `ruff` für Lint/Format. Typ-Hints überall.

@@ -1,0 +1,24 @@
+{
+  "_hinweis": "Fake-Payload, Vertrag v1. Das ist der Signal-Anruf (KONZEPT Schritt 5): der Telefon-Agent warnt den Vorarbeiter. 'anlass' und 'signal' sind Zusatzfelder, die die Ablage ignoriert und in meta.roh ablegt.",
+  "call_id": "call_3b91d7f2",
+  "richtung": "outbound",
+  "anlass": "signal",
+  "signal": "reihenfolge: Wand Abstellraum Top 5 vor Elektro-Verrohrung",
+  "gestartet_um": "2026-11-13T17:31:12+01:00",
+  "beendet_um": "2026-11-13T17:32:58+01:00",
+  "angerufene_person": "Stefan Huber",
+  "telefon": "+43 660 0000000",
+  "projekt": "BV Simmering",
+  "transkript": [
+    {"rolle": "agent", "text": "Hallo Stefan, hier ist der SiteTwin-Assistent von Elektro Gruber. Es ist dringend, es geht um Top 5."},
+    {"rolle": "person", "text": "Ja, was gibts?"},
+    {"rolle": "agent", "text": "Der Trockenbau hat um 17:20 gemeldet, dass sie morgen Samstag um sieben im Abstellraum Top 5 die Wand zumachen. Laut Plan E-05 Index C kommt dort der Wohnungsverteiler hin, und eure Verrohrung dafür ist noch nicht drin. Ihr habt den Umbau erst für Montag geplant."},
+    {"rolle": "person", "text": "Na servas. Das hab ich nicht mitgekriegt, wir waren schon weg. Wenn die zumachen, müssen wir alles wieder aufreißen."},
+    {"rolle": "agent", "text": "Genau. Die Wand darf nicht zugehen, bevor eure Rohre drin sind. Wie willst du vorgehen?"},
+    {"rolle": "person", "text": "Ich komm morgen um sechs mit dem Ali. Die Wandseite mit Kasten und Rohren schaffen wir in einer Stunde, der Rest vom Umbau bleibt für Montag. Den Novak ruf ich gleich selber an, dass er wartet, bis wir fertig sind."},
+    {"rolle": "agent", "text": "Notiert: Samstag sechs Uhr, Verteilerkasten und Verrohrung im Abstellraum Top 5, vor dem Trockenbau um sieben. Gib bitte in der Gruppe Bescheid, wenn es erledigt ist."},
+    {"rolle": "person", "text": "Mach ich."},
+    {"rolle": "agent", "text": "Danke Stefan."}
+  ],
+  "zusammenfassung": "Signal-Anruf: Trockenbau schließt Samstag 7:00 die Wand im Abstellraum Top 5, Verteiler-Verrohrung nach Index C fehlt noch. Stefan Huber kommt Samstag 6:00 mit Ali Demir und zieht Kasten und Rohre vorher ein; er informiert Novak selbst."
+}

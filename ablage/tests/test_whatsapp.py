@@ -79,12 +79,12 @@ def test_kanal_zeit_und_original_ref(items):
 
 def test_mehrzeiler_fehlender_anhang_unsichtbare_zeichen(tmp_path, ctx):
     (tmp_path / "WhatsApp Chat mit Test.txt").write_text(
-        "﻿01.02.26, 08:00 - Gruppe erstellt\n"
+        "\ufeff01.02.26, 08:00 - Gruppe erstellt\n"
         "01.02.26, 08:01 - A B: Zeile eins\n"
         "Zeile zwei\n"
         "\n"
         "Zeile vier: mit Doppelpunkt\n"
-        "01.02.26, 08:02 - ‎A B: ‎IMG-1.jpg (Datei angehängt)\n"
+        "01.02.26, 08:02 - \u200eA B: \u200eIMG-1.jpg (Datei angehängt)\n"
         "01.02.26, 08:03 - A B: <Medien ausgeschlossen>\n"
         "31.02.26, 08:04 - A B: kaputtes Datum\n"
         "01.02.26, 08:05 - C: letzte\n",

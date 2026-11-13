@@ -56,7 +56,7 @@ def test_zufallsmuell_wirft_nie(tmp_path, ctx):
     rng = random.Random(20261113)
     bausteine = [
         "10.11.26, 07:02 - A: ok", "99.99.99, 99:99 - A: x", "10.11.26, 07:02 - ", "[10.11.26, 07:02:61] A: x",
-        "", ":", " - ", "A: B: C", "‎﻿", "<Medien ausgeschlossen>", "x.jpg (Datei angehängt)",
+        "", ":", " - ", "A: B: C", "\u200e\ufeff", "<Medien ausgeschlossen>", "x.jpg (Datei angehängt)",
         "10.11.26, 07:02 - A: x.jpg (Datei angehängt)", "\x00\x01", "😀" * 50, "a" * 5000, "31.12.9999, 23:59 - Z: y",
         "1.1.26, 7:05 - A: kurzes Datum", "10.11.26, 07:02 - A hat B hinzugefügt", "\t", "29.02.27, 10:00 - A: kein Schaltjahr",
     ]  # fmt: skip
@@ -68,7 +68,7 @@ def test_zufallsmuell_wirft_nie(tmp_path, ctx):
             if isinstance(e, RawItem):
                 assert e.zeitpunkt.tzinfo is not None and e.absender
                 assert len(e.content_hash()) == 64
-                assert "‎" not in e.text and "﻿" not in e.text
+                assert "\u200e" not in e.text and "\ufeff" not in e.text
 
 
 def test_kaputte_bytes_im_export(tmp_path, ctx):

@@ -16,7 +16,7 @@ from . import hashing, store
 from .models import Anhang, AnhangTyp, ImportKontext, QuellTyp, RawItem, Status
 
 FEHLER, WARNUNG, OK = "FEHLER", "WARNUNG", "ok"
-_UNSICHTBAR = re.compile("[‎‏‪- ﻿\r]")
+_UNSICHTBAR = re.compile("[\u200e\u200f\u202a-\u202f\ufeff\r]")
 _PFAD = re.compile(r"^(?P<slug>[a-z0-9-]+)/(?P<typ>[a-z]+)/(?P<sha>[0-9a-f]{64})(?P<endung>\.[a-z0-9]+)?$")
 _BELEG = re.compile(r"\b((?:IMG|PTT)-\d{8}-WA\d{4}|[\w-]+\.pdf)\b")
 
@@ -205,8 +205,9 @@ def originale(fake_data: Path, ctx: ImportKontext) -> list[RawItem]:
     from .adapters import call, eml, ordner, whatsapp
 
     paare = ((whatsapp, "whatsapp"), (eml, "email"), (ordner, "drive"), (call, "calls"))
-    return [i for adapter, ordnername in paare if (fake_data / ordnername).exists()
-            for i in adapter.parse(fake_data / ordnername, ctx) if isinstance(i, RawItem)]
+    wurzeln = [fake_data, *sorted(p for p in (fake_data / "szenarien").glob("*") if p.is_dir())]
+    return [i for wurzel in wurzeln for adapter, ordnername in paare if (wurzel / ordnername).exists()
+            for i in adapter.parse(wurzel / ordnername, ctx) if isinstance(i, RawItem)]
 
 
 def lade_supabase(backend: store.SupabaseBackend, projekt: str) -> tuple[list[dict], dict[str, bytes]]:

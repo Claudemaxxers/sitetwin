@@ -11,17 +11,28 @@ from pathlib import Path, PurePosixPath
 
 from ..models import AnhangTyp, Anhang, ImportKontext, ParseFehler, QuellTyp, RawItem
 
-EXPORT_MUSTER = re.compile(r"^WhatsApp Chat mit (?P<gruppe>.+)\.txt$")
-_UNSICHTBAR = re.compile("[‎‏‪- ﻿]")
-_ANDROID = re.compile(
-    r"^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4}), (\d{1,2}):(\d{2}) - (?P<rest>.*)$"
+# Android: "WhatsApp Chat mit <Gruppe>.txt" (EN: "with"); iPhone: "_chat.txt" im Zip.
+EXPORT_MUSTER = re.compile(r"^(?:WhatsApp Chat (?:mit|with) (?P<gruppe>.+)|_chat)\.txt$")
+_CONTAINER = re.compile(r"^WhatsApp[ -]Chat(?: - | mit | with )(?P<gruppe>.+)$")
+_UNSICHTBAR = re.compile("[\u200e\u200f\u202a-\u202f\ufeff]")
+# Gruppen 1–7: Tag, Monat, Jahr, Stunde, Minute, Sekunde?, AM/PM?
+_STEMPEL = r"(\d{1,2})[./](\d{1,2})[./](\d{2}|\d{4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s?([AaPp])\.?[Mm]\.?)?"
+_ANDROID = re.compile(rf"^{_STEMPEL} - (?P<rest>.*)$")
+_IOS = re.compile(rf"^\[{_STEMPEL}\] (?P<rest>.*)$")
+_ANHANG = re.compile(
+    r"^(?P<name>.+?) \((?:Datei angehängt|file attached)\)$|^<(?:Anhang|attached): (?P<ios>.+?)>$"
 )
-_IOS = re.compile(
-    r"^\[(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4}), (\d{1,2}):(\d{2})(?::(\d{2}))?\] (?P<rest>.*)$"
+_GELOESCHT = re.compile(
+    r"^(?:Diese Nachricht wurde gelöscht|Du hast diese Nachricht gelöscht"
+    r"|This message was deleted|You deleted this message)\.?$"
 )
-_ANHANG = re.compile(r"^(?P<name>.+?) \(Datei angehängt\)$|^<Anhang: (?P<ios>.+?)>$")
-_GELOESCHT = ("Diese Nachricht wurde gelöscht.", "Du hast diese Nachricht gelöscht.")
-_OHNE_MEDIEN = ("<Medien ausgeschlossen>", "<Medien weggelassen>")
+_OHNE_MEDIEN = re.compile(
+    r"^(?:<Medien (?:ausgeschlossen|weggelassen)>|<Media omitted>"
+    r"|(?:Bild|Audio|Video|Sticker|GIF|Dokument|Kontaktkarte) weggelassen"
+    r"|(?:image|audio|video|sticker|GIF|document|Contact card) omitted)$"
+)
+# iPhone schreibt Systemhinweise mit dem Chatnamen als "Absender".
+_SYSTEMTEXT = ("Nachrichten und Anrufe sind Ende-zu-Ende-verschlüsselt", "Messages and calls are end-to-end encrypted")
 
 
 @dataclass(frozen=True)
@@ -69,9 +80,13 @@ class _Quelle:
 
 def _zeit(m: re.Match[str], ctx: ImportKontext) -> datetime:
     tag, monat, jahr, stunde, minute = (int(x) for x in m.groups()[:5])
-    sekunde = int(m.group(6)) if m.re is _IOS and m.group(6) else 0
+    sekunde = int(m.group(6)) if m.group(6) else 0
     if jahr < 100:
         jahr += 2000
+    if monat > 12 >= tag:  # US-Export: Monat zuerst
+        tag, monat = monat, tag
+    if m.group(7):  # 12-Stunden-Format
+        stunde = stunde % 12 + (12 if m.group(7).lower() == "p" else 0)
     return datetime(jahr, monat, tag, stunde, minute, sekunde, tzinfo=ctx.tz)
 
 
@@ -97,7 +112,7 @@ def _zeilen(
             yield ParseFehler(ref=f"{exportname}#L{nr}", grund=f"Ungültiges Datum: {e}")
             continue
         absender, trenner, inhalt = m.group("rest").partition(": ")
-        if not trenner:
+        if not trenner or inhalt.startswith(_SYSTEMTEXT):
             yield Systemzeile(ref=f"{exportname}#L{nr}", text=m.group("rest"))
             continue
         aktuell = _Roh(zeile=nr, zeitpunkt=zeitpunkt, absender=absender, text=inhalt)
@@ -125,9 +140,9 @@ def _item(roh: _Roh, exportname: str, kanal: str, quelle: _Quelle, ctx: ImportKo
             if anhang.typ is AnhangTyp.audio and sidecar is not None:
                 text = sidecar().decode("utf-8-sig").strip()
                 meta["transkript_quelle"] = "sidecar"
-    elif text in _OHNE_MEDIEN:
+    elif _OHNE_MEDIEN.match(text):
         meta["medien_ausgeschlossen"] = True
-    elif text in _GELOESCHT:
+    elif _GELOESCHT.match(text):
         meta["geloescht"] = True
 
     return RawItem(
@@ -143,6 +158,20 @@ def _item(roh: _Roh, exportname: str, kanal: str, quelle: _Quelle, ctx: ImportKo
     )
 
 
+def _kanal(exportname: str, path: Path) -> str:
+    """Gruppenname aus dem Dateinamen; bei iPhone-Exporten (_chat.txt) aus Zip- bzw. Ordnernamen."""
+    m = EXPORT_MUSTER.match(exportname)
+    if m and m.group("gruppe"):
+        return m.group("gruppe")
+    container = path.stem if path.is_file() else path.resolve().name
+    if path.is_file() and path.suffix.lower() == ".txt" and exportname != "_chat.txt":
+        return container
+    if exportname == "_chat.txt" and path.is_file() and path.suffix.lower() == ".txt":
+        container = path.resolve().parent.name
+    m = _CONTAINER.match(container)
+    return m.group("gruppe") if m else container
+
+
 def ereignisse(path: Path, ctx: ImportKontext) -> Iterator[RawItem | ParseFehler | Systemzeile]:
     """Wie `parse`, liefert zusätzlich die übersprungenen Systemzeilen (für Tests/Statistik)."""
     path = Path(path)
@@ -155,8 +184,7 @@ def ereignisse(path: Path, ctx: ImportKontext) -> Iterator[RawItem | ParseFehler
         yield ParseFehler(ref=str(path), grund="Kein Export 'WhatsApp Chat mit *.txt' gefunden")
         return
     for exportname in exporte:
-        m = EXPORT_MUSTER.match(exportname)
-        kanal = m.group("gruppe") if m else Path(exportname).stem
+        kanal = _kanal(exportname, path)
         inhalt = quelle.dateien[exportname]().decode("utf-8-sig", errors="replace")
         for e in _zeilen(inhalt, exportname, ctx):
             if isinstance(e, _Roh):
