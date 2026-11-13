@@ -152,3 +152,15 @@ def test_falle_f1_zusatzsteckdosen_top4_keine_dublette_und_kein_fehlalarm():
     dose = next(x for x in db.elemente_liste if x["raum"] == "Küche")
     assert db.eintraege[2]["element_id"] == dose["id"]  # nachträglich zugeordnet
     assert db.signale_liste == []
+
+
+def test_anweisung_der_bauleitung_gibt_vorgeschlagene_aenderung_frei():
+    """Wallbox TG: Vorarbeiter gibt weiter, was der GU will (Vorschlag); GU: 'Ja macht das bitte gleich mit' (Anweisung)."""
+    db = neue_db()
+    db.quellen = [quelle("h-1"), quelle("h-2")]
+    db.eintraege = [
+        e("1", "2026-11-11T12:31:00+01:00", "soll_aenderung", "Stefan Huber", {**aenderung(), "bauteile_neu": [], "bauteile_entfallen": []}, top="TG", raum="Stellplatz 12"),
+        e("2", "2026-11-11T12:40:00+01:00", "anweisung", "Thomas Meier (Krenn Bau)", None, top="TG", raum="Stellplatz 12"),
+    ]
+    pruefe(db, None, None)
+    assert db.soll_liste[0]["status"] == "freigegeben" and db.soll_liste[0]["freigabe_eintrag"] == "2"

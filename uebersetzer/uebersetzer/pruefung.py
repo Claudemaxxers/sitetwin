@@ -220,7 +220,7 @@ def regel_wand_zu_vor_installation(
             "Sonst muss die Wand später wieder geöffnet werden."
         )
     return {
-        "schluessel": f"reihenfolge|{wand['id']}" if wand else f"reihenfolge|{_n(top)}|{_n(raum)}",
+        "schluessel": f"reihenfolge|{wand['id']}" if wand else "reihenfolge|" + ",".join(sorted(k["id"] for k in fehlt)),
         "element_id": wand["id"] if wand else (fehlt[0]["id"] if len(fehlt) == 1 else None),
         "art": "reihenfolge",
         "schwere": "kritisch" if geplant else "hoch",
@@ -484,6 +484,10 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
 
         for quelle_hash, gruppe_iter in groupby(eigene, key=lambda e: e["quelle_hash"]):
             gruppe = list(gruppe_iter)
+            raeume = list(dict.fromkeys(x["raum"] for x in gruppe if x.get("raum")))
+            for x in gruppe:  # z. B. Sprachnachricht: "Ständerwerk im Abstellraum und Vorraum … Samstag machen wir zu"
+                if not x.get("raum") and x.get("schritt") == "beplankung" and raeume:
+                    x["raum"] = ", ".join(raeume)
             try:
                 for e in gruppe:
                     if e["art"] in SOLL_ARTEN:
@@ -509,6 +513,9 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
                     ergebnis = pruefer(system, messages)
                     bericht.claude_aufrufe += 1
                     for v in ergebnis.signale:
+                        if v.art == "reihenfolge":
+                            log.info("  Claude-Vorschlag verworfen (Reihenfolge prüfen die festen Regeln): %s", v.titel)
+                            continue
                         ausloeser = [gruppe[i - 1] for i in v.eintrag_nrs if 1 <= i <= len(gruppe)] or gruppe
                         zeile = v.model_dump(exclude={"kurzschluessel", "eintrag_nrs"})
                         zeile["schluessel"] = f"ki|{v.top or ''}|{v.kurzschluessel.strip().lower()}"

@@ -98,7 +98,7 @@ def test_claude_signal_und_loesung():
         anfragen.append(messages[0]["content"])
         if len(anfragen) == 1:
             return Pruefergebnis(signale=[SignalVorschlag(
-                art="reihenfolge", schwere="kritisch", kurzschluessel="Wand12-zu-vor-abnahme",
+                art="abweichung_plan", schwere="kritisch", kurzschluessel="Wand12-zu-vor-abnahme",
                 titel="Top 3 Bad: Wand 12 zu vor Abnahme", begruendung="Elektro-Abnahme fehlt",
                 anruf_text="Wand 12 noch nicht zumachen.", zustaendig="Marek (Novak)", top="Top 3", raum="Bad",
                 element="Wand 12", eintrag_nrs=[1])], geloest=[])
@@ -135,3 +135,15 @@ def test_claude_fehler_laesst_gruppe_ungeprueft():
 
     b = pruefe(db, None, kaputt)
     assert b.fehler and not db.eintraege[0]["geprueft_am"]
+
+
+def test_reihenfolge_vorschlaege_von_claude_werden_verworfen():
+    db = neue_db([e("1", "2026-11-13T09:00:00+01:00", "arbeit_geplant")])
+
+    def fake(system, messages):
+        return Pruefergebnis(signale=[SignalVorschlag(
+            art="reihenfolge", schwere="hoch", kurzschluessel="x", titel="Wand zu", begruendung="b", anruf_text="a",
+            zustaendig=None, top="Top 5", raum=None, element=None, eintrag_nrs=[1])], geloest=[])
+
+    pruefe(db, None, fake)
+    assert db.signale_liste == []

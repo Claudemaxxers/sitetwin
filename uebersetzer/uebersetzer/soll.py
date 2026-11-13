@@ -22,7 +22,7 @@ from .db import DB, Zeile
 
 log = logging.getLogger("soll")
 
-SOLL_ARTEN = {"soll_aenderung", "freigabe", "nachweis"}
+SOLL_ARTEN = {"soll_aenderung", "freigabe", "nachweis", "anweisung"}
 DOKUMENT_ANHAENGE = {"image", "pdf"}
 
 
@@ -101,8 +101,9 @@ class SollAblauf:
             if len(gleicher_ort) != 1:
                 continue
             for e in self.alle:
+                passend = {"verrohrung", "leitung_eingezogen", "gesetzt", "angeschlossen", "montage", "rueckbau"}
                 if (
-                    not e.get("element_id") and e.get("schritt") and e["art"] in ("arbeit_erledigt", "arbeit_geplant")
+                    not e.get("element_id") and e.get("schritt") in passend and e["art"] in ("arbeit_erledigt", "arbeit_geplant")
                     and _norm(e.get("top")) == _norm(el.get("top")) and _norm(e.get("raum")) == _norm(el.get("raum"))
                     and str(e.get("zeitpunkt") or "") >= str(sa.get("vorgeschlagen_am") or "")
                 ):
@@ -130,6 +131,13 @@ class SollAblauf:
         details: dict[str, Any] = e.get("soll") or {}
         quelle = self.quellen.get(e["quelle_hash"])
         berechtigt = darf_soll_aendern(e.get("person"), self.personen)
+
+        if e["art"] == "anweisung":
+            # "Ja macht das bitte gleich mit" der Bauleitung zu einer vorgeschlagenen Änderung am selben Ort
+            gleich = self._gleiche_aenderung(e) if berechtigt else None
+            if gleich and gleich["status"] == "vorgeschlagen":
+                self._freigeben(gleich, e, quelle)
+            return
 
         if e["art"] == "soll_aenderung":
             schluessel = f"sa|{e['quelle_hash']}|{e['nr']}"

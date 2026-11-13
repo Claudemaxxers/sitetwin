@@ -168,7 +168,9 @@ def test_plan_veraltet_erst_geloest_wenn_ersatz_gesetzt_und_s1_wird_kritisch():
     db.eintraege = [
         e("1", "2026-11-12T16:02:00+01:00", "arbeit_erledigt", raum["Vorraum"], "gesetzt", top="Top 5", raum="Vorraum", person="Stefan Huber"),
         e("2", "2026-11-13T17:19:00+01:00", "arbeit_erledigt", None, "beplankung", top="Top 5", raum="Abstellraum", person="Marko Novak"),
-        e("3", "2026-11-13T17:20:00+01:00", "arbeit_geplant", None, "beplankung", top="Top 5", raum="Abstellraum", person="Marko Novak"),
+        e("3", "2026-11-13T17:20:00+01:00", "arbeit_geplant", None, "beplankung", top="Top 5", raum=None, person="Marko Novak"),
+        e("3b", "2026-11-13T17:20:00+01:00", "arbeit_erledigt", None, "staenderwerk", top="Top 5", raum="Abstellraum", person="Marko Novak",
+          quelle_hash="h-3"),  # gleiche Sprachnachricht nennt den Raum nur hier
         e("4", "2026-11-14T06:05:00+01:00", "arbeit_erledigt", raum["Abstellraum"], "verrohrung", top="Top 5", raum="Abstellraum", person="Stefan Huber"),
         e("5", "2026-11-14T06:52:00+01:00", "arbeit_erledigt", raum["Abstellraum"], "gesetzt", top="Top 5", raum="Abstellraum", person="Ali Demir"),
     ]
