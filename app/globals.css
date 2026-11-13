@@ -56,3 +56,12 @@ h1, h2, h3 { font-weight: 480; letter-spacing: -0.01em; }
 .tw-range::-moz-range-track { height: 2px; background: var(--line); }
 .tw-range::-moz-range-thumb { width: 10px; height: 10px; border-radius: 99px; background: var(--text); border: 3px solid #fff; }
 details > summary::-webkit-details-marker { display: none; }
+
+/* Talona-style analysis board and rule canvas */
+@keyframes tw-in { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.tw-step { opacity: 0; animation: tw-in .5s cubic-bezier(.2,.7,.2,1) forwards; }
+.tw-board .tw-step.-translate-x-1\/2 { animation-name: tw-in-c; }
+@keyframes tw-in-c { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes tw-pulse { 50% { opacity: .45; } }
+.tw-cloud { animation: tw-pulse 1.6s ease-in-out infinite; }
+.tw-dots { background-image: radial-gradient(rgba(12,10,8,.12) 1px, transparent 1px); background-size: 16px 16px; }

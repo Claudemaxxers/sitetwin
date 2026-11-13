@@ -29,7 +29,7 @@ export async function getProjekte(): Promise<Projekt[]> {
 
 export async function getProjektDaten(projekt: string): Promise<ProjektDaten | null> {
   const p = eq(projekt);
-  const [projekte, tops, eintraege, signale, plaene, lv, verlauf] = await Promise.all([
+  const [projekte, tops, eintraege, signale, plaene, lv, verlauf, quellen] = await Promise.all([
     rest<Projekt[]>(`projekte?select=*&projekt=${p}`),
     rest<ProjektDaten["tops"]>(`tops?select=*&projekt=${p}`),
     rest<ProjektDaten["eintraege"]>(`eintraege_mit_quelle?select=*&projekt=${p}&order=zeitpunkt.asc,nr.asc`),
@@ -37,10 +37,11 @@ export async function getProjektDaten(projekt: string): Promise<ProjektDaten | n
     rest<ProjektDaten["plaene"]>(`plaene_aktuell?select=*&projekt=${p}`),
     rest<ProjektDaten["lv"]>(`lv_positionen?select=*&projekt=${p}&order=pos_nr`),
     rest<ProjektDaten["verlauf"]>(`signal_verlauf?select=*&order=zeitpunkt.asc`).catch(() => [] as ProjektDaten["verlauf"]),
+    rest<ProjektDaten["quellen"]>(`quellen?select=typ,kanal,absender,zeitpunkt,text,anhang_pfad,anhang_typ,anhang_name,content_hash&projekt=${p}&order=zeitpunkt.asc.nullslast`).catch(() => [] as ProjektDaten["quellen"]),
   ]);
   if (!projekte[0]) return null;
   const ids = new Set(signale.map((x) => x.id));
-  return { projekt: projekte[0], tops, eintraege, signale, plaene, lv, verlauf: verlauf.filter((v) => ids.has(v.signal_id)), geladen: new Date().toISOString() };
+  return { projekt: projekte[0], quellen, tops, eintraege, signale, plaene, lv, verlauf: verlauf.filter((v) => ids.has(v.signal_id)), geladen: new Date().toISOString() };
 }
 
 /** Photos and PDFs live in Santino's private bucket; stream them through the server. */

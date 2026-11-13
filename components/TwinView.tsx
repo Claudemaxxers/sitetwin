@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { aenderungen, personenVerzeichnis } from "@/lib/vm";
 import {
   ART_LABEL,
   eur,
@@ -36,7 +37,16 @@ export default function TwinView({ daten, neu, focus }: { daten: ProjektDaten; n
   const [isolated, setIsolated] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const z = useMemo(() => zwilling(daten, cursor ?? undefined), [daten, cursor]);
+  // extra costs come from the same change list as the Änderungen view, so both show the same numbers
+  const changes = useMemo(() => aenderungen(daten, personenVerzeichnis(daten), daten.signale), [daten]);
+  const z = useMemo(() => {
+    const basis = zwilling(daten, cursor ?? undefined);
+    const bis = cursor ?? Number.POSITIVE_INFINITY;
+    const mehrkosten = changes
+      .filter((c) => ts(c.erhoben) <= bis)
+      .map((c) => ({ titel: c.titel, top: c.top, betrag: c.schaetzung?.betrag ?? null, grundlage: c.schaetzung?.grundlage ?? c.fehlend.join(", "), eintrag: c.eintraege[0] }));
+    return { ...basis, mehrkosten, mehrkostenSumme: mehrkosten.reduce((a, x) => a + (x.betrag ?? 0), 0) };
+  }, [daten, cursor, changes]);
   const zLive = useMemo(() => zwilling(daten), [daten]);
 
   const goHouse = useCallback(() => {

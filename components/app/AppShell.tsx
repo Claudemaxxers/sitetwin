@@ -2,28 +2,34 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { zwilling, type ProjektDaten } from "@/lib/twin-model";
+import type { ProjektDaten } from "@/lib/twin-model";
+import type { Aenderung } from "@/lib/vm";
 import TwinView from "../TwinView";
+import { AlertsView } from "./AlertsView";
+import { AskDrawer } from "./AskDrawer";
 import { ChangesView } from "./ChangesView";
+import { DailyLogView } from "./DailyLogView";
+import { DraftModal } from "./DraftModal";
 import { InboxView } from "./InboxView";
+import { baueModell, type Ansicht, type Nav } from "./modell";
 import { RecordView } from "./RecordView";
+import { ThreadDrawer } from "./ThreadDrawer";
+import { I, Logo } from "./ui";
 
-export type Ansicht = "aenderungen" | "inbox" | "protokoll" | "zwilling";
+export type { Ansicht } from "./modell";
 
-export interface Nav {
-  zuAenderung: (id: string) => void;
-  zuNachricht: (hash: string) => void;
-  zuTop: (top: string) => void;
-}
-
-/** Talona's web app frame: thin icon rail on the left, page on the right (TALONA.md §2). */
+/** Talona's web app frame: thin icon rail on the left, the page on the right (TALONA.md §2). */
 export default function AppShell({ initial, start }: { initial: ProjektDaten; start?: Ansicht }) {
   const [daten, setDaten] = useState(initial);
   const [neu, setNeu] = useState<Set<string>>(new Set());
   const [ansicht, setAnsicht] = useState<Ansicht>(start ?? "aenderungen");
   const [aenderung, setAenderung] = useState<string | null>(null);
+  const [exposure, setExposure] = useState(false);
   const [nachricht, setNachricht] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ top: string; key: number } | null>(null);
+  const [thread, setThread] = useState<string | null>(null);
+  const [entwurf, setEntwurf] = useState<Aenderung | null>(null);
+  const [frage, setFrage] = useState<{ q: string; key: number } | null>(null);
 
   useEffect(() => {
     const id = setInterval(async () => {
@@ -44,122 +50,98 @@ export default function AppShell({ initial, start }: { initial: ProjektDaten; st
     return () => clearInterval(id);
   }, [initial.projekt.projekt]);
 
-  const z = useMemo(() => zwilling(daten), [daten]);
+  const m = useMemo(() => baueModell(daten), [daten]);
+
   const nav: Nav = {
-    zuAenderung: (id) => {
-      setAenderung(id);
+    zu: (a) => {
+      setAnsicht(a);
+      if (a === "aenderungen") {
+        setAenderung(null);
+        setExposure(false);
+      }
+    },
+    aenderung: (key) => {
+      setAenderung(key);
+      setExposure(false);
       setAnsicht("aenderungen");
     },
-    zuNachricht: (hash) => {
+    exposure: () => {
+      setExposure(true);
+      setAenderung(null);
+      setAnsicht("aenderungen");
+    },
+    nachricht: (hash) => {
       setNachricht(hash);
       setAnsicht("inbox");
     },
-    zuTop: (top) => {
+    top: (top) => {
       setFocus({ top, key: Date.now() });
       setAnsicht("zwilling");
     },
+    thread: (hash) => setThread(hash),
+    entwurf: (c) => setEntwurf(c),
+    fragen: (q) => setFrage({ q: q ?? "", key: Date.now() }),
   };
-  const offen = z.signale.filter((s) => s.status === "offen").length;
+
+  const offeneSignale = m.d.signale.filter((s) => s.status !== "geloest").length;
+  const offeneAenderungen = m.ch.filter((c) => !c.bereit).length;
 
   return (
     <div className="flex h-screen overflow-hidden bg-white">
-      <aside className="flex w-[56px] shrink-0 flex-col items-center gap-1 border-r border-[var(--line)] bg-white py-3">
-        <Link href="/" title="Alle Projekte" className="mb-3 flex h-9 w-9 items-center justify-center">
-          <Logo />
+      <aside className="flex w-[64px] shrink-0 flex-col items-center gap-2 border-r border-[var(--line)] bg-[#faf9f7] py-4">
+        <Link href="/" title="Alle Projekte" className="mb-4 flex h-9 w-9 items-center justify-center">
+          <Logo size={24} />
         </Link>
-        <RailButton title="Änderungen" active={ansicht === "aenderungen"} badge={offen} onClick={() => { setAnsicht("aenderungen"); setAenderung(null); }}>
-          <IconChart />
-        </RailButton>
-        <RailButton title="Inbox" active={ansicht === "inbox"} onClick={() => setAnsicht("inbox")}>
-          <IconInbox />
-        </RailButton>
-        <RailButton title="Protokoll" active={ansicht === "protokoll"} onClick={() => setAnsicht("protokoll")}>
-          <IconRecord />
-        </RailButton>
-        <RailButton title="Zwilling" active={ansicht === "zwilling"} onClick={() => setAnsicht("zwilling")}>
-          <IconCube />
-        </RailButton>
+        <Rail title="Änderungen" active={ansicht === "aenderungen"} dot={offeneAenderungen > 0} onClick={() => nav.zu("aenderungen")}>
+          <I.Chart />
+        </Rail>
+        <Rail title="Inbox" active={ansicht === "inbox"} onClick={() => nav.zu("inbox")}>
+          <I.Inbox />
+        </Rail>
+        <Rail title="Bautagebuch" active={ansicht === "bautagebuch"} onClick={() => nav.zu("bautagebuch")}>
+          <I.Calendar />
+        </Rail>
+        <Rail title="Protokoll" active={ansicht === "protokoll"} onClick={() => nav.zu("protokoll")}>
+          <I.Layers />
+        </Rail>
+        <Rail title="Zwilling" active={ansicht === "zwilling"} onClick={() => nav.zu("zwilling")}>
+          <I.Cube />
+        </Rail>
+        <Rail title="Benachrichtigungen" active={ansicht === "benachrichtigungen"} dot={offeneSignale > 0} onClick={() => nav.zu("benachrichtigungen")}>
+          <I.Bell />
+        </Rail>
         <div className="flex-1" />
-        <Link href="/" title="Alle Projekte" className="muted flex h-9 w-9 items-center justify-center rounded-[4px] hover:bg-[var(--panel-2)] hover:text-[var(--text)]">
-          <IconGrid />
+        <Link href="/" title="Alle Projekte" className="flex h-9 w-9 items-center justify-center rounded-[6px] text-[rgba(12,10,8,.45)] hover:bg-[var(--wash)] hover:text-[var(--text)]">
+          <I.Grid />
         </Link>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--line)] px-6 text-[13px]">
-          <div className="flex items-center gap-2">
-            <span>{daten.projekt.name ?? daten.projekt.projekt}</span>
-            <span className="muted">· {daten.projekt.adresse}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="muted">Krenn Bau GmbH</span>
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--text)] text-[10px] text-white">KB</span>
-          </div>
-        </header>
-        <main className="min-h-0 flex-1 overflow-hidden">
-          {ansicht === "aenderungen" && <ChangesView daten={daten} z={z} detail={aenderung} setDetail={setAenderung} nav={nav} />}
-          {ansicht === "inbox" && <InboxView daten={daten} z={z} sel={nachricht} setSel={setNachricht} nav={nav} neu={neu} />}
-          {ansicht === "protokoll" && <RecordView daten={daten} nav={nav} neu={neu} />}
-          {ansicht === "zwilling" && <TwinView daten={daten} neu={neu} focus={focus} />}
-        </main>
-      </div>
+      <main className="relative min-w-0 flex-1 overflow-hidden">
+        {ansicht === "aenderungen" && <ChangesView m={m} detail={aenderung} exposure={exposure} nav={nav} />}
+        {ansicht === "inbox" && <InboxView m={m} sel={nachricht} setSel={setNachricht} nav={nav} neu={neu} />}
+        {ansicht === "bautagebuch" && <DailyLogView m={m} nav={nav} />}
+        {ansicht === "protokoll" && <RecordView m={m} nav={nav} neu={neu} />}
+        {ansicht === "zwilling" && <TwinView daten={daten} neu={neu} focus={focus} />}
+        {ansicht === "benachrichtigungen" && <AlertsView m={m} nav={nav} />}
+
+        {thread && <ThreadDrawer m={m} hash={thread} onClose={() => setThread(null)} />}
+        {frage && <AskDrawer key={frage.key} m={m} start={frage.q} nav={nav} onClose={() => setFrage(null)} />}
+        {entwurf && <DraftModal m={m} c={entwurf} onClose={() => setEntwurf(null)} />}
+      </main>
     </div>
   );
 }
 
-function RailButton({ title, active, badge, onClick, children }: { title: string; active: boolean; badge?: number; onClick: () => void; children: ReactNode }) {
+function Rail({ title, active, dot, onClick, children }: { title: string; active: boolean; dot?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       title={title}
       aria-label={title}
       onClick={onClick}
-      className={`relative flex h-9 w-9 items-center justify-center rounded-[4px] ${active ? "bg-[var(--panel-2)] text-[var(--text)]" : "muted hover:bg-[var(--wash)] hover:text-[var(--text)]"}`}
+      className={`relative flex h-10 w-10 items-center justify-center rounded-[6px] ${active ? "bg-[#ebe8e5] text-[var(--text)]" : "text-[rgba(12,10,8,.45)] hover:bg-[var(--wash)] hover:text-[var(--text)]"}`}
     >
       {children}
-      {!!badge && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
+      {dot && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />}
     </button>
   );
 }
-
-/* Icons: 18px, 1.6 stroke, like Talona's rail. */
-const S = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-function Logo() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 26 26" aria-hidden>
-      <rect x="3" y="15" width="20" height="7" rx="1.5" fill="#0c0a08" />
-      <rect x="3" y="9.5" width="20" height="4.5" rx="1.2" fill="#0c0a08" opacity=".55" />
-      <rect x="3" y="4" width="20" height="4.5" rx="1.2" fill="#ee783b" />
-    </svg>
-  );
-}
-const IconChart = () => (
-  <svg {...S}>
-    <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
-  </svg>
-);
-const IconInbox = () => (
-  <svg {...S}>
-    <path d="M3 13l2.5-7.5A2 2 0 0 1 7.4 4h9.2a2 2 0 0 1 1.9 1.5L21 13v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-    <path d="M3 13h5l1.5 2.5h5L16 13h5" />
-  </svg>
-);
-const IconRecord = () => (
-  <svg {...S}>
-    <path d="M12 3l9 5-9 5-9-5z" />
-    <path d="M3 13l9 5 9-5" />
-  </svg>
-);
-const IconCube = () => (
-  <svg {...S}>
-    <path d="M12 2l9 5v10l-9 5-9-5V7z" />
-    <path d="M12 12l9-5M12 12v10M12 12L3 7" />
-  </svg>
-);
-const IconGrid = () => (
-  <svg {...S}>
-    <rect x="4" y="4" width="6" height="6" rx="1" />
-    <rect x="14" y="4" width="6" height="6" rx="1" />
-    <rect x="4" y="14" width="6" height="6" rx="1" />
-    <rect x="14" y="14" width="6" height="6" rx="1" />
-  </svg>
-);
