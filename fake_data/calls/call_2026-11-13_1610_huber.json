@@ -8,7 +8,7 @@
   "telefon": "+43 660 0000000",
   "projekt": "BV Simmering",
   "transkript": [
-    {"rolle": "agent", "text": "Hallo Stefan, hier ist der Tieout-Assistent von Elektro Gruber. Hast du kurz zwei Minuten für den Tagesbericht Simmering?"},
+    {"rolle": "agent", "text": "Hallo Stefan, hier ist der SiteTwin-Assistent von Elektro Gruber. Hast du kurz zwei Minuten für den Tagesbericht Simmering?"},
     {"rolle": "person", "text": "Ja passt, bin eh im Auto."},
     {"rolle": "agent", "text": "Super. Was habt ihr heute gemacht?"},
     {"rolle": "person", "text": "In der Früh Top 3, aber da war der Trockenbau nicht fertig. Wir sind zu zweit von sieben bis zehn rumgestanden. Dann ab zehn Top 3 Leerverrohrung, ist jetzt zur Hälfte fertig."},

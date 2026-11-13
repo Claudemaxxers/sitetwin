@@ -1,4 +1,4 @@
-# SPEC – Tieout Ablage (Ingestion Layer)
+# SPEC – SiteTwin Ablage (Ingestion Layer)
 
 > **Für Claude/Fable:** Lies diese Datei vor jeder Aufgabe vollständig. Sie ist die einzige Quelle der Wahrheit für dieses Modul. Wenn etwas hier nicht steht: nachfragen, nicht raten. Änderungen am Datenvertrag (Abschnitt 4–6) nur nach Absprache mit Henrik (DB + Übersetzer).
 
@@ -8,9 +8,11 @@ Owner: Santino (Ablage) · Henrik (DB + Übersetzer) · Melih (Call-Agent, UI) �
 
 ## 1. Zweck
 
-Tieout hilft **Subunternehmern** (Elektro, HKLS), keine ausgeführte Mehrleistung zu verlieren. Die **Ablage** ist die Eingangsschicht: Sie holt alles, was auf der Baustelle kommuniziert wird (WhatsApp, E-Mail, Drive-Dateien, Fotos, Sprachnachrichten, Anruf-Transkripte), **unverändert** an einen Ort, damit der **Übersetzer** (Claude-API) daraus strukturierte Änderungen machen kann.
+SiteTwin ist unser Beitrag zu Talona Track 01, *Context for the Physical World*: **ein Live-Protokoll der Baustelle**, das festhält, was sich geändert hat und wer es entschieden hat, und Probleme meldet, solange noch jemand eingreifen kann (verpasste Änderung, Arbeit außer Reihenfolge, veralteter Plan). Die **Ablage** ist die Eingangsschicht und dockt an das an, was die Baustelle schon nutzt: Sie holt alles, was dort kommuniziert wird (WhatsApp, E-Mail, Drive-Dateien, Fotos, Sprachnachrichten, Anruf-Transkripte), **unverändert** an einen Ort, damit der **Übersetzer** (Claude-API) daraus strukturierte Änderungen machen kann.
 
-**Die Ablage interpretiert nichts.** Sie parst Formate, normalisiert sie in ein gemeinsames `RawItem` und speichert sie mit Beleg. Ob etwas eine Mehrleistung ist, entscheidet der Übersetzer.
+Demo-Fall ist ein Elektro-Subunternehmer auf dem BV Simmering; das Golden Set in `fake_data/ERWARTET.md` sind die Änderungen, die dort sonst untergehen.
+
+**Die Ablage interpretiert nichts.** Sie parst Formate, normalisiert sie in ein gemeinsames `RawItem` und speichert sie mit Beleg. Ob etwas eine Änderung oder ein Problem ist, entscheidet der Übersetzer.
 
 ## 2. Abgrenzung
 
