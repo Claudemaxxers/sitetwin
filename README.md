@@ -27,6 +27,15 @@ Construction runs on group chats, email threads and spreadsheets. One crew close
 | Change not acknowledged | medium | A trade works on a wall after a revision it never confirmed |
 | Unclear message | medium | "bin hinten fertig mit dem zeug" → ask back instead of guessing |
 
+## Digital twin (Supabase)
+
+`/` lists the company's projects, `/projekt/<projekt>` is the twin: KPIs on top, the building in 3D on the right, data for the current selection on the left, a timeline at the bottom.
+
+- Reads Hendrik's structured tables (`uebersetzer/schema.sql`) server-side: `projekte`, `tops`, `eintraege_mit_quelle`, `signale`, `plaene_aktuell`, `lv_positionen`. Polls every 6 s.
+- The building is generated from `tops` (storeys, units, rooms). Click a storey: the house is sliced and the storey pulled out; click a unit: rooms, and the place of a signal lights up (e.g. distribution board as built vs. where the valid plan puts it).
+- KPIs are derived, nothing is written back: progress = electrical work stages reported done per unit; extra costs = hours at the Regie rate plus extra pieces at LV unit prices.
+- Setup: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` in `.env.local` (server only). Melih's first prototype is still at `/v1`.
+
 ## Architecture
 
 ```
