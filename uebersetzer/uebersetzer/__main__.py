@@ -102,6 +102,8 @@ def _pruef_ausgabe(b) -> None:
         print("  ⚑", s)
     for s in b.geloest:
         print("  ✓", s)
+    for s in b.soll:
+        print("  ◆ Soll-Änderung", s)
     for f in b.fehler:
         print("  ✗", f)
 

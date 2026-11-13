@@ -25,6 +25,7 @@ from typing import Any, Callable
 from . import prompt
 from .db import DB, Zeile
 from .modell import Pruefergebnis
+from .soll import SOLL_ARTEN, SollAblauf
 
 log = logging.getLogger("pruefer")
 
@@ -45,6 +46,7 @@ class PruefBericht:
     geloest: list[str] = field(default_factory=list)
     claude_aufrufe: int = 0
     fehler: list[str] = field(default_factory=list)
+    soll: list[str] = field(default_factory=list)  # Soll-Änderungen: vorgeschlagen/freigegeben/Nachweis
 
 
 def _ts(z: Any) -> datetime | None:
@@ -423,11 +425,17 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
         stammdaten = prompt.stammdaten_block(projekt, *db.stammdaten(projekt)) if pruefer else ""
         elemente = {x["id"]: x for x in db.elemente(projekt)}
         eigene = [e for e in ungeprueft if e["projekt"] == projekt]
+        tops = [t["top"] for t in db.stammdaten(projekt)[0]]
+        quellen = {q["content_hash"]: q for q in db.projekt_quellen(projekt)}
+        soll_ablauf = SollAblauf(db, projekt, signale, quellen, tops, bericht)
 
         for quelle_hash, gruppe_iter in groupby(eigene, key=lambda e: e["quelle_hash"]):
             gruppe = list(gruppe_iter)
             try:
                 for e in gruppe:
+                    if e["art"] in SOLL_ARTEN:
+                        soll_ablauf.verarbeiten(e)
+                        elemente = {x["id"]: x for x in db.elemente(projekt)}  # Register kann sich geändert haben
                     for vorschlag in (
                         regel_bauteil_entfaellt(e, elemente),
                         regel_plan_veraltet(e, plaene),

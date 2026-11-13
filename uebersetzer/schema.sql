@@ -134,7 +134,10 @@ create table if not exists eintraege (
                    'bestaetigung',           -- "Rev C gesehen", "ok, machen wir"
                    'problem_behoben',        -- Rückmeldung zur Lösung eines Signals
                    'frage',
-                   'sonstiges')),
+                   'sonstiges',
+                   'soll_aenderung',         -- "das haben wir geändert, Keller nur 3x3" → Soll ändert sich
+                   'freigabe',               -- Bauleitung bestätigt/lehnt eine vorgeschlagene Soll-Änderung ab
+                   'nachweis')),             -- Foto/PDF eines Dokuments, das eine Soll-Änderung schriftlich belegt
 
   -- Wer
   person         text,                       -- wie im Original: "Thomas Meier (Krenn Bau)"
@@ -182,6 +185,68 @@ alter table eintraege add column if not exists schritt text check (schritt in (
   'staenderwerk','verrohrung','leitung_eingezogen','gesetzt','angeschlossen','abnahme',
   'beplankung','spachteln','malen','montage','rueckbau','sonstiges'));
 create index if not exists eintraege_element_idx on eintraege (element_id);
+
+-- Soll-Änderungen: Details aus der Nachricht (Bezug, ja/nein, neues Soll, betroffene Bauteile).
+alter table eintraege add column if not exists soll jsonb;
+
+-- Für bestehende Datenbanken: neue Arten im Check zulassen.
+alter table eintraege drop constraint if exists eintraege_art_check;
+alter table eintraege add constraint eintraege_art_check check (art in (
+  'arbeit_erledigt','arbeit_geplant','anweisung','planaenderung','abnahme','behinderung','lieferung',
+  'bestaetigung','problem_behoben','frage','sonstiges','soll_aenderung','freigabe','nachweis'));
+
+-- ---------------------------------------------------------------------------
+-- Personen und Rollen: wer darf das Soll ändern?
+-- ---------------------------------------------------------------------------
+-- Nur Personen mit darf_soll_aendern (Bauleitung des GU, "Superintendent") können eine
+-- Soll-Änderung anordnen oder freigeben. Alle anderen können sie nur vorschlagen.
+create table if not exists personen (
+  id                uuid primary key default gen_random_uuid(),
+  projekt           text not null,
+  name              text not null,               -- "Thomas Meier"
+  aliase            text[] not null default '{}', -- Schreibweisen in den Quellen, z. B. "Thomas Meier (Krenn Bau)"
+  firma             text,
+  rolle             text not null check (rolle in ('bauleitung','projektleitung','vorarbeiter','monteur','planer','kaeufer','sonstige')),
+  darf_soll_aendern boolean not null default false,
+  telefon           text,
+  unique (projekt, name)
+);
+
+-- ---------------------------------------------------------------------------
+-- Soll-Änderungen während der Bauphase
+-- ---------------------------------------------------------------------------
+-- Ablauf (ÖNORM B 2110: Anordnung des AG, aus Beweisgründen schriftlich):
+--   Bauleitung meldet Änderung          → status freigegeben, nachweis fehlt
+--   Arbeiter meldet "wurde geändert"   → status vorgeschlagen → Bauleitung gibt frei / lehnt ab
+--   Freigegeben                         → Bauteil-Register wird angepasst, zugehörige Signale gelöst
+--   Foto/PDF eines Dokuments der Bauleitung → nachweis vorhanden
+create table if not exists soll_aenderungen (
+  id                    uuid primary key default gen_random_uuid(),
+  projekt               text not null,
+  schluessel            text not null,          -- "sa|<quelle_hash>|<nr>"
+  titel                 text not null,
+  neues_soll            text,                   -- was jetzt gilt
+  top                   text,
+  raum                  text,
+  element_ids           uuid[] not null default '{}',   -- betroffene Bauteile
+  bauteile_neu          jsonb not null default '[]',    -- neue Soll-Bauteile (wie SollElement)
+  bauteile_entfallen    text[] not null default '{}',   -- Schlüssel der Bauteile, die wegfallen
+  status                text not null default 'vorgeschlagen' check (status in ('vorgeschlagen','freigegeben','abgelehnt')),
+  vorgeschlagen_von     text,
+  vorgeschlagen_am      timestamptz,
+  vorschlag_eintrag     uuid references eintraege (id) on delete set null,
+  freigegeben_von       text,
+  freigegeben_am        timestamptz,
+  freigabe_eintrag      uuid references eintraege (id) on delete set null,
+  nachweis_status       text not null default 'fehlt' check (nachweis_status in ('fehlt','vorhanden')),
+  nachweis_quelle_hash  text,                   -- Foto/PDF (quellen.content_hash)
+  nachweis_am           timestamptz,
+  signal_ids            uuid[] not null default '{}',   -- Signale, die diese Änderung betrifft
+  erstellt_am           timestamptz not null default now(),
+  aktualisiert_am       timestamptz not null default now(),
+  unique (projekt, schluessel)
+);
+create index if not exists soll_aenderungen_status_idx on soll_aenderungen (projekt, status, nachweis_status);
 
 -- ---------------------------------------------------------------------------
 -- Signale (Schritt 4 + Lebenszyklus aus KONZEPT.md)
@@ -294,6 +359,22 @@ from elemente el
 left join eintraege e on e.element_id = el.id
 group by el.id;
 
+-- Offene Aufgaben fürs Frontend: was die Bauleitung noch tun muss.
+create or replace view offene_aufgaben with (security_invoker = true) as
+select
+  sa.projekt,
+  case when sa.status = 'vorgeschlagen' then 'freigabe' else 'nachweis' end as aufgabe,
+  case when sa.status = 'vorgeschlagen'
+       then 'Soll-Änderung bestätigen oder ablehnen: ' || sa.titel
+       else 'Schriftlichen Nachweis einreichen (Foto/PDF): ' || sa.titel end as titel,
+  sa.id as soll_aenderung_id,
+  sa.top, sa.raum, sa.neues_soll,
+  coalesce(sa.freigegeben_von,
+           (select string_agg(p.name, ', ') from personen p where p.projekt = sa.projekt and p.darf_soll_aendern)) as zustaendig,
+  case when sa.status = 'vorgeschlagen' then sa.vorgeschlagen_am else sa.freigegeben_am end as seit
+from soll_aenderungen sa
+where sa.status = 'vorgeschlagen' or (sa.status = 'freigegeben' and sa.nachweis_status = 'fehlt');
+
 -- Einträge mit ihrer Rohquelle (Kanal, Absender, Anhang) für Zwilling und Timeline.
 create or replace view eintraege_mit_quelle with (security_invoker = true) as
 select
@@ -323,5 +404,9 @@ begin
   if not exists (select 1 from pg_publication_tables
                  where pubname = 'supabase_realtime' and tablename = 'elemente') then
     alter publication supabase_realtime add table elemente;
+  end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and tablename = 'soll_aenderungen') then
+    alter publication supabase_realtime add table soll_aenderungen;
   end if;
 end $$;

@@ -100,6 +100,49 @@ def soll_uebernehmen(
     return bericht
 
 
+def soll_aenderungen_liste(aenderungen: list[Zeile]) -> str:
+    """Für den Prompt: offene bzw. noch nicht nachgewiesene Soll-Änderungen."""
+    relevant = [
+        a for a in aenderungen
+        if a["status"] == "vorgeschlagen" or (a["status"] == "freigegeben" and a.get("nachweis_status") == "fehlt")
+    ]
+    if not relevant:
+        return "(keine)"
+    return "\n".join(
+        f"- {a['schluessel']} · {a['status']}"
+        + (" · Nachweis fehlt" if a["status"] == "freigegeben" else "")
+        + f" · {a['titel']}" + (f" · {a['top']}" if a.get("top") else "")
+        for a in relevant
+    )
+
+
+def soll_aenderung_anwenden(db: DB, projekt: str, sa: Zeile, tops: list[str]) -> RegisterBericht:
+    """Eine freigegebene Soll-Änderung ins Bauteil-Register übernehmen.
+    Neue Bauteile bekommen soll_plan_nr = 'Änderung', entfallene werden soll_aktiv = false."""
+    bericht = RegisterBericht()
+    vorhanden = {e["schluessel"]: e for e in db.elemente(projekt)}
+    for s in sa.get("bauteile_neu") or []:
+        el = SollElement.model_validate(s)
+        top = _top(el.top, tops)
+        schluessel = element_schluessel(top, el.raum, el.bezeichnung)
+        felder = {
+            "top": top, "raum": el.raum, "art": el.art, "bezeichnung": el.bezeichnung, "lage": el.lage,
+            "anzahl": max(1, el.anzahl), "soll_plan_nr": "Änderung", "soll_plan_index": None, "soll_aktiv": True,
+        }
+        if schluessel in vorhanden:
+            db.element_aendern(vorhanden[schluessel]["id"], felder)
+            bericht.aktualisiert += 1
+        else:
+            vorhanden[schluessel] = db.element_einfuegen({"projekt": projekt, "schluessel": schluessel, **felder})
+            bericht.neu += 1
+    for schluessel in sa.get("bauteile_entfallen") or []:
+        e = vorhanden.get(" ".join(schluessel.lower().split()))
+        if e and e.get("soll_aktiv", True):
+            db.element_aendern(e["id"], {"soll_aktiv": False})
+            bericht.deaktiviert += 1
+    return bericht
+
+
 def bauteil_liste(elemente: list[Zeile]) -> str:
     """Für den Prompt: Schlüssel, Art, Bezeichnung, Lage, Status im Soll."""
     if not elemente:

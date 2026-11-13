@@ -18,7 +18,7 @@ def eintrag(**kw) -> Eintrag:
     basis = dict(
         art="arbeit_erledigt", zusammenfassung="x", person=None, firma=None, gewerk=None, top=None, raum=None,
         element=None, taetigkeit=None, menge=None, einheit=None, lv_pos_nr=None, plan_nr=None, plan_index=None,
-        entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, konfidenz=0.9, unklar=False, rueckfrage=None,
+        entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, soll=None, konfidenz=0.9, unklar=False, rueckfrage=None,
     )
     return Eintrag(**{**basis, **kw})
 

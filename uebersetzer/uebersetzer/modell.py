@@ -21,6 +21,9 @@ EintragArt = Literal[
     "problem_behoben",
     "frage",
     "sonstiges",
+    "soll_aenderung",  # das Soll ändert sich während der Bauphase ("Keller nur 3x3", "haben wir geändert")
+    "freigabe",        # Bauleitung bestätigt oder lehnt eine vorgeschlagene Soll-Änderung ab
+    "nachweis",        # Foto/PDF eines Dokuments, das eine Soll-Änderung schriftlich belegt
 ]
 
 
@@ -54,6 +57,19 @@ class SollElement(BaseModel):
     gehoert_zu: Optional[str] = Field(description="Bezeichnung des Bauteils, in dem es sitzt (meist die Wand), sonst null.")
 
 
+class SollDetails(BaseModel):
+    """Nur bei art = soll_aenderung, freigabe oder nachweis."""
+
+    bezug: Optional[str] = Field(
+        description="Schlüssel einer offenen Soll-Änderung aus der Liste, auf die sich die Nachricht bezieht (bei freigabe/nachweis immer, sonst null)."
+    )
+    freigabe_ja: Optional[bool] = Field(description="Bei freigabe: true = bestätigt, false = abgelehnt. Sonst null.")
+    titel: Optional[str] = Field(description="Bei soll_aenderung: kurzer Titel, z. B. 'Keller 3x3 m statt 3x4 m'.")
+    neues_soll: Optional[str] = Field(description="Bei soll_aenderung: was jetzt gelten soll, konkret.")
+    bauteile_neu: list[SollElement] = Field(description="Bei soll_aenderung: Bauteile, die es neu bzw. an neuer Stelle gibt.")
+    bauteile_entfallen: list[str] = Field(description="Bei soll_aenderung: Schlüssel aus der Bauteil-Liste, die wegfallen oder verlegt werden.")
+
+
 class Eintrag(BaseModel):
     """Ein strukturierter Eintrag: was, wo, wer, wann, nach welchem Plan."""
 
@@ -82,6 +98,7 @@ class Eintrag(BaseModel):
         "Nur wenn eindeutig, sonst null."
     )
     schritt: Optional[Schritt] = Field(description="Welcher Arbeitsschritt am Bauteil, nur bei Arbeit.")
+    soll: Optional[SollDetails] = Field(description="Nur bei art soll_aenderung, freigabe, nachweis; sonst null.")
     konfidenz: float = Field(description="0 bis 1: wie sicher die Zuordnung ist.")
     unklar: bool
     rueckfrage: Optional[str] = Field(description="Was man nachfragen müsste, statt zu raten.")

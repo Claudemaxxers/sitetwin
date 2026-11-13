@@ -53,6 +53,19 @@ Damit der Prüf-Agent weiß, *welches* Kabel oder *welche* Wand gemeint ist, lie
 - **Ist pro Nachricht:** Jeder Eintrag bekommt, wenn eindeutig, `element_id` und `schritt` (verrohrung, leitung_eingezogen, gesetzt, abnahme, beplankung, …). Die Sicht `element_stand` zeigt je Bauteil die erledigten und geplanten Schritte – das ist die Grundlage für den Zwilling.
 - **Testdaten:** `fake_data/drive/Projekt_Simmering/Plaene/Plan_E-03_Top3_IndexA.pdf` (5 Trockenbauwände in Top 3 mit Leitungen und Dosen), erzeugt mit `uv run python werkzeuge/plan_top3.py`. Fiktiv, die Pipeline ist echt.
 
+## Soll-Änderungen während der Bauphase
+
+Das Soll steht nicht nur im Plan: Auf der Baustelle wird umentschieden („Keller nur 3×3 statt 3×4“). Nach ÖNORM B 2110 kann der Auftraggeber Leistungsänderungen anordnen – auch mündlich, für den Beweis zählt aber die Schriftform. SiteTwin bildet das so ab (`soll.py`, läuft im Prüf-Agenten, kostenlos):
+
+| Wer meldet | Ergebnis |
+|---|---|
+| Bauleitung (`personen.darf_soll_aendern`, im BV Simmering: Thomas Meier, GU) | Änderung gilt sofort (`freigegeben`), Bauteil-Register wird angepasst, betroffene Signale werden gelöst. |
+| Jemand anderes („das haben wir geändert“) | Nur `vorgeschlagen`. Signale bleiben offen – der Arbeiter ist erst nach der Freigabe frei. |
+| Bauleitung antwortet (Art `freigabe`) | `freigegeben` (inkl. Register + Signale) oder `abgelehnt`. Freigaben von Unberechtigten werden ignoriert. |
+| Bauleitung schickt Foto/PDF eines Dokuments (Art `nachweis`) | `nachweis_status = vorhanden`. Sprachnachrichten und Fotos anderer zählen nicht. |
+
+Offene Aufgaben fürs Frontend liefert die Sicht **`offene_aufgaben`**: „Soll-Änderung bestätigen“ (vorgeschlagen) und „Schriftlichen Nachweis einreichen“ (freigegeben, Nachweis fehlt), mit `zustaendig`.
+
 ## Prüf-Agent (Schritt 4)
 
 `pruefung.py` prüft jeden neuen Eintrag gegen den gültigen Plan und legt **Signale** an, solange noch jemand eingreifen kann. `lauf` übersetzt und prüft in einem Durchgang; einzeln geht's mit:

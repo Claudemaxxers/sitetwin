@@ -89,7 +89,7 @@ def _ohne_llm(quelle: Zeile) -> list[Eintrag] | None:
             zusammenfassung="Sprachnachricht ohne Transkript, Inhalt unbekannt.",
             person=quelle.get("absender"), firma=None, gewerk=None, top=None, raum=None, element=None,
             taetigkeit=None, menge=None, einheit=None, lv_pos_nr=None, plan_nr=None, plan_index=None,
-            entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, konfidenz=0.0, unklar=True,
+            entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, soll=None, konfidenz=0.0, unklar=True,
             rueckfrage="Sprachnachricht konnte nicht transkribiert werden – bitte Inhalt schriftlich nachreichen.",
         )]
     if not text and not quelle.get("anhang_pfad"):
@@ -126,6 +126,7 @@ def verarbeite(db: DB, extrahierer: Extrahierer, projekt_filter: str | None, kon
                     db.aktuelle_plaene(projekt),
                     stammdaten,
                     register.bauteil_liste(db.elemente(projekt)),
+                    register.soll_aenderungen_liste(db.soll_aenderungen(projekt)),
                 )
                 ergebnis = extrahierer(system, messages)
                 eintraege, plaene = ergebnis.eintraege, ergebnis.plaene

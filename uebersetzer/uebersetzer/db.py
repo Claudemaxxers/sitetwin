@@ -41,6 +41,11 @@ class DB(Protocol):
     def elemente(self, projekt: str) -> list[Zeile]: ...
     def element_einfuegen(self, zeile: Zeile) -> Zeile: ...
     def element_aendern(self, element_id: str, felder: Zeile) -> None: ...
+    # Soll-Änderungen
+    def personen(self, projekt: str) -> list[Zeile]: ...
+    def soll_aenderungen(self, projekt: str) -> list[Zeile]: ...
+    def soll_aenderung_einfuegen(self, zeile: Zeile) -> Zeile: ...
+    def soll_aenderung_aendern(self, sa_id: str, felder: Zeile) -> None: ...
 
 
 def element_schluessel(top: str | None, raum: str | None, bezeichnung: str) -> str:
@@ -171,6 +176,21 @@ class SupabaseDB:
         felder = {**felder, "aktualisiert_am": datetime.now(timezone.utc).isoformat()}
         self.client.table("elemente").update(felder).eq("id", element_id).execute()
 
+    def personen(self, projekt: str) -> list[Zeile]:
+        return self._alle("personen", projekt)
+
+    def soll_aenderungen(self, projekt: str) -> list[Zeile]:
+        return self._alle("soll_aenderungen", projekt)
+
+    def soll_aenderung_einfuegen(self, zeile: Zeile) -> Zeile:
+        return self.client.table("soll_aenderungen").insert(zeile).execute().data[0]
+
+    def soll_aenderung_aendern(self, sa_id: str, felder: Zeile) -> None:
+        from datetime import datetime, timezone
+
+        felder = {**felder, "aktualisiert_am": datetime.now(timezone.utc).isoformat()}
+        self.client.table("soll_aenderungen").update(felder).eq("id", sa_id).execute()
+
     def als_geprueft(self, eintrag_ids: list[str]) -> None:
         from datetime import datetime, timezone
 
@@ -190,6 +210,8 @@ class SpeicherDB:
         self.plaene: list[Zeile] = []
         self.signale_liste: list[Zeile] = []
         self.elemente_liste: list[Zeile] = []
+        self.personen_liste: list[Zeile] = []
+        self.soll_liste: list[Zeile] = []
 
     def neue_quellen(self, projekt: str | None) -> list[Zeile]:
         return sorted(
@@ -272,6 +294,26 @@ class SpeicherDB:
         for e in self.elemente_liste:
             if e["id"] == element_id:
                 e.update(felder)
+
+    def personen(self, projekt: str) -> list[Zeile]:
+        return [x for x in self.personen_liste if x["projekt"] == projekt]
+
+    def soll_aenderungen(self, projekt: str) -> list[Zeile]:
+        return [x for x in self.soll_liste if x["projekt"] == projekt]
+
+    def soll_aenderung_einfuegen(self, zeile: Zeile) -> Zeile:
+        import uuid
+
+        if any(x["projekt"] == zeile["projekt"] and x["schluessel"] == zeile["schluessel"] for x in self.soll_liste):
+            raise ValueError("unique (projekt, schluessel) verletzt")
+        neu = {"status": "vorgeschlagen", "nachweis_status": "fehlt", "signal_ids": [], "element_ids": [], **zeile, "id": str(uuid.uuid4())}
+        self.soll_liste.append(neu)
+        return neu
+
+    def soll_aenderung_aendern(self, sa_id: str, felder: Zeile) -> None:
+        for x in self.soll_liste:
+            if x["id"] == sa_id:
+                x.update(felder)
 
     def als_geprueft(self, eintrag_ids: list[str]) -> None:
         ids = set(eintrag_ids)
