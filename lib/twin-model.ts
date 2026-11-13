@@ -23,6 +23,7 @@ export type EintragArt =
   | "arbeit_geplant"
   | "anweisung"
   | "planaenderung"
+  | "soll_aenderung"
   | "abnahme"
   | "behinderung"
   | "lieferung"
@@ -100,6 +101,7 @@ export interface Plan {
   top: string | null;
   aenderung: string | null;
   gueltig_ab: string | null;
+  quelle_hash?: string | null;
 }
 
 export interface LvPosition {
@@ -110,11 +112,33 @@ export interface LvPosition {
   einheitspreis_eur: number;
 }
 
+export interface SignalVerlauf {
+  id: number;
+  signal_id: string;
+  status: SignalStatus;
+  zeitpunkt: string;
+}
+
+/** Raw message as Santino's Ablage stored it (table `quellen`). */
+export interface Quelle {
+  typ: "whatsapp" | "email" | "drive" | "call";
+  kanal: string | null;
+  absender: string | null;
+  zeitpunkt: string | null;
+  text: string;
+  anhang_pfad: string | null;
+  anhang_typ: string | null;
+  anhang_name: string | null;
+  content_hash: string;
+}
+
 export interface ProjektDaten {
   projekt: Projekt;
+  quellen: Quelle[];
   tops: Top[];
   eintraege: Eintrag[];
   signale: Signal[];
+  verlauf: SignalVerlauf[];
   plaene: Plan[];
   lv: LvPosition[];
   geladen: string;
@@ -144,6 +168,7 @@ export const ART_LABEL: Record<EintragArt, string> = {
   arbeit_geplant: "Geplant",
   anweisung: "Anweisung",
   planaenderung: "Planänderung",
+  soll_aenderung: "Änderung angeordnet",
   abnahme: "Abnahme",
   behinderung: "Behinderung",
   lieferung: "Lieferung",

@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { aenderungen, personenVerzeichnis } from "@/lib/vm";
 import {
   ART_LABEL,
   eur,
@@ -18,7 +18,6 @@ import {
   type TopZustand,
   type Zwilling,
 } from "@/lib/twin-model";
-import { Brand, Firma } from "./Brand";
 
 const Building3D = dynamic(() => import("./Building3D"), {
   ssr: false,
@@ -31,36 +30,23 @@ const Building3D = dynamic(() => import("./Building3D"), {
 
 const SLICE_MS = 650;
 
-export default function TwinView({ initial }: { initial: ProjektDaten }) {
-  const [daten, setDaten] = useState(initial);
+export default function TwinView({ daten, neu, focus }: { daten: ProjektDaten; neu: Set<string>; focus?: { top: string; key: number } | null }) {
   const [cursor, setCursor] = useState<number | null>(null); // null = live
   const [floorSel, setFloorSel] = useState<string | null>(null);
   const [topSel, setTopSel] = useState<string | null>(null);
   const [isolated, setIsolated] = useState(false);
-  const [neu, setNeu] = useState<Set<string>>(new Set());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // live: poll Hendrik's tables
-  useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/projekt/${encodeURIComponent(initial.projekt.projekt)}`, { cache: "no-store" });
-        if (!res.ok) return;
-        const next = (await res.json()) as ProjektDaten;
-        setDaten((prev) => {
-          const known = new Set(prev.eintraege.map((e) => e.id));
-          const fresh = next.eintraege.filter((e) => !known.has(e.id)).map((e) => e.id);
-          if (fresh.length) setNeu(new Set(fresh));
-          return next;
-        });
-      } catch {
-        /* offline: keep last state */
-      }
-    }, 6000);
-    return () => clearInterval(id);
-  }, [initial.projekt.projekt]);
-
-  const z = useMemo(() => zwilling(daten, cursor ?? undefined), [daten, cursor]);
+  // extra costs come from the same change list as the Änderungen view, so both show the same numbers
+  const changes = useMemo(() => aenderungen(daten, personenVerzeichnis(daten), daten.signale), [daten]);
+  const z = useMemo(() => {
+    const basis = zwilling(daten, cursor ?? undefined);
+    const bis = cursor ?? Number.POSITIVE_INFINITY;
+    const mehrkosten = changes
+      .filter((c) => ts(c.erhoben) <= bis)
+      .map((c) => ({ titel: c.titel, top: c.top, betrag: c.schaetzung?.betrag ?? null, grundlage: c.schaetzung?.grundlage ?? c.fehlend.join(", "), eintrag: c.eintraege[0] }));
+    return { ...basis, mehrkosten, mehrkostenSumme: mehrkosten.reduce((a, x) => a + (x.betrag ?? 0), 0) };
+  }, [daten, cursor, changes]);
   const zLive = useMemo(() => zwilling(daten), [daten]);
 
   const goHouse = useCallback(() => {
@@ -87,44 +73,61 @@ export default function TwinView({ initial }: { initial: ProjektDaten }) {
     [floorSel, isolated],
   );
 
+  // jump in from a change or a message ("Im Zwilling zeigen")
+  useEffect(() => {
+    if (!focus) return;
+    const g = z.geschosse.find((x) => x.tops.some((t) => t.top === focus.top));
+    if (g) goFloor(g.name, focus.top);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.key]);
+
   const geschoss = z.geschosse.find((g) => g.name === floorSel) ?? null;
   const top = topSel ? z.tops[topSel] : null;
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <header className="flex items-center justify-between border-b border-[var(--line)] bg-white/90 px-6 py-3 backdrop-blur">
-        <div className="flex items-center gap-6">
-          <Brand />
-          <nav className="flex items-center gap-2 text-sm">
-            <Link href="/" className="muted hover:text-[var(--text)]">
-              Projekte
-            </Link>
-            <span className="muted">/</span>
-            <button onClick={goHouse} className={floorSel ? "muted hover:text-[var(--text)]" : ""}>
-              {daten.projekt.name ?? daten.projekt.projekt}
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-end justify-between px-8 pb-4 pt-6">
+        <div>
+          <nav className="muted mb-1 flex items-center gap-1.5 text-[12px]">
+            <button onClick={goHouse} className="hover:text-[var(--text)]">
+              Zwilling
             </button>
             {floorSel && (
               <>
-                <span className="muted">/</span>
-                <button onClick={() => goFloor(floorSel)} className={topSel ? "muted hover:text-[var(--text)]" : ""}>
+                <span>/</span>
+                <button onClick={() => goFloor(floorSel)} className="hover:text-[var(--text)]">
                   {floorSel}
                 </button>
               </>
             )}
             {topSel && (
               <>
-                <span className="muted">/</span>
+                <span>/</span>
                 <span>{topSel}</span>
               </>
             )}
           </nav>
+          <h1 className="text-[28px] leading-8 tracking-[-0.02em]">{topSel ?? floorSel ?? "Gebäude"}</h1>
         </div>
-        <Firma />
-      </header>
+        <div className="flex items-center gap-2 text-[12px]">
+          {cursor === null ? (
+            <span className="muted flex items-center gap-1.5">
+              <span className="live-dot" /> Live
+            </span>
+          ) : (
+            <span className="rounded-[3px] bg-[var(--text)] px-2 py-1 text-white">Stand {zeitLabel(cursor)}</span>
+          )}
+          {floorSel && (
+            <button onClick={topSel ? () => goFloor(floorSel) : goHouse} className="btn">
+              ← {topSel ? floorSel : "Ganzes Gebäude"}
+            </button>
+          )}
+        </div>
+      </div>
 
       <Kpis z={z} />
 
-      <div className="grid min-h-0 flex-1 grid-cols-[400px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 grid-cols-[380px_minmax(0,1fr)] border-t border-[var(--line)]">
         <aside className="min-h-0 overflow-y-auto border-r border-[var(--line)] bg-white">
           {top ? (
             <TopPanel zs={top} z={z} neu={neu} />
@@ -135,23 +138,8 @@ export default function TwinView({ initial }: { initial: ProjektDaten }) {
           )}
         </aside>
 
-        <section className="relative min-h-0">
+        <section className="relative min-h-0 bg-[#f7f5f2]">
           <Building3D z={z} floorSel={floorSel} topSel={topSel} isolated={isolated} onFloor={(g) => goFloor(g)} onTop={(g, t) => goFloor(g, t)} />
-          <div className="pointer-events-none absolute left-5 top-4 flex items-center gap-2">
-            {cursor === null ? (
-              <>
-                <span className="live-dot" />
-                <span className="label">Live aus Supabase</span>
-              </>
-            ) : (
-              <span className="label rounded bg-[var(--text)] px-2 py-1 !text-white">Stand {zeitLabel(cursor)}</span>
-            )}
-          </div>
-          {floorSel && (
-            <button onClick={topSel ? () => goFloor(floorSel) : goHouse} className="btn absolute right-5 top-4 bg-white/90">
-              ← {topSel ? floorSel : "Ganzes Gebäude"}
-            </button>
-          )}
           {!floorSel && <div className="label pointer-events-none absolute bottom-4 right-5">Geschoss anklicken, um es herauszuziehen</div>}
         </section>
       </div>
@@ -413,7 +401,7 @@ function Feed({ title, eintraege, neu, limit }: { title: string; eintraege: Eint
           <div key={e.id} className={`border-b border-[var(--line)] py-2.5 ${neu.has(e.id) ? "flash" : ""}`}>
             <div className="flex items-center gap-1.5 text-xs">
               <span className="chip">{quelle(e)}</span>
-              <span className={`chip ${e.art === "behinderung" || e.art === "planaenderung" ? "!border-[var(--accent)] accent" : ""}`}>{ART_LABEL[e.art]}</span>
+              <span className={`chip ${e.art === "behinderung" || e.art === "planaenderung" ? "!border-[var(--accent)] accent" : ""}`}>{ART_LABEL[e.art] ?? e.art}</span>
               {e.top && <span className="chip">{e.top}</span>}
               <span className="muted ml-auto">{zeitLabel(e.zeitpunkt)}</span>
             </div>
