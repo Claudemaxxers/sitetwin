@@ -26,7 +26,7 @@ Schnittstelle zwischen Ablage und Übersetzer ist die Tabelle `quellen` (`ablage
 - **Code-Freeze: Samstag 14.11., 15:00 scharf.** Späte Abgaben zählen nicht.
 - **Runde 1 (15:00–16:00, Talona-Jury):** bis 5 Minuten Live-Demo, 3 Minuten Fragen.
 - **Runde 2 (ab 16:00, nur Track-Sieger):** 4 Minuten Live-Demo, 2 Minuten Fragen. Externe Jury, die Track-Punkte zählen dort nicht mehr: Wirkung und Relevanz 30, technische Leistung 30, Innovation 20, Live-Demo und Pitch 20. Bei Gleichstand entscheidet die stärkere Live-Demo.
-- **Talona-Jury:** Kacper Nowakowski (auch Mentor) und Ignacy Ruszkowski.
+- **Talona-Jury:** Kacper Gadomski (auch Mentor; Nachname laut Track-Seite, im Brief steht „surname to confirm“) und Ignacy Ruszkowski.
 - **Abgabe pro Team, eine Abgabe über das Formular (Link auf Discord):**
   - Repository mit echtem README (Setup, Start, Umgebung, Architektur, Annahmen) und `.env.example`
   - 3-Minuten-Demo-Video, das die Lösung von Anfang bis Ende zeigt
@@ -69,5 +69,5 @@ Was laut Brief gut aussieht:
 
 - Root-`README.md` beschreibt noch vor allem den ersten Prototyp. Es fehlen die Gesamtkette (Ablage → Übersetzer → Prüf-Agent → Telefon-Agent → Zwilling), die Umgebung für alle Teile und ein Abschnitt Annahmen und Grenzen.
 - Demo-Video und schriftlicher Abgabetext.
-- Prüfen, ob das Repo privat ist und wo es laut Organisatoren liegen soll.
+- Das Repo ist privat (geprüft 14.11.). Offen: wo es laut Organisatoren liegen soll.
 - Echte Sprachnachrichten werden noch von niemandem transkribiert.
