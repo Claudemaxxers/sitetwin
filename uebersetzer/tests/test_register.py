@@ -68,12 +68,12 @@ def test_wand_zu_angekuendigt_bevor_installation_fertig_ist_kritisch():
     pruefe(db, None, None)
     [s] = db.signale_liste
     assert s["art"] == "reihenfolge" and s["schwere"] == "kritisch" and s["element_id"] == el["Wand B1"]["id"]
-    assert "Steckdose Waschtisch" in s["anruf_text"] and "Abnahme" in s["anruf_text"]
+    assert "Steckdose Waschtisch" in s["anruf_text"] and "Abnahme" not in s["anruf_text"]  # Abnahme blockiert nicht
     assert "Leitung F4" not in s["anruf_text"]  # ist schon erledigt
     assert s["anruf_text"].startswith("Servus Marek") and "noch nicht zumachen" in s["anruf_text"]
 
 
-def test_wand_zu_ist_ok_wenn_alles_drin_und_abgenommen():
+def test_wand_zu_ist_ok_wenn_installation_drin_ist():
     db = SpeicherDB([], [], [])
     el = wand_plan(db)
     db.eintraege = [
@@ -97,7 +97,7 @@ def test_reihenfolge_signal_loest_sich_wenn_installation_nachgeholt_wird():
     ]
     b = pruefe(db, None, None)
     [s] = db.signale_liste
-    assert s["status"] == "geloest" and s["geloest_durch"] == "4" and len(b.geloest) == 1
+    assert s["status"] == "geloest" and s["geloest_durch"] == "3" and len(b.geloest) == 1  # mit der letzten fehlenden Dose
 
 
 def test_arbeit_an_entfallenem_bauteil_und_loesung_am_neuen_ort():
@@ -120,3 +120,30 @@ def test_arbeit_an_entfallenem_bauteil_und_loesung_am_neuen_ort():
     [s] = db.signale_liste
     assert s["art"] == "plan_veraltet" and s["schluessel"] == f"plan_veraltet|{raum['Vorraum']}"
     assert s["status"] == "geloest" and s["geloest_durch"] == "2"
+
+
+def test_szenario_wand_top5_abstellraum_ohne_wand_im_plan():
+    """Santinos Szenario (fake_data/szenarien/wand_top5): Plan E-05 kennt nur den Verteiler, keine Wand.
+    Trockenbau kündigt an, im Abstellraum zuzumachen → Signal an den Elektro-Vorarbeiter. Gelöst, sobald der Verteiler gesetzt ist."""
+    db = SpeicherDB([], [], [])
+    db.personen_liste = [
+        {"projekt": P, "name": "Stefan Huber", "aliase": [], "firma": "Elektro Gruber GmbH", "rolle": "vorarbeiter", "darf_soll_aendern": False},
+        {"projekt": P, "name": "Marko Novak", "aliase": [], "firma": "Novak Trockenbau", "rolle": "vorarbeiter", "darf_soll_aendern": False},
+    ]
+    soll_uebernehmen(db, P, [soll("Wohnungsverteiler", "verteiler", raum="Vorraum", top="Top 5")], plan("E-05", "B"), "hB", TOPS)
+    soll_uebernehmen(db, P, [soll("Wohnungsverteiler", "verteiler", raum="Abstellraum", top="Top 5")], plan("E-05", "C"), "hC", TOPS)
+    wv = next(x for x in db.elemente_liste if x["raum"] == "Abstellraum")
+    db.eintraege = [
+        e("1", "2026-11-13T17:20:00+01:00", "arbeit_geplant", None, "beplankung", person="Marko Novak (Novak Trockenbau)",
+          top="Top 5", raum="Abstellraum, Vorraum"),
+        e("2", "2026-11-13T17:22:00+01:00", "arbeit_geplant", None, "beplankung", person="Marko Novak (Novak Trockenbau)",
+          top="Top 4", raum="Vorraum, Küche"),  # Falle F1: Top 4 hat keine offene Installation im Register
+        e("3", "2026-11-14T06:05:00+01:00", "arbeit_geplant", wv["id"], "verrohrung", top="Top 5", raum="Abstellraum", person="Stefan Huber"),
+        e("4", "2026-11-14T06:52:00+01:00", "arbeit_erledigt", wv["id"], "gesetzt", top="Top 5", raum="Abstellraum", person="Ali Demir"),
+    ]
+    pruefe(db, None, None)
+    [s] = db.signale_liste
+    assert s["art"] == "reihenfolge" and s["schwere"] == "kritisch" and s["zustaendig"] == "Stefan Huber"
+    assert s["anruf_text"].startswith("Servus Stefan") and "Wohnungsverteiler (Plan E-05 C)" in s["anruf_text"]
+    assert "Marko Novak" in s["anruf_text"]
+    assert s["status"] == "geloest" and s["geloest_durch"] == "4"  # 06:05 ("ziehen jetzt ein") löst noch nicht

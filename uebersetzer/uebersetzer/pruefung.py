@@ -152,47 +152,86 @@ def _wand_von(e: Zeile, elemente: dict[str, Zeile]) -> Zeile | None:
     return elemente.get(el.get("gehoert_zu") or "") if el.get("gehoert_zu") else None
 
 
-def wand_offene_punkte(wand: Zeile, elemente: dict[str, Zeile], stand: dict[str, set[str]]) -> list[str]:
-    kinder = [k for k in elemente.values() if k.get("gehoert_zu") == wand["id"] and k.get("soll_aktiv", True)]
-    fehlt = [
-        k["bezeichnung"] for k in kinder
-        if k["art"] in VOR_DEM_SCHLIESSEN and not (stand.get(k["id"], set()) & VOR_DEM_SCHLIESSEN[k["art"]])
-    ]
-    if kinder and "abnahme" not in stand.get(wand["id"], set()) and not any("abnahme" in stand.get(k["id"], set()) for k in kinder):
-        fehlt.append("Abnahme der Installation")
-    return fehlt
+def _n(s: str | None) -> str:
+    return " ".join((s or "").lower().split())
 
 
-def regel_wand_zu_vor_installation(e: Zeile, elemente: dict[str, Zeile], alle: list[Zeile]) -> Zeile | None:
-    """Wand soll geschlossen werden (oder ist es), obwohl Leitungen/Dosen darin fehlen oder nicht abgenommen sind."""
+def bauteile_im_bereich(top: str | None, raum: str | None, wand_id: str | None, elemente: dict[str, Zeile]) -> list[Zeile]:
+    """Installations-Bauteile, die fertig sein müssen, bevor in diesem Bereich zugemacht wird:
+    die Bauteile in der Wand (falls bekannt) und alle im selben Raum (Raum darf mehrere nennen, z. B. 'Abstellraum, Vorraum')."""
+    if not top:
+        return []
+    treffer = []
+    for k in elemente.values():
+        if not k.get("soll_aktiv", True) or k["art"] not in VOR_DEM_SCHLIESSEN:
+            continue
+        in_wand = wand_id and k.get("gehoert_zu") == wand_id
+        im_raum = _n(k.get("top")) == _n(top) and raum and k.get("raum") and _n(k["raum"]) in _n(raum)
+        if in_wand or im_raum:
+            treffer.append(k)
+    return treffer
+
+
+def offene_installation(bauteile: list[Zeile], stand: dict[str, set[str]]) -> list[Zeile]:
+    return [k for k in bauteile if not (stand.get(k["id"], set()) & VOR_DEM_SCHLIESSEN[k["art"]])]
+
+
+def zustaendig_fuer(fehlend: list[Zeile], personen: list[Zeile], fallback: str | None) -> str | None:
+    """Wer muss handeln? Der Vorarbeiter des Gewerks, dessen Installation fehlt (alle Bauteile hier sind Elektro)."""
+    if fehlend:
+        for p in personen:
+            if p.get("rolle") == "vorarbeiter" and "elektro" in _n(p.get("firma")):
+                return p["name"]
+    return fallback
+
+
+def regel_wand_zu_vor_installation(
+    e: Zeile, elemente: dict[str, Zeile], alle: list[Zeile], personen: list[Zeile] | None = None
+) -> Zeile | None:
+    """Jemand will zumachen (oder hat zugemacht), obwohl laut Plan noch Installation in Wand/Raum fehlt."""
     if e["art"] not in ARBEIT or e.get("schritt") != "beplankung":
         return None
     wand = _wand_von(e, elemente)
-    if not wand:
-        return None
-    fehlt = wand_offene_punkte(wand, elemente, ist_stand(alle, e.get("zeitpunkt"), ausser=e.get("id")))
+    top = (wand or {}).get("top") or e.get("top")
+    raum = e.get("raum") or (wand or {}).get("raum")
+    bereich = bauteile_im_bereich(top, raum, wand["id"] if wand else None, elemente)
+    fehlt = offene_installation(bereich, ist_stand(alle, e.get("zeitpunkt"), ausser=e.get("id")))
     if not fehlt:
         return None
     geplant = e["art"] == "arbeit_geplant"
-    ort = f"{wand.get('top') or ''} {wand.get('raum') or ''}".strip()
-    liste = ", ".join(fehlt)
+    ort = " ".join(x for x in (top, raum) if x)
+    was = wand["bezeichnung"] if wand else "die Wand"
+    liste = ", ".join(
+        k["bezeichnung"] + (f" (Plan {k['soll_plan_nr']} {k['soll_plan_index']})" if k.get("soll_plan_index") else "") for k in fehlt
+    )
+    akteur = e.get("person") or "Jemand"
+    zustaendig = zustaendig_fuer(fehlt, personen or [], e.get("person"))
+    if zustaendig and _n(zustaendig) not in _n(akteur):
+        anruf = (
+            f"Servus {_vorname(zustaendig)}, hier ist SiteTwin. {akteur} {'will' if geplant else 'hat'} in {ort} {was} "
+            f"{'zumachen' if geplant else 'zugemacht'}, laut Plan fehlt dort aber noch: {liste}. "
+            + ("Bitte das vorher erledigen oder Bescheid geben, dass noch nicht zugemacht wird." if geplant
+               else "Bitte klären, ob die Wand wieder geöffnet werden muss.")
+        )
+    else:
+        anruf = (
+            f"Servus {_vorname(akteur)}, hier ist SiteTwin. In {ort} bitte "
+            f"{'noch nicht zumachen' if geplant else 'nicht weiterarbeiten'}: Laut Plan fehlt noch {liste}. "
+            "Sonst muss die Wand später wieder geöffnet werden."
+        )
     return {
-        "schluessel": f"reihenfolge|{wand['id']}",
-        "element_id": wand["id"],
+        "schluessel": f"reihenfolge|{wand['id']}" if wand else f"reihenfolge|{_n(top)}|{_n(raum)}",
+        "element_id": wand["id"] if wand else (fehlt[0]["id"] if len(fehlt) == 1 else None),
         "art": "reihenfolge",
         "schwere": "kritisch" if geplant else "hoch",
-        "titel": f"{ort}: {wand['bezeichnung']} {'soll zu' if geplant else 'zu'}, Installation nicht fertig",
+        "titel": f"{ort}: {'soll zugemacht werden' if geplant else 'zugemacht'}, Installation fehlt ({liste})",
         "begruendung": (
-            f"{e.get('person') or 'Jemand'} {'will' if geplant else 'meldet'} {wand['bezeichnung']} ({ort}) "
-            f"{'schließen' if geplant else 'geschlossen'}. Laut Plan sitzen darin Bauteile, für die noch fehlt: {liste}."
+            f"{akteur} {'will' if geplant else 'meldet'} in {ort} {was} {'schließen' if geplant else 'geschlossen'}. "
+            f"Laut Plan muss vorher fertig sein: {liste}."
         ),
-        "anruf_text": (
-            f"Servus {_vorname(e.get('person'))}, hier ist SiteTwin. {wand['bezeichnung']} in {ort} bitte "
-            f"{'noch nicht zumachen' if geplant else 'wieder aufmachen lassen, bevor weitergearbeitet wird'}: "
-            f"Es fehlt noch {liste}. Sonst muss die Wand später wieder geöffnet werden."
-        ).replace("Servus ,", "Servus,"),
-        "zustaendig": e.get("person"),
-        "top": wand.get("top"), "raum": wand.get("raum"), "element": wand["bezeichnung"],
+        "anruf_text": anruf.replace("Servus ,", "Servus,"),
+        "zustaendig": zustaendig,
+        "top": top, "raum": raum, "element": wand["bezeichnung"] if wand else None,
     }
 
 
@@ -233,14 +272,18 @@ def loest_bauteil_signal(signal: Zeile, e: Zeile, elemente: dict[str, Zeile], al
     - reihenfolge: alle offenen Punkte der Wand sind inzwischen erledigt.
     - plan_veraltet an einem entfallenen Bauteil: gleichartiges Bauteil am gültigen Ort ist erledigt."""
     el_id = signal.get("element_id")
-    if not el_id or e["art"] not in ("arbeit_erledigt", "problem_behoben"):
+    if e["art"] not in ("arbeit_erledigt", "problem_behoben"):
+        return False
+    if not el_id and signal["art"] != "reihenfolge":
         return False
     if signal["art"] == "reihenfolge":
-        wand = elemente.get(el_id)
-        betroffen = _wand_von(e, elemente)
-        if not wand or not betroffen or betroffen["id"] != wand["id"]:
+        if not _n(e.get("top")) == _n(signal.get("top")) and not _wand_von(e, elemente):
             return False
-        return not wand_offene_punkte(wand, elemente, ist_stand(alle, e.get("zeitpunkt")))
+        wand = elemente.get(el_id or "")
+        wand_id = wand["id"] if wand and wand["art"] == "wand" else None
+        bereich = bauteile_im_bereich(signal.get("top"), signal.get("raum"), wand_id, elemente)
+        betrifft = e.get("element_id") in {k["id"] for k in bereich} or (wand_id and _wand_von(e, elemente) and _wand_von(e, elemente)["id"] == wand_id)
+        return bool(betrifft and bereich and not offene_installation(bereich, ist_stand(alle, e.get("zeitpunkt"))))
     if signal["art"] == "plan_veraltet":
         alt, neu = elemente.get(el_id), elemente.get(e.get("element_id") or "")
         return bool(
@@ -428,6 +471,7 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
         tops = [t["top"] for t in db.stammdaten(projekt)[0]]
         quellen = {q["content_hash"]: q for q in db.projekt_quellen(projekt)}
         soll_ablauf = SollAblauf(db, projekt, signale, quellen, tops, bericht)
+        personen = soll_ablauf.personen
 
         for quelle_hash, gruppe_iter in groupby(eigene, key=lambda e: e["quelle_hash"]):
             gruppe = list(gruppe_iter)
@@ -439,7 +483,7 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
                     for vorschlag in (
                         regel_bauteil_entfaellt(e, elemente),
                         regel_plan_veraltet(e, plaene),
-                        regel_wand_zu_vor_installation(e, elemente, alle),
+                        regel_wand_zu_vor_installation(e, elemente, alle, personen),
                         regel_unklar(e),
                     ):
                         if vorschlag:

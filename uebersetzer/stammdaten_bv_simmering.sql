@@ -48,5 +48,6 @@ insert into personen (projekt, name, aliase, firma, rolle, darf_soll_aendern, te
   ('BV Simmering', 'Andrea Gruber', '{"Andrea Gruber <a.gruber@elektro-gruber.example>","Gruber"}', 'Elektro Gruber GmbH', 'projektleitung', false, null),
   ('BV Simmering', 'Stefan Huber', '{"Stefan"}', 'Elektro Gruber GmbH', 'vorarbeiter', false, '+43 660 0000000'),
   ('BV Simmering', 'Ali Demir', '{}', 'Elektro Gruber GmbH', 'monteur', false, null),
-  ('BV Simmering', 'Martin Lechner', '{"DI Martin Lechner","DI Martin Lechner <m.lechner@tb-lechner.example>"}', 'TB Lechner Elektroplanung', 'planer', false, null)
+  ('BV Simmering', 'Martin Lechner', '{"DI Martin Lechner","DI Martin Lechner <m.lechner@tb-lechner.example>"}', 'TB Lechner Elektroplanung', 'planer', false, null),
+  ('BV Simmering', 'Marko Novak', '{"Marko Novak (Novak Trockenbau)","Marko","Novak"}', 'Novak Trockenbau', 'vorarbeiter', false, null)
 on conflict do nothing;

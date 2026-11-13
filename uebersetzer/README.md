@@ -79,7 +79,7 @@ uv run python -m uebersetzer pruefen --mit-claude  # zusätzlich Claude-Prüfung
 | Stufe | Erkennt | Kosten |
 |---|---|---|
 | Feste Regel `plan_veraltet` | Arbeit nach Plan-Index X, obwohl zu dem Zeitpunkt schon ein neuerer Index ausgegeben war („Änderung hat die Crew nicht erreicht“). Gelöst, sobald am selben Ort nach dem gültigen Index gearbeitet wird. | 0 |
-| Feste Regel Wand zu vor Installation | Eine Wand soll geschlossen werden (oder ist es), obwohl Leitungen/Dosen darin laut Plan noch nicht gesetzt sind oder die Abnahme fehlt. Kritisch, solange es nur angekündigt ist. Gelöst, sobald alles nachgeholt ist. | 0 |
+| Feste Regel Wand zu vor Installation | In einer Wand oder einem Raum soll zugemacht werden (oder ist es), obwohl laut Plan dort noch Installation fehlt (Leitung nicht verrohrt/eingezogen, Dose/Verteiler nicht gesetzt). Kritisch, solange es nur angekündigt ist. Angerufen wird der Vorarbeiter des Gewerks, dessen Installation fehlt (z. B. Elektro), nicht der, der zumacht. Gelöst, sobald alles gesetzt ist. Eine Abnahme ist bewusst keine Voraussetzung (Golden Set S1). | 0 |
 | Feste Regel Bauteil entfällt | Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht. Gelöst, sobald das Bauteil am neuen Ort erledigt ist. | 0 |
 | Feste Regel `unklar` | Gemeldete Arbeit, bei der unklar ist, was oder wo → Rückfrage statt Raten. Kurze Antworten wie „ok“ lösen nichts aus. | 0 |
 | Claude-Prüfung | Arbeit außer Reihenfolge (z. B. Wand zu vor Installation/Abnahme), Abweichung von Plan/LV ohne Anordnung, nicht weitergegebene Anweisungen; erkennt auch, wenn ein neuer Eintrag ein offenes Signal löst. | pro Quelle 1 Aufruf |
