@@ -110,11 +110,19 @@ export interface LvPosition {
   einheitspreis_eur: number;
 }
 
+export interface SignalVerlauf {
+  id: number;
+  signal_id: string;
+  status: SignalStatus;
+  zeitpunkt: string;
+}
+
 export interface ProjektDaten {
   projekt: Projekt;
   tops: Top[];
   eintraege: Eintrag[];
   signale: Signal[];
+  verlauf: SignalVerlauf[];
   plaene: Plan[];
   lv: LvPosition[];
   geladen: string;

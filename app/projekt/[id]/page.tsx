@@ -1,13 +1,15 @@
 import { notFound } from "next/navigation";
-import TwinView from "@/components/TwinView";
+import AppShell, { type Ansicht } from "@/components/app/AppShell";
 import { getProjektDaten, supabaseConfigured } from "@/lib/sb";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjektPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjektPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ ansicht?: string }> }) {
   if (!supabaseConfigured()) notFound();
   const { id } = await params;
   const daten = await getProjektDaten(decodeURIComponent(id));
   if (!daten) notFound();
-  return <TwinView initial={daten} />;
+  const { ansicht } = await searchParams;
+  const start = (["aenderungen", "inbox", "protokoll", "zwilling"] as const).find((a) => a === ansicht) as Ansicht | undefined;
+  return <AppShell initial={daten} start={start} />;
 }
