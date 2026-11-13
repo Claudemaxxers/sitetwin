@@ -218,6 +218,14 @@ Eine einzelne Nachricht per `POST /import/whatsapp/nachricht`. Wer den Provider-
 - 1 RawItem: `typ=whatsapp`, `original_ref = wa_id`, `meta = {wa_id, quelle: "live"}`. Anhang wird wie beim Export in den Bucket gelegt.
 - Identität ist `wa_id` (Abschnitt 6).
 
+### 7.6 WhatsApp live über Twilio (`adapters/whatsapp_twilio.py`, Form-Input)
+Twilio-Webhook "When a message comes in", `POST /import/whatsapp/twilio`, `application/x-www-form-urlencoded`. Gebaut nach dem dokumentierten Format, noch nicht gegen einen echten Twilio-Account gelaufen.
+- Pflicht: `MessageSid`, `From`. Genutzt: `ProfileName`, `Body`, `NumMedia`, `MediaUrl0`, `MediaContentType0`. Unbekannte Felder werden ignoriert.
+- 1 RawItem wie 7.5: `original_ref = wa_id = MessageSid` (Twilio-Retries ergeben keine zweite Zeile), `meta = {wa_id, quelle: "live", provider: "twilio", absender_nummer, ...}`. `absender = ProfileName`, sonst `From` ohne `whatsapp:`. `zeitpunkt` = Eingangszeit (Twilio sendet keinen), `projekt = DEFAULT_PROJEKT`, `kanal = WHATSAPP_LIVE_KANAL` oder `None`.
+- Medien: Download per HTTP GET mit Basic Auth (`TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`). Dateiname = `MessageSid` + Endung aus dem Content-Type (Sprachnachricht `audio/ogg` → `.ogg`). Schlägt der Download fehl, wird die Nachricht ohne Anhang gespeichert, `meta.anhang_fehler` und `meta.anhang_url` halten den Grund.
+- Signatur: sind `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` gesetzt, wird `X-Twilio-Signature` geprüft (HMAC-SHA1 über URL + Parameter sortiert als Key+Value, Base64), sonst 403. Ohne beide Werte keine Prüfung.
+- Antwort: 200 mit leerem TwiML `<Response></Response>` (`text/xml`), keine Auto-Antwort. Pflichtfeld fehlt → 422, Storage-Fehler → 502.
+
 ## 8. API (`api.py`, FastAPI)
 
 | Methode | Pfad | Body | Antwort |
@@ -228,6 +236,7 @@ Eine einzelne Nachricht per `POST /import/whatsapp/nachricht`. Wer den Provider-
 | POST | `/import/ordner` | JSON `{"pfad": "...", "projekt": "..."}` – **nur lokal/dev** | `ImportErgebnis` |
 | POST | `/import/call` | Call-JSON v1 (7.4) | `ImportErgebnis` |
 | POST | `/import/whatsapp/nachricht` | Live-Nachricht als JSON (7.5) | `ImportErgebnis` |
+| POST | `/import/whatsapp/twilio` | Twilio-Webhook, Form-encoded (7.6) | leeres TwiML, `text/xml` |
 | GET | `/quellen` *(optional)* | Query: `status`, `typ`, `projekt`, `limit` (≤200), `seit` | `list[QuelleOut]` sortiert nach `zeitpunkt` |
 | PATCH | `/quellen/{id}/status` *(optional)* | `{"status": "verarbeitet" \| "fehler", "fehler": "..."}` | `QuelleOut` |
 
@@ -253,7 +262,13 @@ SUPABASE_SERVICE_KEY=
 ABLAGE_BUCKET=ablage
 DEFAULT_PROJEKT=BV Simmering
 TZ=Europe/Vienna
+WHATSAPP_LIVE_KANAL=
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WEBHOOK_URL=
 ```
+
+Die vier letzten sind optional und nur für 7.6. `TWILIO_WEBHOOK_URL` ist die öffentliche URL des Endpunkts, genau wie im Twilio-Dashboard eingetragen.
 
 ## 10. Qualität
 

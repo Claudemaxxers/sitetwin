@@ -19,6 +19,10 @@ class Einstellungen:
     bucket: str
     default_projekt: str
     tz: ZoneInfo
+    whatsapp_live_kanal: str | None = None
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_webhook_url: str = ""
 
 
 def laden() -> Einstellungen:
@@ -29,4 +33,8 @@ def laden() -> Einstellungen:
         bucket=os.environ.get("ABLAGE_BUCKET", "").strip() or "ablage",
         default_projekt=os.environ.get("DEFAULT_PROJEKT", "").strip() or "BV Simmering",
         tz=ZoneInfo(os.environ.get("TZ", "").strip() or "Europe/Vienna"),
+        whatsapp_live_kanal=os.environ.get("WHATSAPP_LIVE_KANAL", "").strip() or None,
+        twilio_account_sid=os.environ.get("TWILIO_ACCOUNT_SID", "").strip(),
+        twilio_auth_token=os.environ.get("TWILIO_AUTH_TOKEN", "").strip(),
+        twilio_webhook_url=os.environ.get("TWILIO_WEBHOOK_URL", "").strip(),
     )

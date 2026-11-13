@@ -45,8 +45,21 @@ curl.exe -X POST localhost:8000/import/call -H "Content-Type: application/json" 
 | `GET /health` | – | – |
 | `POST /import/call` | Call-JSON v1 (SPEC §7.4) | `call_id` |
 | `POST /import/whatsapp/nachricht` | eine Live-Nachricht (SPEC §7.5) | `wa_id` |
+| `POST /import/whatsapp/twilio` | Twilio-Webhook, Form-encoded (SPEC §7.6) | `MessageSid` |
 
-Antwort jeweils `{"gelesen", "neu", "duplikate", "fehler"}`. Interaktive Doku: `http://localhost:8000/docs`.
+Antwort jeweils `{"gelesen", "neu", "duplikate", "fehler"}`, nur der Twilio-Endpunkt antwortet mit leerem TwiML. Interaktive Doku: `http://localhost:8000/docs`.
+
+## WhatsApp live über Twilio (Sandbox)
+
+Gebaut nach dem dokumentierten Twilio-Format und in Tests geprüft, aber **noch nicht gegen einen echten Twilio-Account gelaufen**.
+
+1. `.env` ergänzen: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (für Mediendownload und Signaturprüfung), `TWILIO_WEBHOOK_URL` (öffentliche URL aus Schritt 3), optional `WHATSAPP_LIVE_KANAL`. `DEFAULT_PROJEKT` auf einen eigenen Testnamen setzen, z. B. `Test Santino`, damit die Zeilen von „BV Simmering“ getrennt bleiben.
+2. API starten: `.venv\Scripts\python -m uvicorn ablage.api:app --port 8000`
+3. Tunnel öffnen (z. B. `ngrok http 8000`) und `https://<tunnel>/import/whatsapp/twilio` in der Twilio-Konsole unter Messaging → Try it out → WhatsApp Sandbox → **When a message comes in** eintragen (Methode POST). Dieselbe URL als `TWILIO_WEBHOOK_URL` setzen, uvicorn neu starten.
+4. Vom Handy den Join-Code an die Sandbox-Nummer schicken, danach eine Testnachricht.
+5. Prüfen: `.venv\Scripts\python -m ablage zeige --projekt "Test Santino"`
+
+Sprachnachrichten kommen als Datei (`<MessageSid>.ogg`) mit leerem `text` an, weil noch nichts transkribiert. Schlägt der Mediendownload fehl, bleibt die Nachricht ohne Anhang erhalten, der Grund steht in `meta.anhang_fehler`. Ohne `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` wird die Signatur nicht geprüft.
 
 ## Eigenen WhatsApp-Chat testen
 
@@ -64,7 +77,7 @@ Gelesen werden Android- und iPhone-Exporte (`WhatsApp Chat mit ….txt` bzw. `_c
 ## Architektur
 
 ```
-adapters/whatsapp.py  eml.py  ordner.py  call.py  whatsapp_live.py
+adapters/whatsapp.py  eml.py  ordner.py  call.py  whatsapp_live.py  whatsapp_twilio.py
         │  reine Funktionen: parse(path, ctx) -> RawItem | ParseFehler
         ▼
 store.py   Upload in den Bucket + Insert mit content_hash (Backend per Dependency Injection:
