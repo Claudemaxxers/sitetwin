@@ -59,7 +59,7 @@ Was laut Brief gut aussieht:
 
 ## Arbeitsregeln im Repo
 
-- Basisdaten in `fake_data/` (`whatsapp/`, `email/`, `drive/`, `calls/`) **nicht ändern**: Tests von Ablage und Übersetzer hängen an ihren Zahlen. Neue Fälle kommen nach `fake_data/szenarien/<name>/`.
+- Basisdaten in `fake_data/` (`whatsapp/`, `email/`, `drive/`, `calls/`) **nur nach Absprache ändern**: Tests von Ablage und Übersetzer hängen an ihren Zahlen (zuletzt: 39 WhatsApp, 8 E-Mail, 6 Drive, 1 Call). Neue Fälle kommen nach `fake_data/szenarien/<name>/`.
 - Testdaten sind fiktiv, Fotos und Sprachdateien sind Platzhalter. In READMEs und in der Demo so benennen.
 - Interne Recherche-Dokumente (z. B. die Bauprozess-Recherche zu Regie und Nachtrag) gehören **nicht** ins Repo.
 - Vor dem Pushen: `git pull`, Tests des eigenen Teils grün.

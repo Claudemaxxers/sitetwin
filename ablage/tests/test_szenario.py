@@ -66,7 +66,7 @@ def test_reihenfolge_ausloeser_vor_anruf_vor_loesung(items):
 def test_nach_basisdaten_11_neu_keine_kollision():
     backend = store.FakeBackend()
     alle = audit.originale(FAKE_DATA, CTX)
-    assert len(alle) == 64 and len({i.content_hash() for i in alle}) == 64
+    assert len(alle) == 65 and len({i.content_hash() for i in alle}) == 65
     store.speichern(whatsapp.parse(FAKE_DATA / "whatsapp", CTX), backend)
     assert len(backend.zeilen) == 39
     eins = store.speichern(whatsapp.parse(SZENARIO / "whatsapp", CTX), backend)

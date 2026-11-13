@@ -97,16 +97,17 @@ def test_kaputte_mail_und_html_fallback(tmp_path, ctx):
 # --- Ordner / Drive -------------------------------------------------------
 
 
-def test_5_dateien_2_csv_1_md_2_pdf(dateien):
+def test_6_dateien_2_csv_1_md_3_pdf(dateien):
     assert all(isinstance(d, RawItem) for d in dateien)
     assert sorted(d.original_ref for d in dateien) == [
         "Projekt_Simmering/LV_Elektro.csv",
+        "Projekt_Simmering/Plaene/Plan_E-03_Top3_IndexA.pdf",
         "Projekt_Simmering/Plaene/Plan_E-05_Top5_IndexB.pdf",
         "Projekt_Simmering/Plaene/Plan_E-05_Top5_IndexC.pdf",
         "Projekt_Simmering/Projekt.md",
         "Projekt_Simmering/Tops.csv",
     ]
-    assert sorted(d.anhang.typ.value for d in dateien) == ["pdf", "pdf", "tabelle", "tabelle", "text"]
+    assert sorted(d.anhang.typ.value for d in dateien) == ["pdf", "pdf", "pdf", "tabelle", "tabelle", "text"]
 
 
 def test_drive_felder(dateien):
@@ -141,7 +142,7 @@ def test_steuerdateien_ignoriert_mtime_nicht_im_hash_kaputtes_pdf(tmp_path, ctx)
     def hashes(pfad):
         return sorted(d.content_hash() for d in ordner.parse(pfad, ctx))
 
-    assert len(hashes(kopie)) == 5
+    assert len(hashes(kopie)) == 6
     assert hashes(kopie) == hashes(DRIVE)
 
     (kopie / "kaputt.pdf").write_bytes(b"kein pdf")
@@ -172,8 +173,8 @@ def test_alles_zusammen_zweiter_import_0_neu(ctx):
             store.speichern(call.parse(CALL, ctx), backend),
         ]
 
-    assert [(e.gelesen, e.neu) for e in lauf()] == [(39, 39), (8, 8), (5, 5), (1, 1)]
-    assert [(e.neu, e.duplikate) for e in lauf()] == [(0, 39), (0, 8), (0, 5), (0, 1)]
-    assert len(backend.zeilen) == 53
+    assert [(e.gelesen, e.neu) for e in lauf()] == [(39, 39), (8, 8), (6, 6), (1, 1)]
+    assert [(e.neu, e.duplikate) for e in lauf()] == [(0, 39), (0, 8), (0, 6), (0, 1)]
+    assert len(backend.zeilen) == 54
     # Plan Index C liegt in Mail und Drive: gleiche Datei, aber getrennte Pfade je typ
-    assert len(backend.dateien) == 5 + 2 + 5
+    assert len(backend.dateien) == 5 + 2 + 6

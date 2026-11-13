@@ -65,11 +65,11 @@ Basisdaten:
 - WhatsApp: **39 Nachrichten** (ohne 5 Systemzeilen), davon 5 mit Anhang (3 Fotos, 2 Sprachnachrichten), 1 gelöschte Nachricht mit `meta.geloescht = true`
 - Absender exakt: `Andrea Gruber`, `Stefan Huber`, `Ali Demir`, `Thomas Meier (Krenn Bau)`
 - E-Mail: **6 Mails + 2 PDF-Anhänge** = 8 RawItems; Betreff korrekt dekodiert (Umlaute, Gedankenstrich)
-- Drive: **5 Dateien** (2 CSV, 1 MD, 2 PDF) – je Datei ein RawItem
+- Drive: **6 Dateien** (2 CSV, 1 MD, 3 PDF) – je Datei ein RawItem
 - Call: 1 RawItem mit Transkript als Text
 - Zweiter Import derselben Dateien: **0 neue, alle Duplikate**
 
 Szenario `szenarien/wand_top5/`:
 - WhatsApp: **10 Nachrichten** (ohne 1 Systemzeile), davon 4 mit Anhang (2 Fotos, 2 Sprachnachrichten mit Sidecar-Transkript); neuer Absender `Marko Novak (Novak Trockenbau)`; gleicher Kanal wie die Basisdaten
 - Call: 1 RawItem (`call_3b91d7f2`)
-- Nach Basisdaten importiert: **11 neue**, keine Kollision mit den 53 vorhandenen; zusammen 64
+- Nach Basisdaten importiert: **11 neue**, keine Kollision mit den 54 vorhandenen; zusammen 65

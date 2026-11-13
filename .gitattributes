@@ -1,0 +1,2 @@
+# Testdaten byte-genau halten: keine Zeilenenden-Umwandlung, sonst andert sich der sha256 je Rechner
+fake_data/** -text

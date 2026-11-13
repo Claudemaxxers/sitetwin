@@ -260,11 +260,11 @@ TZ=Europe/Vienna
 - **Tests** (`ablage/tests/`, pytest, Fixtures = `fake_data/` im Repo-Root). Mindestens:
   - WhatsApp: 39 Nachrichten, 5 Systemzeilen übersprungen, 5 Anhänge, 4 Absender exakt, Mehrzeiler korrekt, gelöschte Nachricht markiert, beide Sprachnachrichten mit Sidecar-Transkript in `text`
   - E-Mail: 6 Mails + 2 Anhänge, Umlaut-Betreff dekodiert, `in_reply_to` gesetzt
-  - Ordner: 5 Dateien, CSV-Inhalt im Text, Steuerdateien ignoriert, `zeitpunkt` ist `None`
+  - Ordner: 6 Dateien, CSV-Inhalt im Text, Steuerdateien ignoriert, `zeitpunkt` ist `None`
   - Call: Transkript-Zeilen, Zeitzone korrekt, `projekt` aus Payload
   - Hash: gleicher Input → gleicher Hash; anderer Exportdateiname → gleicher Hash; Drive-Datei mit geänderter mtime → gleicher Hash; Audio-Item mit und ohne Sidecar → gleicher Hash; Call mit geänderter Zusammenfassung → gleicher Hash
   - Store (mit Fake-Client): zweiter Import → `neu = 0`
-  - Szenario `fake_data/szenarien/wand_top5/` (Kernbeispiel aus `KONZEPT.md`): 10 WhatsApp-Nachrichten + 1 Call, zusätzlich zu den Basisdaten importiert → 11 neu, zusammen 64. Die Basisdaten bleiben unverändert, weil auch die Tests des Übersetzers an ihren Zahlen hängen.
+  - Szenario `fake_data/szenarien/wand_top5/` (Kernbeispiel aus `KONZEPT.md`): 10 WhatsApp-Nachrichten + 1 Call, zusätzlich zu den Basisdaten importiert → 11 neu, zusammen 65. Die Basisdaten bleiben unverändert, weil auch die Tests des Übersetzers an ihren Zahlen hängen.
 - Adapter-Tests laufen **ohne** Supabase. Store bekommt den Client per Dependency Injection.
 - Dependencies in `ablage/pyproject.toml`, darunter `pypdf` und **`tzdata`** (Windows hat keine Zeitzonendatenbank, ohne `tzdata` wirft `ZoneInfo("Europe/Vienna")`).
 - `ruff` für Lint/Format. Typ-Hints überall.
