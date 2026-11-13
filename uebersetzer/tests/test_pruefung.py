@@ -112,6 +112,21 @@ def test_claude_signal_und_loesung():
     assert "Marek will Wand 12" in anfragen[1]  # Stand der Baustelle enthält den früheren Eintrag
 
 
+def test_claude_darf_regel_signale_nicht_loesen():
+    db = neue_db([
+        e("1", "2026-11-12T10:52:00+01:00", "arbeit_geplant", plan_nr="E-05", plan_index="B"),
+        e("2", "2026-11-12T15:38:00+01:00", "planaenderung", person="Andrea Gruber", zusammenfassung="Index C gilt"),
+    ])
+    schluessel = "plan_veraltet|Top 5|E-05|wohnungsverteiler"
+
+    def fake(system, messages):
+        assert "loesbar=\"ja\">\n(keine)" in messages[0]["content"]
+        return Pruefergebnis(signale=[], geloest=[SignalGeloest(schluessel=schluessel, eintrag_nr=1, begruendung="geklärt")])
+
+    pruefe(db, None, fake)
+    assert db.signale_liste[0]["schluessel"] == schluessel and db.signale_liste[0]["status"] == "offen"
+
+
 def test_claude_fehler_laesst_gruppe_ungeprueft():
     db = neue_db([e("1", "2026-11-13T09:00:00+01:00", "arbeit_geplant")])
 

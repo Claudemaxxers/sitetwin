@@ -158,13 +158,19 @@ Signal-Arten:
 Nicht melden (wird anderweitig erledigt oder ist keine Abweichung):
 - Arbeit nach einem veralteten Plan-Index (eigene feste Regel).
 - Unklare Nachrichten (eigene feste Regel).
-- Normaler Fortschritt, Lieferungen, Wartezeiten, Kosten- und Abrechnungsfragen.
-- Zusatzleistungen, die jemand mit Befugnis (GU, Bauleitung, Planer, Käufer über GU) angeordnet hat.
+- Normaler Fortschritt, Lieferungen, Wartezeiten.
+- Kosten, Aufträge, Angebote, Freigaben, Abrechnung, Regieberichte – das ist kaufmännisch, keine Abweichung auf der Baustelle.
+- Zusatz- oder Mehrleistungen, die GU, Bauleitung, Planer oder Käufer (über den GU) angeordnet haben – auch wenn Auftrag oder Angebot noch fehlen.
 - Dinge, die in den offenen Signalen schon gemeldet sind.
 
-Lösungen: Wenn ein neuer Eintrag belegt, dass ein offenes Signal behoben ist (z. B. "Abnahme ok, jetzt zu", "Verteiler im Abstellraum gesetzt"), trage es in `geloest` ein. Nur bei klarem Beleg.
+zustaendig: die Person, die die betroffene Arbeit ausführt oder ihr Team anweist (Vorarbeiter/Obermonteur des ausführenden Gewerks) – nie der GU, der etwas angeordnet hat.
 
-anruf_text: 2–3 Sätze in Du-Form, konkret, was nicht passieren soll und warum. Kein Smalltalk."""
+Lösungen: Wenn ein neuer Eintrag belegt, dass die Abweichung auf der Baustelle tatsächlich behoben ist (z. B. "Abnahme ok, jetzt zu", "Verteiler im Abstellraum gesetzt"), trage das Signal in `geloest` ein. Dass ein Problem erkannt, gemeldet oder geklärt wurde, ist noch keine Lösung. Nur Signale aus der Liste `loesbar` dürfen in `geloest` stehen.
+
+anruf_text: 2–3 Sätze in Du-Form an die zuständige Person, konkret, was nicht passieren soll und warum. Kein Smalltalk."""
+
+# Signale dieser Arten löst nur die jeweilige feste Regel, nicht Claude.
+REGEL_ARTEN = {"plan_veraltet", "unklar"}
 
 
 def eintrag_kurz(e: Zeile, nr: int | None = None) -> str:
@@ -182,11 +188,15 @@ def baue_pruefanfrage(
         {"type": "text", "text": stammdaten, "cache_control": {"type": "ephemeral"}},
     ]
     gueltig = [neuester_plan(plaene, nr, None) for nr in sorted({p["plan_nr"] for p in plaene})]
-    offen_txt = "\n".join(f"- {s['schluessel']} · {s['art']} · {s['titel']}" for s in offene) or "(keine)"
+    loesbar = [s for s in offene if s["art"] not in REGEL_ARTEN]
+    andere = [s for s in offene if s["art"] in REGEL_ARTEN]
+    loesbar_txt = "\n".join(f"- {s['schluessel']} · {s['art']} · {s['titel']}" for s in loesbar) or "(keine)"
+    andere_txt = "\n".join(f"- {s['art']} · {s['titel']}" for s in andere) or "(keine)"
     text = (
         f"<gueltige_plaene>\n{prompt.plaene_block([p for p in gueltig if p])}\n</gueltige_plaene>\n\n"
         f"<stand_der_baustelle>\n" + ("\n".join(eintrag_kurz(e) for e in stand) or "(noch nichts)") + "\n</stand_der_baustelle>\n\n"
-        f"<offene_signale>\n{offen_txt}\n</offene_signale>\n\n"
+        f"<offene_signale loesbar=\"ja\">\n{loesbar_txt}\n</offene_signale>\n\n"
+        f"<offene_signale loesbar=\"nein\" hinweis=\"nur Kontext, nicht erneut melden\">\n{andere_txt}\n</offene_signale>\n\n"
         "<neue_eintraege hinweis=\"nur diese prüfen\">\n"
         + "\n".join(eintrag_kurz(e, i) for i, e in enumerate(neue, start=1))
         + "\n</neue_eintraege>"
@@ -295,7 +305,7 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
                         zeile = v.model_dump(exclude={"kurzschluessel", "eintrag_nrs"})
                         zeile["schluessel"] = f"ki|{v.top or ''}|{v.kurzschluessel.strip().lower()}"
                         signale.melden(zeile, ausloeser)
-                    nach_schluessel = {s["schluessel"]: s for s in offene}
+                    nach_schluessel = {s["schluessel"]: s for s in offene if s["art"] not in REGEL_ARTEN}
                     for g in ergebnis.geloest:
                         if g.schluessel in nach_schluessel and 1 <= g.eintrag_nr <= len(gruppe):
                             signale.loesen(nach_schluessel[g.schluessel], gruppe[g.eintrag_nr - 1], g.begruendung)
