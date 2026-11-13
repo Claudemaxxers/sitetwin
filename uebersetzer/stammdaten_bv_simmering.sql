@@ -1,5 +1,10 @@
 -- Stammdaten BV Simmering, erzeugt aus fake_data/drive/Projekt_Simmering/*.csv
--- Nach schema.sql einmal im SQL-Editor ausführen.
+-- Nach schema.sql ausführen. Wiederholbar (on conflict do nothing).
+-- Pläne (plaene) befüllt der Übersetzer aus den Quellen, weil er dafür den content_hash braucht.
+
+insert into projekte (projekt, name, adresse) values
+  ('BV Simmering', 'BV Simmeringer Hauptstraße 112 (fiktiv)', 'Simmeringer Hauptstraße 112, 1110 Wien')
+on conflict do nothing;
 
 insert into lv_positionen (projekt, pos_nr, kurztext, langtext, einheit, menge, einheitspreis_eur) values
   ('BV Simmering', '01.01.010', 'Baustelleneinrichtung', 'Einrichten und Räumen der Baustelle inkl. Container und Lager', 'PA', 1, 1850.00),
@@ -21,7 +26,8 @@ insert into lv_positionen (projekt, pos_nr, kurztext, langtext, einheit, menge, 
   ('BV Simmering', '04.01.010', 'Regiestunde Monteur', 'Nur auf schriftliche Anordnung des AG, Nachweis durch Regiebericht', 'h', 0, 62.00),
   ('BV Simmering', '04.01.020', 'Regiestunde Helfer', 'Nur auf schriftliche Anordnung des AG, Nachweis durch Regiebericht', 'h', 0, 48.00),
   ('BV Simmering', '05.01.010', 'Erdung und Potentialausgleich', 'Fundamenterder, Haupterdungsschiene, Potentialausgleich', 'PA', 1, 2400.00),
-  ('BV Simmering', '05.01.020', 'Prüfung und E-Befund je Top', 'Erstprüfung und Befund je Wohnung', 'Stk', 8, 180.00);
+  ('BV Simmering', '05.01.020', 'Prüfung und E-Befund je Top', 'Erstprüfung und Befund je Wohnung', 'Stk', 8, 180.00)
+on conflict do nothing;
 
 insert into tops (projekt, top, geschoss, raeume, kaeufer_status) values
   ('BV Simmering', 'Top 1', 'EG', 'Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC,Abstellraum', 'verkauft'),
@@ -32,4 +38,5 @@ insert into tops (projekt, top, geschoss, raeume, kaeufer_status) values
   ('BV Simmering', 'Top 6', '2. OG', 'Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC', 'frei'),
   ('BV Simmering', 'Top 7', '2. OG', 'Vorraum,Wohnzimmer,Küche,Schlafzimmer,Arbeitszimmer,Bad,WC', 'verkauft'),
   ('BV Simmering', 'Top 8', '2. OG', 'Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC,Abstellraum', 'frei'),
-  ('BV Simmering', 'TG', 'UG', 'Fahrgasse,Stellplätze 1-24,Technikraum', '-');
+  ('BV Simmering', 'TG', 'UG', 'Fahrgasse,Stellplätze 1-24,Technikraum', '-')
+on conflict do nothing;
