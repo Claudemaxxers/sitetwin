@@ -1,0 +1,21 @@
+pos_nr;kurztext;langtext;einheit;menge;einheitspreis_eur
+01.01.010;Baustelleneinrichtung;Einrichten und Räumen der Baustelle inkl. Container und Lager;PA;1;1850.00
+02.01.010;Leerverrohrung UP M20;Flexibles Installationsrohr M20 unter Putz, inkl. Befestigung, Wohnungen;lfm;1200;4.80
+02.01.020;Unterputzdose Standard;Geräte-/Abzweigdose UP 60 mm;Stk;420;3.90
+02.02.010;Schukosteckdose UP komplett;Schutzkontaktsteckdose UP inkl. Dose, Zuleitung und Abdeckung. Menge lt. Plan Index B: je Top 21 Stk, davon Küche 6 Stk;Stk;168;38.50
+02.02.020;Steckdose Bad IP44;Feuchtraumsteckdose IP44 im Bad, je Top 2 Stk (Waschtisch, Waschmaschine);Stk;16;52.00
+02.02.030;Herdanschlussdose;Herdanschlussdose 5-polig inkl. Zuleitung 5x2,5;Stk;8;64.00
+02.03.010;Lichtauslass Decke;Deckenauslass inkl. Dose und Zuleitung, Lage lt. Plan Index B;Stk;64;41.00
+02.03.020;Schalter UP;Aus-/Wechselschalter UP komplett;Stk;72;34.00
+02.04.010;Datendose Cat6 doppelt;Datendose 2x RJ45 Cat6 UP, je Top 2 Stk (Wohnzimmer, Schlafzimmer);Stk;16;89.00
+02.04.020;Netzwerkkabel Cat6;Installationskabel Cat6 S/FTP, verlegt im Rohr;lfm;900;2.90
+02.05.010;Wohnungsverteiler UP 3-reihig;Wohnungsverteiler UP 3-reihig komplett bestückt, Lage lt. Plan Index B;Stk;8;640.00
+02.05.020;FI/LS-Schalter;FI/LS-Kombischalter 1+N 30 mA;Stk;64;72.00
+02.06.010;Wohnungsstation Gegensprechanlage;Video-Wohnungsstation inkl. Verkabelung;Stk;8;210.00
+02.07.010;Rauchwarnmelder;Rauchwarnmelder nach ÖNORM, Montage nach Malerarbeiten;Stk;32;39.00
+03.01.010;TG-Beleuchtung LED Feuchtraum;LED-Feuchtraumleuchte Tiefgarage inkl. Montage;Stk;24;118.00
+03.01.020;Leerverrohrung TG M25;Installationsrohr M25 Aufputz Tiefgarage, nur für Beleuchtung;lfm;180;6.20
+04.01.010;Regiestunde Monteur;Nur auf schriftliche Anordnung des AG, Nachweis durch Regiebericht;h;0;62.00
+04.01.020;Regiestunde Helfer;Nur auf schriftliche Anordnung des AG, Nachweis durch Regiebericht;h;0;48.00
+05.01.010;Erdung und Potentialausgleich;Fundamenterder, Haupterdungsschiene, Potentialausgleich;PA;1;2400.00
+05.01.020;Prüfung und E-Befund je Top;Erstprüfung und Befund je Wohnung;Stk;8;180.00

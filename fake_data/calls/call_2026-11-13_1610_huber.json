@@ -1,0 +1,26 @@
+{
+  "_hinweis": "Fake-Payload im Stil eines Vapi/Retell End-of-Call-Webhooks. Melih: echtes Format angleichen, Ablage mappt es in /import/call.",
+  "call_id": "call_8f3a2c1e",
+  "richtung": "outbound",
+  "gestartet_um": "2026-11-13T16:10:04+01:00",
+  "beendet_um": "2026-11-13T16:12:41+01:00",
+  "angerufene_person": "Stefan Huber",
+  "telefon": "+43 660 0000000",
+  "projekt": "BV Simmering",
+  "transkript": [
+    {"rolle": "agent", "text": "Hallo Stefan, hier ist der Tieout-Assistent von Elektro Gruber. Hast du kurz zwei Minuten für den Tagesbericht Simmering?"},
+    {"rolle": "person", "text": "Ja passt, bin eh im Auto."},
+    {"rolle": "agent", "text": "Super. Was habt ihr heute gemacht?"},
+    {"rolle": "person", "text": "In der Früh Top 3, aber da war der Trockenbau nicht fertig. Wir sind zu zweit von sieben bis zehn rumgestanden. Dann ab zehn Top 3 Leerverrohrung, ist jetzt zur Hälfte fertig."},
+    {"rolle": "agent", "text": "Verstanden, zwei Personen drei Stunden Wartezeit in Top 3. Wer hat euch gesagt, dass ihr warten sollt?"},
+    {"rolle": "person", "text": "Der Meier von Krenn, per WhatsApp."},
+    {"rolle": "agent", "text": "Danke. Gab es heute sonst noch etwas, das nicht im Plan war?"},
+    {"rolle": "person", "text": "Ja, den Auslass im Wohnzimmer Top 2 haben wir versetzt, 80 Zentimeter Richtung Fenster, hat der Meier gestern per Sprachnachricht gesagt. Hat ungefähr eineinhalb Stunden gedauert, plus drei Meter Rohr und Kabel."},
+    {"rolle": "agent", "text": "Notiert: Lichtauslass Top 2 Wohnzimmer versetzt, 1,5 Stunden plus Material, angeordnet von Thomas Meier mündlich. Gibt es dafür schon was Schriftliches?"},
+    {"rolle": "person", "text": "Nein, nur die Sprachnachricht."},
+    {"rolle": "agent", "text": "Okay, ich markiere das als nicht schriftlich freigegeben. Und der Verteiler in Top 5?"},
+    {"rolle": "person", "text": "Noch nicht umgebaut, machen wir Montag. Rechne mit sechs Stunden."},
+    {"rolle": "agent", "text": "Danke Stefan, schönes Wochenende."}
+  ],
+  "zusammenfassung": "Wartezeit Top 3 (2 Pers. x 3 h, Trockenbau nicht fertig). Lichtauslass Top 2 Wohnzimmer versetzt (1,5 h + Material), nur mündlich angeordnet. Umbau Verteiler Top 5 geplant Montag (ca. 6 h)."
+}

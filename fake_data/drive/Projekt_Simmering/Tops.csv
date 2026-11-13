@@ -1,0 +1,10 @@
+top;geschoss;raeume;kaeufer_status
+Top 1;EG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC,Abstellraum;verkauft
+Top 2;EG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC;verkauft
+Top 3;1. OG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Kinderzimmer,Bad,WC;frei
+Top 4;1. OG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC;verkauft
+Top 5;1. OG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC,Abstellraum;verkauft
+Top 6;2. OG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC;frei
+Top 7;2. OG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Arbeitszimmer,Bad,WC;verkauft
+Top 8;2. OG;Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC,Abstellraum;frei
+TG;UG;Fahrgasse,Stellplätze 1-24,Technikraum;-
