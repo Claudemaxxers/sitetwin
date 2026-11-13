@@ -58,16 +58,25 @@ class SollElement(BaseModel):
 
 
 class SollDetails(BaseModel):
-    """Nur bei art = soll_aenderung, freigabe oder nachweis."""
+    """Details zu einem Eintrag der Art soll_aenderung, freigabe oder nachweis.
+    Bewusst ohne optionale Felder (leer = ""): sonst wird das Ausgabeformat für Structured Outputs zu groß."""
 
-    bezug: Optional[str] = Field(
-        description="Schlüssel einer offenen Soll-Änderung aus der Liste, auf die sich die Nachricht bezieht (bei freigabe/nachweis immer, sonst null)."
-    )
-    freigabe_ja: Optional[bool] = Field(description="Bei freigabe: true = bestätigt, false = abgelehnt. Sonst null.")
-    titel: Optional[str] = Field(description="Bei soll_aenderung: kurzer Titel, z. B. 'Keller 3x3 m statt 3x4 m'.")
-    neues_soll: Optional[str] = Field(description="Bei soll_aenderung: was jetzt gelten soll, konkret.")
-    bauteile_neu: list[SollElement] = Field(description="Bei soll_aenderung: Bauteile, die es neu bzw. an neuer Stelle gibt.")
+    eintrag_nr: int = Field(description="Nummer des Eintrags in `eintraege` (1-basiert), zu dem diese Details gehören.")
+    bezug: str = Field(description="Bei freigabe/nachweis: Schlüssel der offenen Soll-Änderung aus der Liste, sonst \"\".")
+    entscheidung: Literal["ja", "nein", "keine"] = Field(description="Bei freigabe: ja = bestätigt, nein = abgelehnt. Sonst keine.")
+    titel: str = Field(description="Bei soll_aenderung: kurzer Titel, z. B. 'Keller 3x3 m statt 3x4 m'. Sonst \"\".")
+    neues_soll: str = Field(description="Bei soll_aenderung: was jetzt gelten soll, konkret. Sonst \"\".")
     bauteile_entfallen: list[str] = Field(description="Bei soll_aenderung: Schlüssel aus der Bauteil-Liste, die wegfallen oder verlegt werden.")
+
+    def als_dict(self) -> dict:
+        """Format, das in eintraege.soll gespeichert und von soll.py gelesen wird."""
+        return {
+            "bezug": self.bezug or None,
+            "freigabe_ja": {"ja": True, "nein": False}.get(self.entscheidung),
+            "titel": self.titel or None,
+            "neues_soll": self.neues_soll or None,
+            "bauteile_entfallen": self.bauteile_entfallen,
+        }
 
 
 class Eintrag(BaseModel):
@@ -76,14 +85,10 @@ class Eintrag(BaseModel):
     art: EintragArt
     zusammenfassung: str = Field(description="Ein kurzer deutscher Satz, was passiert ist oder passieren soll.")
     person: Optional[str] = Field(description="Wer, wie im Original geschrieben, z. B. 'Thomas Meier (Krenn Bau)'.")
-    firma: Optional[str]
     gewerk: Optional[str] = Field(description="elektro, gu, planung, trockenbau, maler, sanitaer, grosshandel, kaeufer, …")
     top: Optional[str] = Field(description="Exakt wie in der Liste der Tops, z. B. 'Top 5' oder 'TG'.")
     raum: Optional[str]
     element: Optional[str] = Field(description="Bauteil, z. B. 'Wohnungsverteiler', 'Deckenauslass', 'Steckdose'.")
-    taetigkeit: Optional[str] = Field(description="Normalisiert, z. B. 'Steckdosen setzen', 'Verteiler versetzen'.")
-    menge: Optional[float]
-    einheit: Optional[str]
     lv_pos_nr: Optional[str] = Field(description="Passende LV-Position, nur wenn eindeutig.")
     plan_nr: Optional[str] = Field(description="Plan, nach dem gearbeitet wurde/wird, z. B. 'E-05'. Nur zusammen mit plan_index.")
     plan_index: Optional[str] = Field(
@@ -98,7 +103,6 @@ class Eintrag(BaseModel):
         "Nur wenn eindeutig, sonst null."
     )
     schritt: Optional[Schritt] = Field(description="Welcher Arbeitsschritt am Bauteil, nur bei Arbeit.")
-    soll: Optional[SollDetails] = Field(description="Nur bei art soll_aenderung, freigabe, nachweis; sonst null.")
     konfidenz: float = Field(description="0 bis 1: wie sicher die Zuordnung ist.")
     unklar: bool
     rueckfrage: Optional[str] = Field(description="Was man nachfragen müsste, statt zu raten.")
@@ -117,8 +121,10 @@ class Plan(BaseModel):
 class Ergebnis(BaseModel):
     eintraege: list[Eintrag]
     plaene: list[Plan]
+    soll: list[SollDetails] = Field(description="Je ein Element pro Eintrag der Art soll_aenderung, freigabe oder nachweis. Sonst leer.")
     elemente: list[SollElement] = Field(
-        description="Nur bei Plandokumenten: alle Bauteile, die der Plan in diesem Index vorsieht. Sonst leere Liste."
+        description="Bei Plandokumenten: alle Bauteile, die der Plan in diesem Index vorsieht. "
+        "Bei einer soll_aenderung: die Bauteile, die es dadurch neu bzw. an neuer Stelle gibt. Sonst leere Liste."
     )
 
 

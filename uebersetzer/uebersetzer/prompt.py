@@ -32,9 +32,9 @@ Arten:
 - lieferung: Material geliefert oder angekündigt
 - bestaetigung: jemand bestätigt eine Anweisung oder einen Plan ("ok machen wir", "Rev C gesehen")
 - problem_behoben: Rückmeldung, dass ein gemeldetes Problem gelöst ist
-- soll_aenderung: jemand teilt mit, dass das Soll während der Bauphase anders ist als im Plan ("Keller nur 3x3 statt 3x4", "das haben wir geändert, Steckdose kommt links") – egal ob Bauleitung oder Arbeiter. Fülle `soll` (titel, neues_soll, bauteile_neu, bauteile_entfallen). Ein neuer Plan-Index vom Planer ist planaenderung, nicht soll_aenderung.
-- freigabe: Antwort auf eine offene Soll-Änderung aus der Liste: bestätigt (freigabe_ja = true) oder abgelehnt (false). `soll.bezug` = deren Schlüssel.
-- nachweis: Foto oder PDF eines Dokuments (unterschriebene Anordnung, Plan mit Vermerk, Protokoll), das eine offene Soll-Änderung schriftlich belegt. `soll.bezug` = deren Schlüssel. Ein Baustellenfoto ohne Dokument ist kein Nachweis.
+- soll_aenderung: jemand teilt mit, dass das Soll während der Bauphase anders ist als im Plan ("Keller nur 3x3 statt 3x4", "das haben wir geändert, Steckdose kommt links") – egal ob Bauleitung oder Arbeiter. Lege dazu in `soll` ein Element mit eintrag_nr, titel, neues_soll, bauteile_entfallen an; neue oder verlegte Bauteile kommen in `elemente`. Ein neuer Plan-Index vom Planer ist planaenderung, nicht soll_aenderung.
+- freigabe: Antwort auf eine offene Soll-Änderung aus der Liste: bestätigt oder abgelehnt. In `soll` ein Element mit eintrag_nr, bezug = deren Schlüssel und entscheidung ja/nein.
+- nachweis: Foto oder PDF eines Dokuments (unterschriebene Anordnung, Plan mit Vermerk, Protokoll), das eine offene Soll-Änderung schriftlich belegt. In `soll` ein Element mit eintrag_nr und bezug = deren Schlüssel. Ein Baustellenfoto ohne Dokument ist kein Nachweis.
 - frage: offene Frage an andere
 - sonstiges: alles andere, das für den Baustellenstand relevant ist
 

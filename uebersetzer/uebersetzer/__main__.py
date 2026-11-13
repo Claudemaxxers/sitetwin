@@ -200,7 +200,7 @@ def cmd_trockenlauf(args, k: konfig_mod.Konfig) -> None:
                 teile = messages[0]["content"]
                 art = ", ".join(t["type"] for t in teile)
                 print(f"   → würde Claude fragen: {len(teile)} Block/Blöcke ({art}), {len(teile[-1]['text'])} Zeichen Text")
-                return Ergebnis(eintraege=[], plaene=[], elemente=[])
+                return Ergebnis(eintraege=[], plaene=[], soll=[], elemente=[])
         else:
             extrahierer = _claude_extrahierer(k)
 

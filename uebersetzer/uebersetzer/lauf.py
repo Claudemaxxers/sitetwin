@@ -87,9 +87,9 @@ def _ohne_llm(quelle: Zeile) -> list[Eintrag] | None:
         return [Eintrag(
             art="sonstiges",
             zusammenfassung="Sprachnachricht ohne Transkript, Inhalt unbekannt.",
-            person=quelle.get("absender"), firma=None, gewerk=None, top=None, raum=None, element=None,
-            taetigkeit=None, menge=None, einheit=None, lv_pos_nr=None, plan_nr=None, plan_index=None,
-            entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, soll=None, konfidenz=0.0, unklar=True,
+            person=quelle.get("absender"), gewerk=None, top=None, raum=None, element=None,
+            lv_pos_nr=None, plan_nr=None, plan_index=None,
+            entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, konfidenz=0.0, unklar=True,
             rueckfrage="Sprachnachricht konnte nicht transkribiert werden – bitte Inhalt schriftlich nachreichen.",
         )]
     if not text and not quelle.get("anhang_pfad"):
@@ -113,6 +113,7 @@ def verarbeite(db: DB, extrahierer: Extrahierer, projekt_filter: str | None, kon
         try:
             eintraege = _ohne_llm(quelle)
             plaene: list = []
+            soll_details: dict[int, dict] = {}
             if eintraege is None:
                 daten = db.anhang_laden(quelle["anhang_pfad"]) if quelle.get("anhang_pfad") else None
                 bloecke, hinweis = anhang.inhaltsbloecke(quelle, daten)
@@ -130,7 +131,15 @@ def verarbeite(db: DB, extrahierer: Extrahierer, projekt_filter: str | None, kon
                 )
                 ergebnis = extrahierer(system, messages)
                 eintraege, plaene = ergebnis.eintraege, ergebnis.plaene
-                if ergebnis.elemente:
+                soll_details = {d.eintrag_nr: d.als_dict() for d in ergebnis.soll}
+                if ergebnis.elemente and not ist_plandokument(quelle):
+                    # Bauteile aus einer Soll-Änderung: erst nach Freigabe ins Register (soll.py), hier nur merken
+                    nr = next((i for i, x in enumerate(eintraege, start=1) if x.art == "soll_aenderung"), None)
+                    if nr:
+                        soll_details.setdefault(nr, {"bezug": None, "freigabe_ja": None, "titel": None,
+                                                     "neues_soll": None, "bauteile_entfallen": []})
+                        soll_details[nr]["bauteile_neu"] = [x.model_dump() for x in ergebnis.elemente]
+                elif ergebnis.elemente:
                     rb = register.soll_uebernehmen(
                         db, projekt, ergebnis.elemente, plaene[0] if plaene else None, quelle["content_hash"], tops
                     )
@@ -143,6 +152,8 @@ def verarbeite(db: DB, extrahierer: Extrahierer, projekt_filter: str | None, kon
 
             bauteile = {e["schluessel"]: e["id"] for e in db.elemente(projekt)}
             zeilen = [eintrag_zeile(projekt, quelle, i, e, tops, bauteile) for i, e in enumerate(eintraege, start=1)]
+            for z in zeilen:
+                z["soll"] = soll_details.get(z["nr"]) if z["art"] in ("soll_aenderung", "freigabe", "nachweis") else None
             db.eintraege_ersetzen(quelle["content_hash"], zeilen)
             for p in plaene:
                 db.plan_speichern({

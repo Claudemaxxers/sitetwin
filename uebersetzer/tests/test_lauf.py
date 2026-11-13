@@ -16,9 +16,9 @@ PROJEKT = "BV Simmering"
 
 def eintrag(**kw) -> Eintrag:
     basis = dict(
-        art="arbeit_erledigt", zusammenfassung="x", person=None, firma=None, gewerk=None, top=None, raum=None,
-        element=None, taetigkeit=None, menge=None, einheit=None, lv_pos_nr=None, plan_nr=None, plan_index=None,
-        entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, soll=None, konfidenz=0.9, unklar=False, rueckfrage=None,
+        art="arbeit_erledigt", zusammenfassung="x", person=None, gewerk=None, top=None, raum=None,
+        element=None, lv_pos_nr=None, plan_nr=None, plan_index=None,
+        entschieden_von=None, wartet_auf=None, zitat=None, bauteil=None, schritt=None, konfidenz=0.9, unklar=False, rueckfrage=None,
     )
     return Eintrag(**{**basis, **kw})
 
@@ -41,7 +41,7 @@ def test_testquellen_mengen(db):
 
 def test_alles_wird_verarbeitet_und_ohne_llm_faelle_uebersprungen(db):
     aufrufe = []
-    bericht = verarbeite(db, lambda s, m: aufrufe.append(m) or Ergebnis(eintraege=[], plaene=[], elemente=[]), None)
+    bericht = verarbeite(db, lambda s, m: aufrufe.append(m) or Ergebnis(eintraege=[], plaene=[], soll=[], elemente=[]), None)
     assert bericht.verarbeitet == 54 and not bericht.fehler
     # 3 Stammdaten-Dateien (2 CSV, 1 MD) + 1 gelöschte Nachricht brauchen kein Claude
     assert bericht.uebersprungen == 4
@@ -50,24 +50,24 @@ def test_alles_wird_verarbeitet_und_ohne_llm_faelle_uebersprungen(db):
 
 
 def test_zweiter_lauf_macht_nichts(db):
-    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag()], plaene=[], elemente=[]), None)
+    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag()], plaene=[], soll=[], elemente=[]), None)
     anzahl = len(db.eintraege)
     bericht = verarbeite(db, lambda s, m: pytest.fail("darf nicht aufgerufen werden"), None)
     assert bericht.verarbeitet == 0 and len(db.eintraege) == anzahl
 
 
 def test_neuverarbeitung_ersetzt_statt_verdoppelt(db):
-    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag(), eintrag()], plaene=[], elemente=[]), None)
+    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag(), eintrag()], plaene=[], soll=[], elemente=[]), None)
     vorher = len(db.eintraege)
     for q in db.quellen:
         q["status"] = "neu"
-    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag(), eintrag()], plaene=[], elemente=[]), None)
+    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag(), eintrag()], plaene=[], soll=[], elemente=[]), None)
     assert len(db.eintraege) == vorher
     assert {(e["quelle_hash"], e["nr"]) for e in db.eintraege}.__len__() == vorher
 
 
 def test_top_wird_normalisiert_und_konfidenz_begrenzt(db):
-    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag(top="top5", konfidenz=1.7)], plaene=[], elemente=[]), None)
+    verarbeite(db, lambda s, m: Ergebnis(eintraege=[eintrag(top="top5", konfidenz=1.7)], plaene=[], soll=[], elemente=[]), None)
     e = db.eintraege[0]
     assert e["top"] == "Top 5" and e["konfidenz"] == 1.0
     assert e["projekt"] == PROJEKT and e["nr"] == 1
@@ -77,10 +77,10 @@ def test_gueltiger_plan_ist_der_neueste_index(db):
     def extr(system, messages):
         text = messages[0]["content"][-1]["text"]
         if "Index C" in text and "neue_quelle" in text and "IndexC" in text:
-            return Ergebnis(eintraege=[], plaene=[Plan(plan_nr="E-05", plan_index="C", bezeichnung=None, top="Top 5", aenderung="Verteiler in Abstellraum")], elemente=[])
+            return Ergebnis(eintraege=[], plaene=[Plan(plan_nr="E-05", plan_index="C", bezeichnung=None, top="Top 5", aenderung="Verteiler in Abstellraum")], soll=[], elemente=[])
         if "IndexB" in text:
-            return Ergebnis(eintraege=[], plaene=[Plan(plan_nr="E-05", plan_index="B", bezeichnung=None, top="Top 5", aenderung=None)], elemente=[])
-        return Ergebnis(eintraege=[], plaene=[], elemente=[])
+            return Ergebnis(eintraege=[], plaene=[Plan(plan_nr="E-05", plan_index="B", bezeichnung=None, top="Top 5", aenderung=None)], soll=[], elemente=[])
+        return Ergebnis(eintraege=[], plaene=[], soll=[], elemente=[])
 
     verarbeite(db, extr, None)
     aktuell = db.aktuelle_plaene(PROJEKT)
@@ -94,7 +94,7 @@ def test_fehler_markiert_quelle_und_laeuft_weiter(db):
     def extr(system, messages):
         if "Steckdosen IP44" in messages[0]["content"][-1]["text"].split("<neue_quelle>")[1]:
             raise ExtraktionsFehler("kaputt")
-        return Ergebnis(eintraege=[], plaene=[], elemente=[])
+        return Ergebnis(eintraege=[], plaene=[], soll=[], elemente=[])
 
     bericht = verarbeite(db, extr, None)
     fehler = [q for q in db.quellen if q["status"] == "fehler"]
@@ -105,7 +105,7 @@ def test_fehler_markiert_quelle_und_laeuft_weiter(db):
 def test_audio_ohne_transkript_wird_unklar(db):
     audio = next(q for q in db.quellen if q["anhang_typ"] == "audio")
     audio["text"] = ""
-    verarbeite(db, lambda s, m: Ergebnis(eintraege=[], plaene=[], elemente=[]), None)
+    verarbeite(db, lambda s, m: Ergebnis(eintraege=[], plaene=[], soll=[], elemente=[]), None)
     e = [e for e in db.eintraege if e["quelle_hash"] == audio["content_hash"]]
     assert len(e) == 1 and e[0]["unklar"] and e[0]["rueckfrage"]
 
