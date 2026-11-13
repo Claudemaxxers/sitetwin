@@ -97,7 +97,7 @@ class RawItem(BaseModel):
 ```
 
 `original_ref` – Format je Quelle:
-- whatsapp: `"<exportdatei>#L<zeilennummer>"` (erste Zeile der Nachricht, 1-basiert)
+- whatsapp: `"<exportdatei>#L<zeilennummer>"` (erste Zeile der Nachricht, 1-basiert); live: `"<wa_id>"`
 - email: `"<Message-ID>"`, Anhang: `"<Message-ID>#<dateiname>"`
 - drive: relativer Pfad ab Drive-Wurzel, z. B. `"Projekt_Simmering/Plaene/Plan_E-05_Top5_IndexC.pdf"`
 - call: `"<call_id>"`
@@ -144,11 +144,13 @@ content_hash = sha256( typ | projekt | kanal | absender | zeitpunkt_iso_utc | te
 
 drive:  sha256( typ | projekt | kanal | original_ref | anhang.sha256 )
 call:   sha256( typ | projekt | call_id )
+whatsapp live (meta.wa_id gesetzt):  sha256( typ | projekt | wa_id )
 ```
 - Felder mit `|` verbunden, `None` → `""`, Text vorher `strip()` und Zeilenenden auf `\n`.
 - **Items mit `anhang`: `text` geht als `""` in den Hash.** Transkript und PDF-Text sind abgeleitet und dürfen die Identität nicht ändern.
 - **Drive:** Identität ist Pfad + Dateiinhalt. Die mtime ist pro Clone anders und steht deshalb nicht im Hash. Einzige Ausnahme von „`original_ref` nicht im Hash“.
 - **Call:** Identität ist `call_id`. Retries und eine nachgelieferte Zusammenfassung erzeugen keine zweite Zeile.
+- **WhatsApp live:** Identität ist `wa_id` (Message-ID des Providers). Webhook-Retries erzeugen keine zweite Zeile. Folge: Dieselbe Nachricht einmal live und einmal per Export ergibt zwei Zeilen (der Export kennt keine `wa_id` und nur Minuten). Für die Demo pro Chat einen Weg wählen.
 - Upsert mit `on_conflict=content_hash`, `ignore_duplicates=true`. Folge: Ein später ergänztes Transkript aktualisiert die bestehende Zeile nicht → für die Demo Tabelle leeren und neu importieren (Referenzen über `content_hash` bleiben gültig).
 - Bewusst **nicht** im Hash: `meta`, Dateiname der Exportdatei, `original_ref` außer bei Drive (der Chat wird oft mehrmals mit anderem Namen exportiert).
 - Bekannte Einschränkung: Zwei identische Nachrichten derselben Person in derselben Minute („ok“, „👍“) fallen zusammen. Für den Hackathon akzeptiert.
@@ -204,6 +206,17 @@ Input: Ordner (simuliert Google Drive). Rekursiv, 1 RawItem pro Datei, `anhang` 
 - `meta`: `call_id`, `richtung`, `dauer_s`, `zusammenfassung`, `roh`.
 - Erreichbarkeit: Melihs Agent muss die Ablage erreichen (gleicher Rechner oder Tunnel) → s. 12.
 
+### 7.5 WhatsApp live (`adapters/whatsapp_live.py`, JSON-Input)
+Eine einzelne Nachricht per `POST /import/whatsapp/nachricht`. Wer den Provider-Webhook empfängt, mappt auf diese Form:
+```json
+{"projekt": "BV Simmering", "kanal": "BV Simmering Elektro", "absender": "Stefan Huber",
+ "zeitpunkt": "2026-11-14T08:15:30+01:00", "text": "…", "wa_id": "wamid.…",
+ "anhang": {"mimetype": "image/jpeg", "dateiname": "IMG.jpg", "base64": "…"}}
+```
+- Pflicht: `absender`, `zeitpunkt` (ISO; ohne Offset = Europe/Vienna), `wa_id`. Optional: `projekt` (fehlt → `DEFAULT_PROJEKT`), `kanal`, `text`, `anhang`.
+- 1 RawItem: `typ=whatsapp`, `original_ref = wa_id`, `meta = {wa_id, quelle: "live"}`. Anhang wird wie beim Export in den Bucket gelegt.
+- Identität ist `wa_id` (Abschnitt 6).
+
 ## 8. API (`api.py`, FastAPI)
 
 | Methode | Pfad | Body | Antwort |
@@ -213,6 +226,7 @@ Input: Ordner (simuliert Google Drive). Rekursiv, 1 RawItem pro Datei, `anhang` 
 | POST | `/import/email` | multipart: 1..n `.eml`, Feld `projekt` | `ImportErgebnis` |
 | POST | `/import/ordner` | JSON `{"pfad": "...", "projekt": "..."}` – **nur lokal/dev** | `ImportErgebnis` |
 | POST | `/import/call` | Call-JSON v1 (7.4) | `ImportErgebnis` |
+| POST | `/import/whatsapp/nachricht` | Live-Nachricht als JSON (7.5) | `ImportErgebnis` |
 | GET | `/quellen` *(optional)* | Query: `status`, `typ`, `projekt`, `limit` (≤200), `seit` | `list[QuelleOut]` sortiert nach `zeitpunkt` |
 | PATCH | `/quellen/{id}/status` *(optional)* | `{"status": "verarbeitet" \| "fehler", "fehler": "..."}` | `QuelleOut` |
 

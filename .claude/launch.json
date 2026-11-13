@@ -1,6 +1,12 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "sitetwin", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 }
+    { "name": "sitetwin", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3000 },
+    {
+      "name": "ablage-api",
+      "runtimeExecutable": "ablage/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "ablage.api:app", "--app-dir", "ablage", "--port", "8000"],
+      "port": 8000
+    }
   ]
 }
