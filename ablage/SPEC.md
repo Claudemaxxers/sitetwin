@@ -134,7 +134,7 @@ Storage: Bucket `ablage` (privat). Pfad: `{projekt_slug}/{typ}/{sha256}{endung}`
 - Belege in `aenderungen` referenzieren **`content_hash`**, nicht `id`. Die `id` ändert sich bei jedem Neuimport, der Hash nicht.
 - Eine Änderung hat mehrere Belege (Golden Set: bis zu 6) → n:m.
 - Für einen Nachtrag die ganze Projekt-Zeitachse lesen (`where projekt = …`), `status = 'neu'` ist nur der Marker für Neues. Belege verteilen sich über WhatsApp, Mail und Call.
-- Fotos und PDFs sind eigene Zeilen mit `anhang_pfad`; `text` ist leer oder abgeleitet (Transkript, PDF-Text).
+- Fotos, Sprachnachrichten und PDFs sind eigene Zeilen mit `anhang_pfad`. **PDF-Zeilen (Mail-Anhang und Drive) haben den per `pypdf` extrahierten Text in `text`** (`meta.text_quelle = "pypdf"`; kaputtes PDF → `text` leer + `meta.pdf_fehler`). Fotos: `text` leer. Sprachnachrichten: Transkript nur, wenn ein Sidecar daneben liegt, sonst leer → Transkription macht der Übersetzer (s. 12).
 
 ## 6. Identität und Duplikate
 
@@ -280,11 +280,12 @@ Stretch (in dieser Reihenfolge): (1) Whisper für Sprachnachrichten ohne Sidecar
 Entschieden:
 - [x] Ablage = Santino. DB + Übersetzer = Henrik. Henrik liest direkt aus `quellen`, kein Polling über die API.
 - [x] `projekt` ist beim Import frei wählbar.
+- [x] **Henrik (13.11., 21:21):** Vertrag aus 5 + 6 bestätigt, für die Ablage ändert sich nichts. Belege über `content_hash` ohne Fremdschlüssel → `quellen` darf jederzeit geleert und neu importiert werden. Sein Schema (`eintraege`, `plaene`, `signale`) liegt in `uebersetzer/schema.sql`.
+- [x] `quellen` + Bucket `ablage` existieren im gemeinsamen Supabase-Projekt.
+- [x] **PDF-Text:** macht die Ablage (pypdf), Henrik muss PDFs nicht selbst auslesen.
+- [x] **Sprachnachrichten ohne Sidecar:** Transkription übernimmt Henrik im Übersetzer. Whisper in der Ablage bleibt Stretch.
 
 Offen:
-- [ ] **Henrik:** Gleiches Supabase-Projekt? Darf ich `quellen` + Bucket `ablage` anlegen? URL + Service-Key an Santino.
-- [ ] **Henrik:** Bestätigt den Vertrag aus Abschnitt 5 und die Hash-Regeln aus Abschnitt 6 (Belege über `content_hash`, n:m, Drive ohne `zeitpunkt`).
-- [ ] **Henrik:** `projekt` als String `"BV Simmering"` oder braucht er eine `projekt_id`?
 - [ ] **Melih:** Bestätigt Call-Vertrag v1 (7.4) und mappt sein Provider-Format dorthin.
 - [ ] **Melih:** Von wo ruft sein Agent `/import/call` auf (gleicher Rechner oder Tunnel)?
 
