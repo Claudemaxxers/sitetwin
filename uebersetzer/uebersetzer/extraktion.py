@@ -25,6 +25,8 @@ def baue_anfrage(
     zeitachse: list[dict[str, Any]],
     plaene: list[dict[str, Any]],
     stammdaten: str,
+    bauteile: str = "(noch keine Bauteile aus Plänen bekannt)",
+    soll_aenderungen: str = "(keine)",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Gibt (system, messages) zurück. Getrennt vom Aufruf, damit Tests den Prompt prüfen können."""
     system = [
@@ -35,6 +37,8 @@ def baue_anfrage(
     kontext = "\n".join(prompt.quelle_kurz(q) for q in zeitachse) or "(noch nichts)"
     text = (
         f"<gueltige_plaene>\n{prompt.plaene_block(plaene)}\n</gueltige_plaene>\n\n"
+        f"<bauteile hinweis=\"Soll laut Plänen; für das Feld bauteil den Schlüssel exakt übernehmen\">\n{bauteile}\n</bauteile>\n\n"
+        f"<offene_soll_aenderungen hinweis=\"für soll.bezug den Schlüssel exakt übernehmen\">\n{soll_aenderungen}\n</offene_soll_aenderungen>\n\n"
         f"<zeitachse hinweis=\"Kontext, ältere Quellen, nicht extrahieren\">\n{kontext}\n</zeitachse>\n\n"
         f"{prompt.neue_quelle_block(quelle, hinweis)}"
     )

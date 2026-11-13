@@ -32,6 +32,9 @@ Arten:
 - lieferung: Material geliefert oder angekündigt
 - bestaetigung: jemand bestätigt eine Anweisung oder einen Plan ("ok machen wir", "Rev C gesehen")
 - problem_behoben: Rückmeldung, dass ein gemeldetes Problem gelöst ist
+- soll_aenderung: jemand teilt mit, dass das Soll während der Bauphase anders ist als im Plan ("Keller nur 3x3 statt 3x4", "das haben wir geändert, Steckdose kommt links") – egal ob Bauleitung oder Arbeiter. Lege dazu in `soll` ein Element mit eintrag_nr, titel, neues_soll, bauteile_entfallen an; neue oder verlegte Bauteile kommen in `elemente`. Ein neuer Plan-Index vom Planer ist planaenderung, nicht soll_aenderung.
+- freigabe: Antwort auf eine offene Soll-Änderung aus der Liste: bestätigt oder abgelehnt. In `soll` ein Element mit eintrag_nr, bezug = deren Schlüssel und entscheidung ja/nein.
+- nachweis: Foto oder PDF eines Dokuments (unterschriebene Anordnung, Plan mit Vermerk, Protokoll), das eine offene Soll-Änderung schriftlich belegt. In `soll` ein Element mit eintrag_nr und bezug = deren Schlüssel. Ein Baustellenfoto ohne Dokument ist kein Nachweis.
 - frage: offene Frage an andere
 - sonstiges: alles andere, das für den Baustellenstand relevant ist
 
@@ -44,6 +47,11 @@ Regeln:
 - zitat: die tragende Stelle wörtlich, höchstens ein Satz.
 - konfidenz 0..1. Ist eine Nachricht mehrdeutig ("bin hinten fertig mit dem zeug"), setze unklar=true, konfidenz unter 0.5 und formuliere eine kurze Rückfrage. Nicht raten.
 - plaene: nur füllen, wenn die Quelle selbst einen Plan-Index ausgibt oder enthält (Plan-PDF, Mail des Planers mit neuem Index). Sonst leere Liste.
+
+Bauteile (Soll aus den Plänen):
+- Ist die neue Quelle ein Plandokument, trage in `elemente` ALLE Bauteile ein, die der Plan in diesem Index vorsieht: Wände, Leitungen, Dosen, Verteiler, Auslässe, Schalter, Melder. Bezeichnung so, dass sie innerhalb des Raums eindeutig ist; `gehoert_zu` = Bezeichnung der Wand, in der das Bauteil sitzt. Bei allen anderen Quellen bleibt `elemente` leer.
+- Bei jedem Eintrag: Betrifft er eindeutig ein Bauteil aus der Bauteil-Liste, übernimm dessen Schlüssel exakt in `bauteil`. Nicht eindeutig → null. Erfinde keine Schlüssel. Ein Bauteil mit "ENTFÄLLT" darf zugeordnet werden, wenn die Nachricht genau davon spricht (z. B. Verteiler im Vorraum, obwohl er laut gültigem Plan woanders hingehört).
+- `schritt` bei Arbeit: staenderwerk (Ständer gestellt), verrohrung (Leerrohre), leitung_eingezogen (Kabel/Leitungen verlegt), gesetzt (Dose/Verteiler/Auslass gesetzt), angeschlossen, abnahme (Prüfung bestanden), beplankung (Wand zu, beplankt, zugemacht), spachteln, malen, montage (Endmontage), rueckbau, sonstiges.
 - Fakten nicht erfinden. Was nicht in Quelle oder Zeitachse steht, ist null.
 - zusammenfassung: ein kurzer deutscher Satz."""
 

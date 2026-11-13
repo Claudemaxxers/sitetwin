@@ -40,3 +40,14 @@ insert into tops (projekt, top, geschoss, raeume, kaeufer_status) values
   ('BV Simmering', 'Top 8', '2. OG', 'Vorraum,Wohnzimmer,Küche,Schlafzimmer,Bad,WC,Abstellraum', 'frei'),
   ('BV Simmering', 'TG', 'UG', 'Fahrgasse,Stellplätze 1-24,Technikraum', '-')
 on conflict do nothing;
+
+-- Personen und Rollen (aus fake_data/drive/Projekt_Simmering/Projekt.md).
+-- Nur die Bauleitung des GU darf das Soll ändern (Entscheidung Team, 13.11.).
+insert into personen (projekt, name, aliase, firma, rolle, darf_soll_aendern, telefon) values
+  ('BV Simmering', 'Thomas Meier', '{"Thomas Meier (Krenn Bau)","Thomas Meier <t.meier@krenn-bau.example>","Meier"}', 'Krenn Bau GmbH', 'bauleitung', true, null),
+  ('BV Simmering', 'Andrea Gruber', '{"Andrea Gruber <a.gruber@elektro-gruber.example>","Gruber"}', 'Elektro Gruber GmbH', 'projektleitung', false, null),
+  ('BV Simmering', 'Stefan Huber', '{"Stefan"}', 'Elektro Gruber GmbH', 'vorarbeiter', false, '+43 660 0000000'),
+  ('BV Simmering', 'Ali Demir', '{}', 'Elektro Gruber GmbH', 'monteur', false, null),
+  ('BV Simmering', 'Martin Lechner', '{"DI Martin Lechner","DI Martin Lechner <m.lechner@tb-lechner.example>"}', 'TB Lechner Elektroplanung', 'planer', false, null),
+  ('BV Simmering', 'Marko Novak', '{"Marko Novak (Novak Trockenbau)","Marko","Novak"}', 'Novak Trockenbau', 'vorarbeiter', false, null)
+on conflict do nothing;

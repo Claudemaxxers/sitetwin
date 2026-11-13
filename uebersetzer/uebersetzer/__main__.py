@@ -102,6 +102,8 @@ def _pruef_ausgabe(b) -> None:
         print("  ⚑", s)
     for s in b.geloest:
         print("  ✓", s)
+    for s in b.soll:
+        print("  ◆ Soll-Änderung", s)
     for f in b.fehler:
         print("  ✗", f)
 
@@ -198,7 +200,7 @@ def cmd_trockenlauf(args, k: konfig_mod.Konfig) -> None:
                 teile = messages[0]["content"]
                 art = ", ".join(t["type"] for t in teile)
                 print(f"   → würde Claude fragen: {len(teile)} Block/Blöcke ({art}), {len(teile[-1]['text'])} Zeichen Text")
-                return Ergebnis(eintraege=[], plaene=[])
+                return Ergebnis(eintraege=[], plaene=[], soll=[], elemente=[])
         else:
             extrahierer = _claude_extrahierer(k)
 
@@ -209,14 +211,24 @@ def cmd_trockenlauf(args, k: konfig_mod.Konfig) -> None:
         print("\nPläne:")
         for p in db.aktuelle_plaene(k.projekt):
             print(f"  {p['plan_nr']} Index {p['plan_index']} (gültig) – {p.get('aenderung') or ''}")
+        bauteile = {el["id"]: el for el in db.elemente(k.projekt)}
+        print(f"\nBauteile ({len(bauteile)}):")
+        for el in sorted(bauteile.values(), key=lambda x: x["schluessel"]):
+            wand = bauteile.get(el.get("gehoert_zu") or "", {}).get("bezeichnung", "")
+            aktiv = "" if el.get("soll_aktiv", True) else "  ENTFÄLLT"
+            print(f"  {el['schluessel']:60.60} {el['art']:9} {('in ' + wand) if wand else '':16} Plan {el.get('soll_plan_nr')} {el.get('soll_plan_index')}{aktiv}")
         print("\nEinträge:")
         for e in sorted(db.eintraege, key=lambda e: (str(e["zeitpunkt"] or ""), e["nr"])):
             ort = " / ".join(x for x in (e["top"], e["raum"], e["element"]) if x)
             plan = f" [Plan {e['plan_nr'] or ''} {e['plan_index']}]" if e.get("plan_index") else ""
             flag = " ⚠ unklar" if e["unklar"] else ""
-            print(f"  {str(e['zeitpunkt'] or '')[:16]:16} {e['art']:16} {ort:35.35} {e['zusammenfassung']}{plan}{flag}")
+            bt = bauteile.get(e.get("element_id") or "")
+            zuord = f" → {bt['schluessel']} ({e.get('schritt')})" if bt else ""
+            print(f"  {str(e['zeitpunkt'] or '')[:16]:16} {e['art']:16} {ort:35.35} {e['zusammenfassung']}{plan}{flag}{zuord}")
     if args.json:
-        Path(args.json).write_text(json.dumps({"eintraege": db.eintraege, "plaene": db.plaene}, ensure_ascii=False, indent=2, default=str))
+        Path(args.json).write_text(json.dumps(
+            {"eintraege": db.eintraege, "plaene": db.plaene, "elemente": db.elemente_liste}, ensure_ascii=False, indent=2, default=str
+        ))
         print(f"\nJSON geschrieben: {args.json}")
 
 
