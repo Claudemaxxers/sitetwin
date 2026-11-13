@@ -65,6 +65,23 @@ Was auf der Baustelle per WhatsApp, Foto, Sprachnachricht oder Mail passiert, la
 - Mehrere Projekte, pro Projekt der **aktuelle Stand**.
 - Ist die Ground Truth, muss also immer aktuell sein. Flags und Anrufe sind dort ebenfalls sichtbar.
 
+## Lebenszyklus eines Signals
+
+Vorarbeiter und Büro bekommen dasselbe Signal, aber mit unterschiedlicher Rolle: **Der Vorarbeiter handelt, das Büro sieht zu.** So entsteht keine doppelte Arbeit.
+
+```
+ offen ──────────► in Bearbeitung ──────────► gelöst
+ Agent erkennt     Anruf beim Vorarbeiter     Vorarbeiter meldet per Nachricht,
+ Abweichung        ist durch                  dass es behoben ist; Prüf-Agent
+                                              setzt das Signal automatisch auf gelöst
+```
+
+1. **Offen:** Der Prüf-Agent erkennt eine Abweichung. Das Signal erscheint sofort auch im digitalen Zwilling, das Büro sieht: Hier gibt es ein Problem.
+2. **In Bearbeitung:** Der Telefon-Agent ruft den Vorarbeiter an. Sobald der Anruf durch ist, zeigt der Zwilling das Problem als *in Bearbeitung*. Der Vorarbeiter weist seinen Mitarbeiter an („mach das und das“).
+3. **Gelöst:** Nach der Behebung schickt der Vorarbeiter (oder der Mitarbeiter) eine Nachricht ins System, z. B. per WhatsApp. Sie läuft durch denselben Weg (Rohdaten → Strukturierung), der Prüf-Agent erkennt die Lösung und setzt das Signal **automatisch** auf *gelöst*. Im Zwilling verschwindet die Markierung, der Stand ist wieder korrekt.
+
+Das Büro muss also nicht eingreifen, kann aber jederzeit sehen, was offen, in Bearbeitung oder gelöst ist.
+
 ## Produktvideo (für den Pitch)
 
 Grober Ablauf, Details folgen:
@@ -73,11 +90,13 @@ Grober Ablauf, Details folgen:
 2. **Der Weg der Nachricht:** Wir folgen der Nachricht vom Handy in unser System.
 3. **Durchs Produkt:** Wie die Daten strukturiert werden, wie der Agent die Abweichung erkennt und die Flag auslöst.
 4. **Anruf:** Das System ruft den Vorarbeiter an: *„Nicht zumachen, da müssen noch Kabel rein.“*
-5. **Büro:** Der Stand landet im digitalen Zwilling, der Mensch im Büro sieht es auch.
+5. **Büro:** Das Signal erscheint im digitalen Zwilling, erst *offen*, nach dem Anruf *in Bearbeitung*.
+6. **Lösung:** Der Vorarbeiter meldet per Nachricht, dass es erledigt ist, das Signal springt auf *gelöst*, der Zwilling ist wieder aktuell.
 
 ## Offene Punkte
 
-- **Keine Redundanz zwischen Vorarbeiter und Büro:** Wer bekommt was, damit nicht beide dasselbe tun? (noch zu klären)
+- ~~Keine Redundanz zwischen Vorarbeiter und Büro~~ → geklärt, siehe *Lebenszyklus eines Signals*.
+- Was passiert, wenn der Vorarbeiter nicht abhebt oder nie eine Lösung zurückmeldet? (z. B. erneuter Anruf, Eskalation ans Büro)
 - Video: Sequenzen genauer festlegen.
 - Detail-SPECs für Strukturierung (2), Prüf-Agent (4), Telefon-Agent (5) und Frontend (6) fehlen noch.
 
