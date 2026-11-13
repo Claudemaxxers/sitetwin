@@ -92,8 +92,13 @@ def regel_plan_veraltet(e: Zeile, plaene: list[Zeile]) -> Zeile | None:
     geplant = e["art"] == "arbeit_geplant"
     was = e.get("element") or "die Arbeit"
     aenderung = f". Änderung: {neu['aenderung'].rstrip('.')}" if neu.get("aenderung") else ""
+    schluessel = (
+        f"plan_veraltet|{e['element_id']}" if e.get("element_id")
+        else f"plan_veraltet|{e.get('top') or ''}|{e['plan_nr']}|{(e.get('element') or '').lower()}"
+    )
     return {
-        "schluessel": f"plan_veraltet|{e.get('top') or ''}|{e['plan_nr']}|{(e.get('element') or '').lower()}",
+        "schluessel": schluessel,
+        "element_id": e.get("element_id"),
         "art": "plan_veraltet",
         "schwere": "kritisch" if geplant else "hoch",
         "titel": f"{_ort(e)}: nach Index {alt} statt {neu['plan_index']}",
@@ -109,6 +114,138 @@ def regel_plan_veraltet(e: Zeile, plaene: list[Zeile]) -> Zeile | None:
         "zustaendig": e.get("person"),
         "top": e.get("top"), "raum": e.get("raum"), "element": e.get("element"),
     }
+
+
+# --- Regeln auf dem Bauteil-Register -------------------------------------------
+
+ARBEIT = ("arbeit_erledigt", "arbeit_geplant")
+# Was an einem Bauteil erledigt sein muss, bevor die Wand, in der es sitzt, geschlossen wird.
+VOR_DEM_SCHLIESSEN = {
+    "leitung": {"verrohrung", "leitung_eingezogen", "angeschlossen"},
+    "dose": {"gesetzt", "angeschlossen"},
+    "auslass": {"gesetzt", "angeschlossen"},
+    "verteiler": {"gesetzt", "angeschlossen"},
+    "schalter": {"gesetzt", "angeschlossen"},
+}
+
+
+def ist_stand(alle: list[Zeile], bis: Any, ausser: str | None = None) -> dict[str, set[str]]:
+    """Erledigte Schritte je Bauteil bis zum Zeitpunkt `bis` (inklusive)."""
+    stand: dict[str, set[str]] = {}
+    grenze = str(bis or "")
+    for x in alle:
+        if x.get("id") == ausser or x["art"] != "arbeit_erledigt" or not x.get("element_id") or not x.get("schritt"):
+            continue
+        if str(x.get("zeitpunkt") or "") <= grenze:
+            stand.setdefault(x["element_id"], set()).add(x["schritt"])
+    return stand
+
+
+def _wand_von(e: Zeile, elemente: dict[str, Zeile]) -> Zeile | None:
+    el = elemente.get(e.get("element_id") or "")
+    if not el:
+        return None
+    if el["art"] == "wand":
+        return el
+    return elemente.get(el.get("gehoert_zu") or "") if el.get("gehoert_zu") else None
+
+
+def wand_offene_punkte(wand: Zeile, elemente: dict[str, Zeile], stand: dict[str, set[str]]) -> list[str]:
+    kinder = [k for k in elemente.values() if k.get("gehoert_zu") == wand["id"] and k.get("soll_aktiv", True)]
+    fehlt = [
+        k["bezeichnung"] for k in kinder
+        if k["art"] in VOR_DEM_SCHLIESSEN and not (stand.get(k["id"], set()) & VOR_DEM_SCHLIESSEN[k["art"]])
+    ]
+    if kinder and "abnahme" not in stand.get(wand["id"], set()) and not any("abnahme" in stand.get(k["id"], set()) for k in kinder):
+        fehlt.append("Abnahme der Installation")
+    return fehlt
+
+
+def regel_wand_zu_vor_installation(e: Zeile, elemente: dict[str, Zeile], alle: list[Zeile]) -> Zeile | None:
+    """Wand soll geschlossen werden (oder ist es), obwohl Leitungen/Dosen darin fehlen oder nicht abgenommen sind."""
+    if e["art"] not in ARBEIT or e.get("schritt") != "beplankung":
+        return None
+    wand = _wand_von(e, elemente)
+    if not wand:
+        return None
+    fehlt = wand_offene_punkte(wand, elemente, ist_stand(alle, e.get("zeitpunkt"), ausser=e.get("id")))
+    if not fehlt:
+        return None
+    geplant = e["art"] == "arbeit_geplant"
+    ort = f"{wand.get('top') or ''} {wand.get('raum') or ''}".strip()
+    liste = ", ".join(fehlt)
+    return {
+        "schluessel": f"reihenfolge|{wand['id']}",
+        "element_id": wand["id"],
+        "art": "reihenfolge",
+        "schwere": "kritisch" if geplant else "hoch",
+        "titel": f"{ort}: {wand['bezeichnung']} {'soll zu' if geplant else 'zu'}, Installation nicht fertig",
+        "begruendung": (
+            f"{e.get('person') or 'Jemand'} {'will' if geplant else 'meldet'} {wand['bezeichnung']} ({ort}) "
+            f"{'schließen' if geplant else 'geschlossen'}. Laut Plan sitzen darin Bauteile, für die noch fehlt: {liste}."
+        ),
+        "anruf_text": (
+            f"Servus {_vorname(e.get('person'))}, hier ist SiteTwin. {wand['bezeichnung']} in {ort} bitte "
+            f"{'noch nicht zumachen' if geplant else 'wieder aufmachen lassen, bevor weitergearbeitet wird'}: "
+            f"Es fehlt noch {liste}. Sonst muss die Wand später wieder geöffnet werden."
+        ).replace("Servus ,", "Servus,"),
+        "zustaendig": e.get("person"),
+        "top": wand.get("top"), "raum": wand.get("raum"), "element": wand["bezeichnung"],
+    }
+
+
+def regel_bauteil_entfaellt(e: Zeile, elemente: dict[str, Zeile]) -> Zeile | None:
+    """Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht (z. B. Verteiler im Vorraum nach Index C)."""
+    el = elemente.get(e.get("element_id") or "")
+    if not el or el.get("soll_aktiv", True) or e["art"] not in ARBEIT or e.get("schritt") == "rueckbau":
+        return None
+    geplant = e["art"] == "arbeit_geplant"
+    ersatz = [
+        x for x in elemente.values()
+        if x.get("soll_aktiv", True) and x["art"] == el["art"] and x.get("top") == el.get("top")
+        and x.get("soll_plan_nr") == el.get("soll_plan_nr")
+    ]
+    raeume = ", ".join(str(x.get("raum")) for x in ersatz)
+    wohin = f" Laut gültigem Plan gehört das jetzt in: {raeume}." if ersatz else ""
+    return {
+        "schluessel": f"plan_veraltet|{el['id']}",
+        "element_id": el["id"],
+        "art": "plan_veraltet",
+        "schwere": "kritisch" if geplant else "hoch",
+        "titel": f"{el.get('top')} / {el.get('raum')} / {el['bezeichnung']}: laut gültigem Plan entfallen",
+        "begruendung": (
+            f"{e.get('person') or 'Jemand'} {'plant' if geplant else 'meldet'} Arbeit an {el['bezeichnung']} ({el.get('raum')}). "
+            f"Plan {el.get('soll_plan_nr')} sieht das Bauteil in der gültigen Fassung nicht mehr vor.{wohin}"
+        ),
+        "anruf_text": (
+            f"Servus {_vorname(e.get('person'))}, hier ist SiteTwin. {el['bezeichnung']} im {el.get('raum')} ist laut gültigem Plan "
+            f"{el.get('soll_plan_nr')} nicht mehr vorgesehen.{wohin} Bitte dort nicht weiterbauen."
+        ).replace("Servus ,", "Servus,"),
+        "zustaendig": e.get("person"),
+        "top": el.get("top"), "raum": el.get("raum"), "element": el["bezeichnung"],
+    }
+
+
+def loest_bauteil_signal(signal: Zeile, e: Zeile, elemente: dict[str, Zeile], alle: list[Zeile]) -> bool:
+    """Bauteil-bezogene Signale lösen:
+    - reihenfolge: alle offenen Punkte der Wand sind inzwischen erledigt.
+    - plan_veraltet an einem entfallenen Bauteil: gleichartiges Bauteil am gültigen Ort ist erledigt."""
+    el_id = signal.get("element_id")
+    if not el_id or e["art"] not in ("arbeit_erledigt", "problem_behoben"):
+        return False
+    if signal["art"] == "reihenfolge":
+        wand = elemente.get(el_id)
+        betroffen = _wand_von(e, elemente)
+        if not wand or not betroffen or betroffen["id"] != wand["id"]:
+            return False
+        return not wand_offene_punkte(wand, elemente, ist_stand(alle, e.get("zeitpunkt")))
+    if signal["art"] == "plan_veraltet":
+        alt, neu = elemente.get(el_id), elemente.get(e.get("element_id") or "")
+        return bool(
+            alt and neu and not alt.get("soll_aktiv", True) and neu.get("soll_aktiv", True)
+            and neu["id"] != alt["id"] and neu["art"] == alt["art"] and neu.get("top") == alt.get("top")
+        )
+    return False
 
 
 def regel_unklar(e: Zeile) -> Zeile | None:
@@ -131,10 +268,13 @@ def regel_unklar(e: Zeile) -> Zeile | None:
 
 
 def loest_plan_veraltet(signal: Zeile, e: Zeile, plaene: list[Zeile]) -> bool:
-    """Arbeit nach dem gültigen Index am selben Ort löst ein plan_veraltet-Signal."""
+    """Arbeit nach dem gültigen Index am selben Ort löst ein plan_veraltet-Signal (ohne Bauteil-Bezug)."""
     if signal["art"] != "plan_veraltet" or e["art"] not in ("arbeit_erledigt", "problem_behoben"):
         return False
-    _, top, plan_nr, element = (signal["schluessel"].split("|") + ["", "", "", ""])[:4]
+    teile = signal["schluessel"].split("|")
+    if len(teile) != 4:
+        return False  # Bauteil-Signal → loest_bauteil_signal
+    _, top, plan_nr, element = teile
     if not _gleich(e.get("top"), top) or e.get("plan_nr") != plan_nr:
         return False
     if element and e.get("element") and element not in e["element"].lower() and e["element"].lower() not in element:
@@ -169,8 +309,9 @@ Lösungen: Wenn ein neuer Eintrag belegt, dass die Abweichung auf der Baustelle 
 
 anruf_text: 2–3 Sätze in Du-Form an die zuständige Person, konkret, was nicht passieren soll und warum. Kein Smalltalk."""
 
-# Signale dieser Arten löst nur die jeweilige feste Regel, nicht Claude.
-REGEL_ARTEN = {"plan_veraltet", "unklar"}
+# Signale der festen Regeln löst nur die Regel selbst; Claude darf nur seine eigenen ("ki|…") lösen.
+def _von_claude(s: Zeile) -> bool:
+    return s["schluessel"].startswith("ki|")
 
 
 def eintrag_kurz(e: Zeile, nr: int | None = None) -> str:
@@ -188,8 +329,8 @@ def baue_pruefanfrage(
         {"type": "text", "text": stammdaten, "cache_control": {"type": "ephemeral"}},
     ]
     gueltig = [neuester_plan(plaene, nr, None) for nr in sorted({p["plan_nr"] for p in plaene})]
-    loesbar = [s for s in offene if s["art"] not in REGEL_ARTEN]
-    andere = [s for s in offene if s["art"] in REGEL_ARTEN]
+    loesbar = [s for s in offene if _von_claude(s)]
+    andere = [s for s in offene if not _von_claude(s)]
     loesbar_txt = "\n".join(f"- {s['schluessel']} · {s['art']} · {s['titel']}" for s in loesbar) or "(keine)"
     andere_txt = "\n".join(f"- {s['art']} · {s['titel']}" for s in andere) or "(keine)"
     text = (
@@ -280,18 +421,24 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
         alle = db.projekt_eintraege(projekt)
         signale = _Signale(db, projekt, bericht)
         stammdaten = prompt.stammdaten_block(projekt, *db.stammdaten(projekt)) if pruefer else ""
+        elemente = {x["id"]: x for x in db.elemente(projekt)}
         eigene = [e for e in ungeprueft if e["projekt"] == projekt]
 
         for quelle_hash, gruppe_iter in groupby(eigene, key=lambda e: e["quelle_hash"]):
             gruppe = list(gruppe_iter)
             try:
                 for e in gruppe:
-                    for vorschlag in (regel_plan_veraltet(e, plaene), regel_unklar(e)):
+                    for vorschlag in (
+                        regel_bauteil_entfaellt(e, elemente),
+                        regel_plan_veraltet(e, plaene),
+                        regel_wand_zu_vor_installation(e, elemente, alle),
+                        regel_unklar(e),
+                    ):
                         if vorschlag:
                             signale.melden(vorschlag, [e])
                     for s in signale.offene():
-                        if loest_plan_veraltet(s, e, plaene):
-                            signale.loesen(s, e, "Arbeit nach gültigem Index")
+                        if loest_plan_veraltet(s, e, plaene) or loest_bauteil_signal(s, e, elemente, alle):
+                            signale.loesen(s, e, "feste Regel: Abweichung behoben")
 
                 if pruefer and any(e["art"] in PRUEF_ARTEN for e in gruppe):
                     zeit_gruppe = str(gruppe[0].get("zeitpunkt") or "")
@@ -305,7 +452,7 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
                         zeile = v.model_dump(exclude={"kurzschluessel", "eintrag_nrs"})
                         zeile["schluessel"] = f"ki|{v.top or ''}|{v.kurzschluessel.strip().lower()}"
                         signale.melden(zeile, ausloeser)
-                    nach_schluessel = {s["schluessel"]: s for s in offene if s["art"] not in REGEL_ARTEN}
+                    nach_schluessel = {s["schluessel"]: s for s in offene if _von_claude(s)}
                     for g in ergebnis.geloest:
                         if g.schluessel in nach_schluessel and 1 <= g.eintrag_nr <= len(gruppe):
                             signale.loesen(nach_schluessel[g.schluessel], gruppe[g.eintrag_nr - 1], g.begruendung)

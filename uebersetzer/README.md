@@ -45,6 +45,14 @@ uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30  # für die Demo: 
 - **Fehler:** Rate Limit / Netzwerk → Quelle bleibt `neu`, nächster Lauf versucht es wieder. Sonst `status = fehler` mit Grund in `meta.fehler`.
 - **Modell:** `claude-haiku-5-5` mit Structured Outputs (Pydantic, `modell.py`), Effort `medium`. Umstellbar über `UEBERSETZER_MODELL`. Der stabile Teil des Prompts (Regeln + Stammdaten) wird gecacht.
 
+## Bauteil-Register (Soll-Zustand)
+
+Damit der Prüf-Agent weiß, *welches* Kabel oder *welche* Wand gemeint ist, liest der Übersetzer Pläne als Soll ein:
+
+- **Soll aus Plänen:** Plandokumente (Drive `Plaene/…`, Mail-Anhänge `Plan_…`) liefern alle Bauteile – Wände, Leitungen, Dosen, Verteiler, Schalter – mit Raum, Lage und der Wand, in der sie sitzen (`elemente.gehoert_zu`). Ein neuer Index aktualisiert das Register; was er nicht mehr vorsieht, wird `soll_aktiv = false` (z. B. Verteiler Top 5 Vorraum nach Index C). Ein älterer Index ändert nichts mehr, sobald ein neuerer übernommen ist.
+- **Ist pro Nachricht:** Jeder Eintrag bekommt, wenn eindeutig, `element_id` und `schritt` (verrohrung, leitung_eingezogen, gesetzt, abnahme, beplankung, …). Die Sicht `element_stand` zeigt je Bauteil die erledigten und geplanten Schritte – das ist die Grundlage für den Zwilling.
+- **Testdaten:** `fake_data/drive/Projekt_Simmering/Plaene/Plan_E-03_Top3_IndexA.pdf` (5 Trockenbauwände in Top 3 mit Leitungen und Dosen), erzeugt mit `uv run python werkzeuge/plan_top3.py`. Fiktiv, die Pipeline ist echt.
+
 ## Prüf-Agent (Schritt 4)
 
 `pruefung.py` prüft jeden neuen Eintrag gegen den gültigen Plan und legt **Signale** an, solange noch jemand eingreifen kann. `lauf` übersetzt und prüft in einem Durchgang; einzeln geht's mit:
@@ -58,6 +66,8 @@ uv run python -m uebersetzer pruefen --mit-claude  # zusätzlich Claude-Prüfung
 | Stufe | Erkennt | Kosten |
 |---|---|---|
 | Feste Regel `plan_veraltet` | Arbeit nach Plan-Index X, obwohl zu dem Zeitpunkt schon ein neuerer Index ausgegeben war („Änderung hat die Crew nicht erreicht“). Gelöst, sobald am selben Ort nach dem gültigen Index gearbeitet wird. | 0 |
+| Feste Regel Wand zu vor Installation | Eine Wand soll geschlossen werden (oder ist es), obwohl Leitungen/Dosen darin laut Plan noch nicht gesetzt sind oder die Abnahme fehlt. Kritisch, solange es nur angekündigt ist. Gelöst, sobald alles nachgeholt ist. | 0 |
+| Feste Regel Bauteil entfällt | Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht. Gelöst, sobald das Bauteil am neuen Ort erledigt ist. | 0 |
 | Feste Regel `unklar` | Gemeldete Arbeit, bei der unklar ist, was oder wo → Rückfrage statt Raten. Kurze Antworten wie „ok“ lösen nichts aus. | 0 |
 | Claude-Prüfung | Arbeit außer Reihenfolge (z. B. Wand zu vor Installation/Abnahme), Abweichung von Plan/LV ohne Anordnung, nicht weitergegebene Anweisungen; erkennt auch, wenn ein neuer Eintrag ein offenes Signal löst. | pro Quelle 1 Aufruf |
 

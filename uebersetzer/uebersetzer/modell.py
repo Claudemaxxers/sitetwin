@@ -24,6 +24,36 @@ EintragArt = Literal[
 ]
 
 
+Schritt = Literal[
+    "staenderwerk",        # Trockenbau: Ständer gestellt
+    "verrohrung",          # Leerrohre verlegt
+    "leitung_eingezogen",  # Kabel eingezogen / Leitungen verlegt
+    "gesetzt",             # Dose, Verteiler, Auslass gesetzt
+    "angeschlossen",       # Geräte angeschlossen, fertig montiert
+    "abnahme",             # Prüfung/Abnahme bestanden
+    "beplankung",          # Wand geschlossen / beplankt / zugemacht
+    "spachteln",
+    "malen",
+    "montage",             # Endmontage (z. B. Rauchmelder)
+    "rueckbau",            # Ausbau / Rausreißen
+    "sonstiges",
+]
+
+BauteilArt = Literal["wand", "leitung", "dose", "verteiler", "auslass", "schalter", "melder", "sonstiges"]
+
+
+class SollElement(BaseModel):
+    """Ein Bauteil, das ein Plan vorsieht."""
+
+    bezeichnung: str = Field(description="Wie im Plan, eindeutig innerhalb des Raums, z. B. 'Wand B1', 'Steckdose Waschtisch'.")
+    art: BauteilArt
+    top: str = Field(description="Exakt wie in der Liste der Tops, z. B. 'Top 3'.")
+    raum: str
+    lage: Optional[str] = Field(description="Lage/Details laut Plan, z. B. 'h=110 cm, Arbeitsplatte', 'Stromkreis F4'.")
+    anzahl: int
+    gehoert_zu: Optional[str] = Field(description="Bezeichnung des Bauteils, in dem es sitzt (meist die Wand), sonst null.")
+
+
 class Eintrag(BaseModel):
     """Ein strukturierter Eintrag: was, wo, wer, wann, nach welchem Plan."""
 
@@ -47,6 +77,11 @@ class Eintrag(BaseModel):
     entschieden_von: Optional[str] = Field(description="Bei Anweisungen und Planänderungen: wer hat es entschieden.")
     wartet_auf: Optional[str] = Field(description="Worauf/auf wen gewartet wird, z. B. 'Trockenbau', 'Freigabe GU'.")
     zitat: Optional[str] = Field(description="Die relevante Stelle aus der Quelle, wörtlich und kurz.")
+    bauteil: Optional[str] = Field(
+        description="Schlüssel des betroffenen Bauteils exakt aus der Bauteil-Liste, z. B. 'top 3|bad|wand b1'. "
+        "Nur wenn eindeutig, sonst null."
+    )
+    schritt: Optional[Schritt] = Field(description="Welcher Arbeitsschritt am Bauteil, nur bei Arbeit.")
     konfidenz: float = Field(description="0 bis 1: wie sicher die Zuordnung ist.")
     unklar: bool
     rueckfrage: Optional[str] = Field(description="Was man nachfragen müsste, statt zu raten.")
@@ -65,6 +100,9 @@ class Plan(BaseModel):
 class Ergebnis(BaseModel):
     eintraege: list[Eintrag]
     plaene: list[Plan]
+    elemente: list[SollElement] = Field(
+        description="Nur bei Plandokumenten: alle Bauteile, die der Plan in diesem Index vorsieht. Sonst leere Liste."
+    )
 
 
 # --- Prüf-Agent -------------------------------------------------------------

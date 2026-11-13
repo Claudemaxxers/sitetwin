@@ -79,6 +79,36 @@ create table if not exists plaene (
 );
 
 -- ---------------------------------------------------------------------------
+-- Bauteil-Register: Soll-Zustand, automatisch aus Plänen gelesen
+-- ---------------------------------------------------------------------------
+-- Ein Bauteil = etwas, das gebaut wird und dessen Zustand zählt: Wand, Leitung, Dose,
+-- Verteiler, Auslass, Schalter, Melder. Der Übersetzer legt Bauteile an, sobald er einen
+-- Plan liest, und ordnet jede Nachricht einem Bauteil zu (eintraege.element_id).
+-- Gibt ein neuer Plan-Index ein Bauteil nicht mehr her, wird es soll_aktiv = false
+-- (z. B. Verteiler im Vorraum nach Index C) – Arbeit daran ist dann eine Abweichung.
+
+create table if not exists elemente (
+  id               uuid primary key default gen_random_uuid(),
+  projekt          text not null,
+  schluessel       text not null,               -- normalisiert: "top 3|bad|wand b1"
+  top              text,
+  raum             text,
+  art              text not null check (art in ('wand','leitung','dose','verteiler','auslass','schalter','melder','sonstiges')),
+  bezeichnung      text not null,               -- "Wand B1 (Bad/Schlafzimmer)", "Steckdose Waschtisch"
+  lage             text,                         -- wie im Plan beschrieben
+  anzahl           int  not null default 1,
+  gehoert_zu       uuid references elemente (id) on delete set null,  -- z. B. Leitung → Wand
+  soll_plan_nr     text,
+  soll_plan_index  text,                         -- Index, der dieses Bauteil zuletzt bestätigt hat
+  soll_aktiv       boolean not null default true,
+  quelle_hash      text,                         -- Plan-Dokument (quellen.content_hash)
+  erstellt_am      timestamptz not null default now(),
+  aktualisiert_am  timestamptz not null default now(),
+  unique (projekt, schluessel)
+);
+create index if not exists elemente_ort_idx on elemente (projekt, top, raum);
+
+-- ---------------------------------------------------------------------------
 -- Strukturierte Einträge (Schritt 3: "die eine Wahrheit über die Baustelle")
 -- ---------------------------------------------------------------------------
 -- Eine Quelle (Nachricht, Mail, Anruf) ergibt 0..n Einträge.
@@ -146,6 +176,13 @@ create index if not exists eintraege_ort_idx on eintraege (projekt, top, raum);
 alter table eintraege add column if not exists geprueft_am timestamptz;
 create index if not exists eintraege_ungeprueft_idx on eintraege (projekt) where geprueft_am is null;
 
+-- Bauteil-Zuordnung: welches Bauteil, welcher Arbeitsschritt.
+alter table eintraege add column if not exists element_id uuid references elemente (id) on delete set null;
+alter table eintraege add column if not exists schritt text check (schritt in (
+  'staenderwerk','verrohrung','leitung_eingezogen','gesetzt','angeschlossen','abnahme',
+  'beplankung','spachteln','malen','montage','rueckbau','sonstiges'));
+create index if not exists eintraege_element_idx on eintraege (element_id);
+
 -- ---------------------------------------------------------------------------
 -- Signale (Schritt 4 + Lebenszyklus aus KONZEPT.md)
 -- ---------------------------------------------------------------------------
@@ -190,6 +227,7 @@ create table if not exists signale (
   unique (projekt, schluessel)
 );
 create index if not exists signale_projekt_status_idx on signale (projekt, status);
+alter table signale add column if not exists element_id uuid references elemente (id) on delete set null;
 
 -- Verlauf: jeder Statuswechsel als Zeile (für Zeitregler und Demo). Wird per Trigger gefüllt.
 create table if not exists signal_verlauf (
@@ -244,6 +282,18 @@ select distinct on (projekt, plan_nr) *
 from plaene
 order by projekt, plan_nr, gueltig_ab desc nulls last, plan_index desc;
 
+-- Stand je Bauteil: welche Schritte erledigt bzw. geplant sind (für Zwilling und Prüf-Agent).
+create or replace view element_stand with (security_invoker = true) as
+select
+  el.*,
+  coalesce(array_agg(distinct e.schritt) filter (where e.art = 'arbeit_erledigt' and e.schritt is not null), '{}') as schritte_erledigt,
+  coalesce(array_agg(distinct e.schritt) filter (where e.art = 'arbeit_geplant'  and e.schritt is not null), '{}') as schritte_geplant,
+  max(e.zeitpunkt) as letzte_meldung,
+  (select count(*) from signale s where s.status <> 'geloest' and s.element_id = el.id) as offene_signale
+from elemente el
+left join eintraege e on e.element_id = el.id
+group by el.id;
+
 -- Einträge mit ihrer Rohquelle (Kanal, Absender, Anhang) für Zwilling und Timeline.
 create or replace view eintraege_mit_quelle with (security_invoker = true) as
 select
@@ -269,5 +319,9 @@ begin
   if not exists (select 1 from pg_publication_tables
                  where pubname = 'supabase_realtime' and tablename = 'eintraege') then
     alter publication supabase_realtime add table eintraege;
+  end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and tablename = 'elemente') then
+    alter publication supabase_realtime add table elemente;
   end if;
 end $$;

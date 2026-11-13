@@ -37,6 +37,14 @@ class DB(Protocol):
     def eintraege_ersetzen(self, quelle_hash: str, zeilen: list[Zeile]) -> None: ...
     def plan_speichern(self, zeile: Zeile) -> None: ...
     def status_setzen(self, quelle: Zeile, status: str, fehler: str | None = None) -> None: ...
+    # Bauteil-Register
+    def elemente(self, projekt: str) -> list[Zeile]: ...
+    def element_einfuegen(self, zeile: Zeile) -> Zeile: ...
+    def element_aendern(self, element_id: str, felder: Zeile) -> None: ...
+
+
+def element_schluessel(top: str | None, raum: str | None, bezeichnung: str) -> str:
+    return "|".join(" ".join((x or "").lower().split()) for x in (top, raum, bezeichnung))
 
 
 def _sortierschluessel(q: Zeile) -> tuple:
@@ -151,6 +159,18 @@ class SupabaseDB:
     def signal_aendern(self, signal_id: str, felder: Zeile) -> None:
         self.client.table("signale").update(felder).eq("id", signal_id).execute()
 
+    def elemente(self, projekt: str) -> list[Zeile]:
+        return self._alle("elemente", projekt)
+
+    def element_einfuegen(self, zeile: Zeile) -> Zeile:
+        return self.client.table("elemente").insert(zeile).execute().data[0]
+
+    def element_aendern(self, element_id: str, felder: Zeile) -> None:
+        from datetime import datetime, timezone
+
+        felder = {**felder, "aktualisiert_am": datetime.now(timezone.utc).isoformat()}
+        self.client.table("elemente").update(felder).eq("id", element_id).execute()
+
     def als_geprueft(self, eintrag_ids: list[str]) -> None:
         from datetime import datetime, timezone
 
@@ -169,6 +189,7 @@ class SpeicherDB:
         self.eintraege: list[Zeile] = []
         self.plaene: list[Zeile] = []
         self.signale_liste: list[Zeile] = []
+        self.elemente_liste: list[Zeile] = []
 
     def neue_quellen(self, projekt: str | None) -> list[Zeile]:
         return sorted(
@@ -234,6 +255,23 @@ class SpeicherDB:
         for s in self.signale_liste:
             if s["id"] == signal_id:
                 s.update(felder)
+
+    def elemente(self, projekt: str) -> list[Zeile]:
+        return [e for e in self.elemente_liste if e["projekt"] == projekt]
+
+    def element_einfuegen(self, zeile: Zeile) -> Zeile:
+        import uuid
+
+        if any(e["projekt"] == zeile["projekt"] and e["schluessel"] == zeile["schluessel"] for e in self.elemente_liste):
+            raise ValueError("unique (projekt, schluessel) verletzt")
+        neu = {"soll_aktiv": True, "gehoert_zu": None, **zeile, "id": str(uuid.uuid4())}
+        self.elemente_liste.append(neu)
+        return neu
+
+    def element_aendern(self, element_id: str, felder: Zeile) -> None:
+        for e in self.elemente_liste:
+            if e["id"] == element_id:
+                e.update(felder)
 
     def als_geprueft(self, eintrag_ids: list[str]) -> None:
         ids = set(eintrag_ids)

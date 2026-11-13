@@ -44,6 +44,11 @@ Regeln:
 - zitat: die tragende Stelle wörtlich, höchstens ein Satz.
 - konfidenz 0..1. Ist eine Nachricht mehrdeutig ("bin hinten fertig mit dem zeug"), setze unklar=true, konfidenz unter 0.5 und formuliere eine kurze Rückfrage. Nicht raten.
 - plaene: nur füllen, wenn die Quelle selbst einen Plan-Index ausgibt oder enthält (Plan-PDF, Mail des Planers mit neuem Index). Sonst leere Liste.
+
+Bauteile (Soll aus den Plänen):
+- Ist die neue Quelle ein Plandokument, trage in `elemente` ALLE Bauteile ein, die der Plan in diesem Index vorsieht: Wände, Leitungen, Dosen, Verteiler, Auslässe, Schalter, Melder. Bezeichnung so, dass sie innerhalb des Raums eindeutig ist; `gehoert_zu` = Bezeichnung der Wand, in der das Bauteil sitzt. Bei allen anderen Quellen bleibt `elemente` leer.
+- Bei jedem Eintrag: Betrifft er eindeutig ein Bauteil aus der Bauteil-Liste, übernimm dessen Schlüssel exakt in `bauteil`. Nicht eindeutig → null. Erfinde keine Schlüssel. Ein Bauteil mit "ENTFÄLLT" darf zugeordnet werden, wenn die Nachricht genau davon spricht (z. B. Verteiler im Vorraum, obwohl er laut gültigem Plan woanders hingehört).
+- `schritt` bei Arbeit: staenderwerk (Ständer gestellt), verrohrung (Leerrohre), leitung_eingezogen (Kabel/Leitungen verlegt), gesetzt (Dose/Verteiler/Auslass gesetzt), angeschlossen, abnahme (Prüfung bestanden), beplankung (Wand zu, beplankt, zugemacht), spachteln, malen, montage (Endmontage), rueckbau, sonstiges.
 - Fakten nicht erfinden. Was nicht in Quelle oder Zeitachse steht, ist null.
 - zusammenfassung: ein kurzer deutscher Satz."""
 
