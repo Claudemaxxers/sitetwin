@@ -10,6 +10,7 @@ from typing import Protocol
 from .models import Anhang, ImportErgebnis, ParseFehler, RawItem, Status
 
 TABELLE = "quellen"
+BATCH = 500  # Zeilen pro Insert-Request
 _UMLAUTE = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
 
 
@@ -89,11 +90,12 @@ def speichern(eintraege: Iterable[RawItem | ParseFehler], backend: Backend) -> I
             fehlgeschlagen += 1
             ergebnis.fehler.append(f"{item.original_ref}: Upload fehlgeschlagen: {fehler}")
 
-    if zeilen:
+    for start in range(0, len(zeilen), BATCH):  # große Exporte nicht in einem Request
+        teil = zeilen[start : start + BATCH]
         try:
-            ergebnis.neu = backend.einfuegen(zeilen)
+            ergebnis.neu += backend.einfuegen(teil)
         except Exception:
-            for z in zeilen:  # Fehler isolieren: einzeln nachversuchen
+            for z in teil:  # Fehler isolieren: einzeln nachversuchen
                 try:
                     ergebnis.neu += backend.einfuegen([z])
                 except Exception as fehler:

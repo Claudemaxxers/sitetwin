@@ -26,7 +26,30 @@ def main(argv: list[str] | None = None) -> int:
     imp.add_argument("pfad", type=Path)
     imp.add_argument("--projekt", default=cfg.default_projekt)
     imp.add_argument("--dry-run", action="store_true", help="nur parsen, nichts schreiben")
+    aud = sub.add_parser("audit", help="Datenqualität von quellen + Bucket prüfen (liest nur)")
+    aud.add_argument("--projekt", default=cfg.default_projekt)
+    aud.add_argument(
+        "--fake-data",
+        type=Path,
+        default=Path(__file__).resolve().parents[2] / "fake_data",
+        help="Originale zum Abgleich; Ordner fehlt → Abgleich entfällt",
+    )
     args = parser.parse_args(argv)
+
+    if args.befehl == "audit":
+        from . import audit
+
+        zeilen, dateien = audit.lade_supabase(store.supabase_backend(), args.projekt)
+        ctx = ImportKontext(projekt=args.projekt, tz=cfg.tz)
+        hat_originale = args.fake_data.is_dir()
+        befunde = audit.pruefe(
+            zeilen,
+            dateien,
+            quelle=audit.originale(args.fake_data, ctx) if hat_originale else None,
+            belege=audit.belege_aus_erwartet(args.fake_data / "ERWARTET.md"),
+        )
+        print(audit.bericht(befunde))
+        return 1 if any(b.stufe == audit.FEHLER for b in befunde) else 0
 
     try:
         adapter = importlib.import_module(f"ablage.adapters.{ADAPTER[args.quelle]}")

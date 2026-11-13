@@ -25,6 +25,9 @@ Tabelle `quellen` (SQL in SPEC §5) und privater Bucket `ablage` müssen in Supa
 .venv\Scripts\python -m ablage import ordner   ..\fake_data\drive    --projekt "BV Simmering"
 .venv\Scripts\python -m ablage import call     ..\fake_data\calls    --projekt "BV Simmering"
 
+# Datenqualität von quellen + Bucket prüfen (liest nur, 22 Prüfungen, Abgleich mit ..\fake_data)
+.venv\Scripts\python -m ablage audit --projekt "BV Simmering"
+
 # API
 .venv\Scripts\python -m uvicorn ablage.api:app --port 8000
 curl.exe -X POST localhost:8000/import/call -H "Content-Type: application/json" --data-binary "@..\fake_data\calls\call_2026-11-13_1610_huber.json"
