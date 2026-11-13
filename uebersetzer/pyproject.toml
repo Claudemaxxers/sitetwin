@@ -1,0 +1,23 @@
+[project]
+name = "uebersetzer"
+version = "0.1.0"
+description = "SiteTwin Übersetzer: macht aus Rohdaten (quellen) strukturierte Einträge und Pläne"
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic>=0.70",
+  "supabase>=2.10",
+  "pydantic>=2.7",
+  "pypdf>=4.0",
+  "python-dotenv>=1.0",
+  "tzdata",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
