@@ -104,4 +104,4 @@ npm test
 
 ## License
 
-MIT – see [LICENSE](LICENSE).
+Talona track of the Building Better Worlds Hackathon: all work in this repository belongs to Talona. The repository is private and is not published under the MIT license.

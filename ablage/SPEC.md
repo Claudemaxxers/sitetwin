@@ -301,7 +301,7 @@ Schritte 1–3 brauchen kein Supabase.
 4. CLI → **DoD:** WhatsApp-Export landet in Supabase, sichtbar im Table Editor
 5. `adapters/eml.py`, `adapters/ordner.py`, `adapters/call.py` + Tests
 6. `api.py` (Import-Endpunkte) → **DoD:** Melihs Call-JSON per `curl` → Zeile in `quellen`
-7. `ablage/README.md`, `ablage/.env.example` (MIT `LICENSE` liegt schon im Repo-Root)
+7. `ablage/README.md`, `ablage/.env.example` (keine `LICENSE`: Talona-Track, privates Repo, die Arbeit gehört Talona)
 
 ## 14. Ordnerstruktur
 

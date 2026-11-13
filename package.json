@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Live digital twin of a construction site: chat, mail and photos in, one record of what changed, conflicts to the superintendent.",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
