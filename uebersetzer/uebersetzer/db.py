@@ -15,7 +15,20 @@ from typing import Any, Protocol
 Zeile = dict[str, Any]
 
 
+def _eintrag_sort(e: Zeile) -> tuple:
+    return (str(e.get("zeitpunkt") or ""), e.get("quelle_hash", ""), e.get("nr", 0))
+
+
 class DB(Protocol):
+    # Prüf-Agent
+    def ungepruefte_eintraege(self, projekt: str | None) -> list[Zeile]: ...
+    def projekt_eintraege(self, projekt: str) -> list[Zeile]: ...
+    def alle_plaene(self, projekt: str) -> list[Zeile]: ...
+    def signale(self, projekt: str) -> list[Zeile]: ...
+    def signal_einfuegen(self, zeile: Zeile) -> Zeile: ...
+    def signal_aendern(self, signal_id: str, felder: Zeile) -> None: ...
+    def als_geprueft(self, eintrag_ids: list[str]) -> None: ...
+    # Übersetzer
     def neue_quellen(self, projekt: str | None) -> list[Zeile]: ...
     def projekt_quellen(self, projekt: str) -> list[Zeile]: ...
     def anhang_laden(self, pfad: str) -> bytes: ...
@@ -104,6 +117,47 @@ class SupabaseDB:
             update["meta"] = {**(quelle.get("meta") or {}), "fehler": fehler[:2000]}
         self.client.table("quellen").update(update).eq("content_hash", quelle["content_hash"]).execute()
 
+    # --- Prüf-Agent ---
+    def _alle(self, tabelle: str, projekt: str | None, **filter_) -> list[Zeile]:
+        zeilen: list[Zeile] = []
+        start = 0
+        while True:
+            q = self.client.table(tabelle).select("*")
+            if projekt:
+                q = q.eq("projekt", projekt)
+            for k, v in filter_.items():
+                q = q.is_(k, "null") if v is None else q.eq(k, v)
+            seite = q.range(start, start + 999).execute().data
+            zeilen += seite
+            if len(seite) < 1000:
+                return zeilen
+            start += 1000
+
+    def ungepruefte_eintraege(self, projekt: str | None) -> list[Zeile]:
+        return sorted(self._alle("eintraege", projekt, geprueft_am=None), key=_eintrag_sort)
+
+    def projekt_eintraege(self, projekt: str) -> list[Zeile]:
+        return sorted(self._alle("eintraege", projekt), key=_eintrag_sort)
+
+    def alle_plaene(self, projekt: str) -> list[Zeile]:
+        return self._alle("plaene", projekt)
+
+    def signale(self, projekt: str) -> list[Zeile]:
+        return self._alle("signale", projekt)
+
+    def signal_einfuegen(self, zeile: Zeile) -> Zeile:
+        return self.client.table("signale").insert(zeile).execute().data[0]
+
+    def signal_aendern(self, signal_id: str, felder: Zeile) -> None:
+        self.client.table("signale").update(felder).eq("id", signal_id).execute()
+
+    def als_geprueft(self, eintrag_ids: list[str]) -> None:
+        from datetime import datetime, timezone
+
+        jetzt = datetime.now(timezone.utc).isoformat()
+        for i in range(0, len(eintrag_ids), 200):
+            self.client.table("eintraege").update({"geprueft_am": jetzt}).in_("id", eintrag_ids[i : i + 200]).execute()
+
 
 class SpeicherDB:
     """In-Memory-Ersatz. Anhänge liegen als lokale Dateipfade in `anhang_pfad`."""
@@ -114,6 +168,7 @@ class SpeicherDB:
         self.lv = lv
         self.eintraege: list[Zeile] = []
         self.plaene: list[Zeile] = []
+        self.signale_liste: list[Zeile] = []
 
     def neue_quellen(self, projekt: str | None) -> list[Zeile]:
         return sorted(
@@ -140,9 +195,6 @@ class SpeicherDB:
                 aktuell[p["plan_nr"]] = p
         return list(aktuell.values())
 
-    def eintraege_ersetzen(self, quelle_hash: str, zeilen: list[Zeile]) -> None:
-        self.eintraege = [e for e in self.eintraege if e["quelle_hash"] != quelle_hash] + zeilen
-
     def plan_speichern(self, zeile: Zeile) -> None:
         schluessel = (zeile["projekt"], zeile["plan_nr"], zeile["plan_index"])
         for i, p in enumerate(self.plaene):
@@ -155,6 +207,46 @@ class SpeicherDB:
         quelle["status"] = status
         if fehler is not None:
             quelle["meta"] = {**(quelle.get("meta") or {}), "fehler": fehler}
+
+    # --- Prüf-Agent ---
+    def ungepruefte_eintraege(self, projekt: str | None) -> list[Zeile]:
+        return sorted((e for e in self.eintraege if not e.get("geprueft_am") and (not projekt or e["projekt"] == projekt)), key=_eintrag_sort)
+
+    def projekt_eintraege(self, projekt: str) -> list[Zeile]:
+        return sorted((e for e in self.eintraege if e["projekt"] == projekt), key=_eintrag_sort)
+
+    def alle_plaene(self, projekt: str) -> list[Zeile]:
+        return [p for p in self.plaene if p["projekt"] == projekt]
+
+    def signale(self, projekt: str) -> list[Zeile]:
+        return [s for s in self.signale_liste if s["projekt"] == projekt]
+
+    def signal_einfuegen(self, zeile: Zeile) -> Zeile:
+        import uuid
+
+        if any(s["projekt"] == zeile["projekt"] and s["schluessel"] == zeile["schluessel"] for s in self.signale_liste):
+            raise ValueError("unique (projekt, schluessel) verletzt")
+        neu = {"status": "offen", **zeile, "id": str(uuid.uuid4())}
+        self.signale_liste.append(neu)
+        return neu
+
+    def signal_aendern(self, signal_id: str, felder: Zeile) -> None:
+        for s in self.signale_liste:
+            if s["id"] == signal_id:
+                s.update(felder)
+
+    def als_geprueft(self, eintrag_ids: list[str]) -> None:
+        ids = set(eintrag_ids)
+        for e in self.eintraege:
+            if e.get("id") in ids:
+                e["geprueft_am"] = "jetzt"
+
+    def eintraege_ersetzen(self, quelle_hash: str, zeilen: list[Zeile]) -> None:
+        import uuid  # IDs wie in Postgres, damit der Prüf-Agent darauf verweisen kann
+
+        for z in zeilen:
+            z.setdefault("id", str(uuid.uuid4()))
+        self.eintraege = [e for e in self.eintraege if e["quelle_hash"] != quelle_hash] + zeilen
 
 
 def _plan_neuer(a: Zeile, b: Zeile) -> bool:

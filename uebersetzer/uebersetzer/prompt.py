@@ -59,11 +59,15 @@ def stammdaten_block(projekt: str, tops: list[dict[str, Any]], lv: list[dict[str
     return "\n".join(zeilen)
 
 
+WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+
+
 def zeit(z: Any) -> str:
     if not z:
         return "ohne Datum"
     dt = z if isinstance(z, datetime) else datetime.fromisoformat(str(z).replace("Z", "+00:00"))
-    return dt.astimezone(WIEN).strftime("%a %d.%m.%Y %H:%M")
+    dt = dt.astimezone(WIEN)
+    return f"{WOCHENTAGE[dt.weekday()]} {dt:%d.%m.%Y %H:%M}"
 
 
 def quelle_kurz(q: dict[str, Any], max_text: int = 400) -> str:
