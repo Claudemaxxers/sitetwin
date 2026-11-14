@@ -167,7 +167,37 @@ export interface Aenderung {
   signale: Signal[];
 }
 
-const GRUND = { freigabe: "Keine schriftliche Freigabe", preis: "Preis fehlt", foto: "Foto fehlt", kosten: "Kostenübernahme offen", abweichung: "Abweichung offen" };
+export const GRUND = {
+  freigabe: "Keine schriftliche Freigabe",
+  bauleitung: "Freigabe durch Bauleitung fehlt",
+  nachweis: "Schriftlicher Nachweis fehlt",
+  abgelehnt: "Von der Bauleitung abgelehnt",
+  preis: "Preis fehlt",
+  foto: "Foto fehlt",
+  kosten: "Kostenübernahme offen",
+  abweichung: "Abweichung in Bearbeitung",
+};
+
+/**
+ * Signal lifecycle as the office sees it (KONZEPT.md): every signal triggers the phone agent,
+ * so anything not solved is "in Bearbeitung". `angerufen` is set once the agent wrote back.
+ */
+export function signalStand(s: Signal) {
+  const geloest = s.status === "geloest";
+  return {
+    aktiv: !geloest,
+    label: geloest ? "Gelöst" : "In Bearbeitung",
+    ton: (geloest ? "gruen" : "blau") as Ton,
+    schritt: geloest ? 2 : 1, // 0 erkannt, 1 Vorarbeiter angerufen, 2 gelöst
+    angerufen: s.angerufen_am,
+  };
+}
+
+/** Theme from free text (titles of Hendrik's soll_aenderungen). */
+function themaText(text: string): string | null {
+  for (const t of THEMEN) if (t.re.test(text)) return t.key;
+  return null;
+}
 
 function rechne(list: Eintrag[], lv: LvPosition[]): Schaetzung | null {
   const regie = lv.find((p) => p.pos_nr === "04.01.010")?.einheitspreis_eur ?? 0;
@@ -221,13 +251,28 @@ export function aenderungen(d: ProjektDaten, pers: Personen, signale: Signal[]):
     const raum = list.find((e) => e.raum && e.art !== "behinderung")?.raum ?? erster.raum;
     const plan = d.plaene.filter((p) => p.top === top && p.gueltig_ab).sort((a, b) => ts(b.gueltig_ab) - ts(a.gueltig_ab))[0] ?? d.plaene.find((p) => p.top === top) ?? null;
     const schaetzung = rechne(list, d.lv) ?? DEMO_SCHAETZUNG[key] ?? null;
-    const freigabeE = list.find((e) => {
-      const p = pers(e.person);
-      return istGU(p) && e.quelle_typ === "email" && ["anweisung", "bestaetigung", "soll_aenderung", "planaenderung"].includes(e.art) && !/freigabe|kosten/i.test(e.wartet_auf ?? "");
-    });
-    const sig = signale.filter((s) => s.top === top && (t === "wartezeit" ? s.art === "reihenfolge" : `${s.element ?? ""} ${s.titel}`.toLowerCase().includes(t.slice(0, 6))));
+    // sign-off: Hendrik's soll_aenderungen when it knows this change, otherwise a written order by the GC
+    const soll = d.sollAenderungen.find((sa) => sa.top === top && themaText(`${sa.titel} ${sa.neues_soll ?? ""}`) === t);
+    const freigabeE = soll
+      ? null
+      : list.find((e) => {
+          const p = pers(e.person);
+          return istGU(p) && e.quelle_typ === "email" && ["anweisung", "bestaetigung", "soll_aenderung", "planaenderung"].includes(e.art) && !/freigabe|kosten/i.test(e.wartet_auf ?? "");
+        });
+    const freigabe: Aenderung["freigabe"] =
+      soll?.status === "freigegeben"
+        ? { von: pers(soll.freigegeben_von), zeit: soll.freigegeben_am, wie: soll.nachweis_status === "vorhanden" ? "schriftlich" : "mündlich, Nachweis fehlt" }
+        : freigabeE
+          ? { von: pers(freigabeE.person), zeit: freigabeE.zeitpunkt, wie: "per Mail" }
+          : null;
+    const sig = signale.filter(
+      (s) => (soll?.signal_ids.includes(s.id) ?? false) || (s.top === top && (t === "wartezeit" ? s.art === "reihenfolge" : `${s.element ?? ""} ${s.titel}`.toLowerCase().includes(t.slice(0, 6)))),
+    );
     const fehlend: string[] = [];
-    if (g.art !== "wartezeit" && !freigabeE) fehlend.push(GRUND.freigabe);
+    if (soll?.status === "abgelehnt") fehlend.push(GRUND.abgelehnt);
+    else if (soll?.status === "vorgeschlagen") fehlend.push(GRUND.bauleitung);
+    else if (soll?.status === "freigegeben" && soll.nachweis_status === "fehlt") fehlend.push(GRUND.nachweis);
+    else if (!soll && g.art !== "wartezeit" && !freigabeE) fehlend.push(GRUND.freigabe);
     if (!schaetzung) fehlend.push(GRUND.preis);
     if (list.some((e) => e.art === "arbeit_erledigt") && !list.some((e) => istFoto(e.quelle_anhang_pfad))) fehlend.push(GRUND.foto);
     if (list.some((e) => e.art === "frage" && /kost/i.test(`${e.wartet_auf} ${e.zusammenfassung}`))) fehlend.push(GRUND.kosten);
@@ -237,7 +282,7 @@ export function aenderungen(d: ProjektDaten, pers: Personen, signale: Signal[]):
       : fehlend[0] === GRUND.preis
         ? { label: "Preis fehlt", ton: "amber" }
         : fehlend[0] === GRUND.abweichung
-          ? { label: "Abweichung offen", ton: "rot" }
+          ? { label: "Abweichung in Bearbeitung", ton: "blau" }
           : { label: fehlend[0], ton: "orange" };
     const titel =
       g.art === "wartezeit"
@@ -260,7 +305,7 @@ export function aenderungen(d: ProjektDaten, pers: Personen, signale: Signal[]):
       antwortBis: plus3(erster.zeitpunkt!),
       plan,
       schaetzung,
-      freigabe: freigabeE ? { von: pers(freigabeE.person), zeit: freigabeE.zeitpunkt, wie: "per Mail" } : null,
+      freigabe,
       fehlend,
       status,
       bereit: !fehlend.length,
@@ -352,7 +397,7 @@ export interface Leistung {
   gewerk: string;
   gemeldet: { von: Person; zeit: string };
   geprueft: { von: Person; zeit: string } | null;
-  pruefenVor: Eintrag | null; // a later start would cover it
+  pruefenVor: { person: string | null; zeitpunkt: string | null } | null; // closing the wall would cover it
 }
 
 export function leistungen(d: ProjektDaten, pers: Personen): Leistung[] {
@@ -371,7 +416,12 @@ export function leistungen(d: ProjektDaten, pers: Personen): Leistung[] {
       (e) => e.top === top && ts(e.zeitpunkt) > ts(l.gemeldet.zeit) && (e.art === "abnahme" || (e.art === "bestaetigung" && istGU(pers(e.person)))) && (!raum || !e.raum || e.raum === raum),
     );
     if (pruef) l.geprueft = { von: pers(pruef.person), zeit: pruef.zeitpunkt! };
-    // check first: another trade plans to close the room after this was reported
+    // check first: Hendrik's view check_first when available ("At risk" = closing while installation is missing)
+    if (d.checkFirst) {
+      const risk = d.checkFirst.find((c) => c.status === "At risk" && c.top === top && (!raum || !c.raum || c.raum === raum) && l.gewerk !== "Trockenbau");
+      if (risk && !l.geprueft) l.pruefenVor = risk;
+      continue;
+    }
     const deckt = entries.find(
       (e) =>
         e.top === top &&
@@ -464,8 +514,8 @@ export function morgen(d: ProjektDaten, pers: Personen, ch: Aenderung[], req: An
     heute,
     empfaenger: pers(d.eintraege.find((e) => istGU(pers(e.person)))?.person ?? "Bauleitung"),
     braucht: [
-      ...signale.filter((s) => s.status !== "geloest").map((s) => ({ text: s.titel, pill: { label: s.status === "offen" ? "Heute" : "Beim Vorarbeiter", ton: "orange" as Ton } })),
-      ...ch.filter((c) => c.fehlend.includes(GRUND.freigabe)).slice(0, 3).map((c) => ({ text: `Freigabe für ${c.titel}${c.top ? ` (${c.top})` : ""}`, pill: { label: c.nr, ton: "rot" as Ton } })),
+      ...signale.filter((s) => s.status !== "geloest").map((s) => ({ text: s.titel, pill: { label: "In Bearbeitung", ton: "blau" as Ton } })),
+      ...ch.filter((c) => c.fehlend.some((f) => f === GRUND.freigabe || f === GRUND.bauleitung || f === GRUND.nachweis)).slice(0, 3).map((c) => ({ text: `${c.titel}${c.top ? ` (${c.top})` : ""}: ${c.fehlend.find((f) => f !== GRUND.abweichung)?.toLowerCase() ?? "Freigabe fehlt"}`, pill: { label: c.nr, ton: "rot" as Ton } })),
     ],
     wartet: req.filter((r) => !r.beantwortet).slice(0, 4),
     entschieden: d.eintraege.filter((e) => tagKey(e.zeitpunkt) === gestern && (e.art === "bestaetigung" || (e.art === "anweisung" && !!e.entschieden_von))).slice(0, 3),

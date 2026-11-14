@@ -164,6 +164,7 @@ function Geprueft({ m, nav }: { m: Modell; nav: Nav }) {
       {tops.map((top) => {
         const items = m.leist.filter((l) => l.top === top);
         const warn = items.find((l) => l.pruefenVor);
+        const nachgeholt = !warn ? m.d.checkFirst?.find((c) => c.top === top && c.status === "Resolved") : undefined;
         return (
           <Card key={top} className="overflow-hidden">
             <div className="flex items-center justify-between border-b border-[var(--line)] px-6 py-4">
@@ -172,6 +173,11 @@ function Geprueft({ m, nav }: { m: Modell; nav: Nav }) {
             {warn && (
               <div className="border-b border-[var(--line)] bg-[#fff8f3] px-6 py-3 text-[13px] text-[#a4562a]">
                 {m.pers(warn.pruefenVor!.person).vorname} will {tagZeit(warn.pruefenVor!.zeitpunkt)} zumachen. Vorher prüfen, sonst ist es hinter der Platte.
+              </div>
+            )}
+            {nachgeholt && (
+              <div className="border-b border-[var(--line)] bg-[#f3f8f4] px-6 py-3 text-[13px] text-[#2f6b40]">
+                Zumachen war gestoppt, die Installation wurde nachgeholt. Jetzt frei.
               </div>
             )}
             {items.map((l) => (
