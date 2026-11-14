@@ -74,9 +74,11 @@ TRANSKRIPT_BASE_URL=https://api.openai.com/v1     # Groq: https://api.groq.com/o
 TRANSKRIPT_MODELL=whisper-1                       # Groq: whisper-large-v3
 ```
 
+Stille wird erkannt: Meldet der Anbieter für alle Segmente „keine Sprache“ (`no_speech_prob >= 0.5`), bleibt `text` leer und `meta.transkript_fehler` lautet `KeineSprache: keine Sprache erkannt`. Ohne das erfindet Whisper bei Stille Text wie „Vielen Dank.“. Rauschen ohne Sprache wird so nicht erkannt.
+
 Schlägt die Transkription fehl (Netz, Timeout, Fehlerstatus, leere Antwort), wird die Nachricht trotzdem gespeichert, `text` bleibt leer und `meta.transkript_fehler` nennt den Grund. Grenze: Eine schon gespeicherte Sprachnachricht bekommt nachträglich kein Transkript (Upsert mit `ignore_duplicates`); dafür Zeile löschen und neu importieren. Der Hash ändert sich durch das Transkript nicht.
 
-Ehrlicher Stand: in Tests mit nachgebauter Schnittstelle geprüft, noch nicht gegen einen echten Anbieter und eine echte WhatsApp-Sprachnachricht gelaufen. Die Audiodateien in `fake_data/` sind Platzhalter, keine Aufnahmen.
+Ehrlicher Stand: in Tests mit nachgebauter Schnittstelle geprüft, außerdem gegen Groq (`whisper-large-v3`) am 14.11.2026 mit dem Transkribierer direkt aufgerufen: ein synthetisch gesprochener deutscher Satz (Opus und M4A) kam wortgenau zurück, Stille wurde verworfen. Noch nicht gelaufen: eine echte WhatsApp-Sprachnachricht über die laufende Ablage. Die Audiodateien in `fake_data/` sind Platzhalter, keine Aufnahmen.
 
 ## Gmail und Drive live über n8n
 
@@ -126,7 +128,7 @@ Supabase `quellen` (status = 'neu')  ◀── Übersetzer liest direkt
 ## Annahmen
 
 - Rohdaten sind unveränderlich; `quellen` wird nur eingefügt. Ein später ergänztes Transkript aktualisiert bestehende Zeilen nicht → Tabelle leeren und neu importieren (Belege hängen an `content_hash`, nicht an `id`).
-- WhatsApp: Android/DE-Export ist Pflicht, iOS-Format wird mitgelesen. Sprachnachrichten bekommen ihr Transkript aus einer Sidecar-Datei `<audio>.txt` oder, mit `TRANSKRIPT_API_KEY`, per Whisper-Schnittstelle (noch nicht gegen einen echten Anbieter gelaufen); sonst bleibt `text` leer.
+- WhatsApp: Android/DE-Export ist Pflicht, iOS-Format wird mitgelesen. Sprachnachrichten bekommen ihr Transkript aus einer Sidecar-Datei `<audio>.txt` oder, mit `TRANSKRIPT_API_KEY`, per Whisper-Schnittstelle (einmal direkt gegen Groq gelaufen, noch nicht mit einer echten WhatsApp-Sprachnachricht); sonst bleibt `text` leer.
 - Dieselbe WhatsApp-Nachricht einmal live und einmal per Export ergibt zwei Zeilen (unterschiedliche Identität).
 - Zwei identische Nachrichten derselben Person in derselben Minute fallen zusammen.
 - Keine Auth auf der API: nur lokal oder hinter einem Tunnel betreiben.

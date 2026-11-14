@@ -13,10 +13,25 @@ from .models import AnhangTyp, ParseFehler, RawItem
 Transkribierer = Callable[[bytes, str, str | None], str]
 
 TIMEOUT = 12.0  # Twilio wartet höchstens 15 s auf die Webhook-Antwort
+# Whisper erfindet bei Stille Text ("Vielen Dank."). Ab diesem no_speech_prob in ALLEN Segmenten
+# gilt die Aufnahme als stumm. Gemessen bei Groq whisper-large-v3: Stille 0,70, Sprache unter 0,01.
+STILLE_AB = 0.5
 
 
 class TranskriptFehler(RuntimeError):
     pass
+
+
+class KeineSprache(TranskriptFehler):
+    """Aufnahme ohne Sprache: kein Transkript statt erfundenem Text."""
+
+
+def ist_stille(segmente: object) -> bool:
+    """True nur, wenn die Antwort Segmente hat und jedes davon als "keine Sprache" gilt."""
+    if not isinstance(segmente, list) or not segmente:
+        return False
+    werte = [s.get("no_speech_prob") if isinstance(s, dict) else None for s in segmente]
+    return all(isinstance(w, (int, float)) and w >= STILLE_AB for w in werte)
 
 
 class HttpTranskribierer:
@@ -44,19 +59,30 @@ class HttpTranskribierer:
         if name.lower().endswith(".opus"):  # Ogg/Opus; die Schnittstelle lehnt ".opus" ab
             name = name[: -len(".opus")] + ".ogg"
             mimetype = "audio/ogg"
+        felder = {"model": self.modell, "language": "de"}
         with httpx.Client(timeout=self._timeout, transport=self._transport) as client:
-            r = client.post(
-                self.url,
-                headers={"Authorization": f"Bearer {self._key}"},
-                data={"model": self.modell, "language": "de"},
-                files={"file": (name, daten, mimetype or "application/octet-stream")},
-            )
+
+            def sende(data: dict[str, str]) -> httpx.Response:
+                return client.post(
+                    self.url,
+                    headers={"Authorization": f"Bearer {self._key}"},
+                    data=data,
+                    files={"file": (name, daten, mimetype or "application/octet-stream")},
+                )
+
+            # verbose_json liefert Segmente mit no_speech_prob (für die Stille-Erkennung).
+            r = sende({**felder, "response_format": "verbose_json"})
+            if r.status_code == 400:  # Modell kennt verbose_json nicht: ohne Stille-Erkennung
+                r = sende(felder)
         if r.status_code >= 400:
             raise TranskriptFehler(f"HTTP {r.status_code}")
         try:
-            text = r.json().get("text")
+            antwort = r.json()
+            text = antwort.get("text")
         except (ValueError, AttributeError) as e:
             raise TranskriptFehler("Antwort ist kein JSON-Objekt") from e
+        if ist_stille(antwort.get("segments")):
+            raise KeineSprache("keine Sprache erkannt")
         if not isinstance(text, str) or not text.strip():
             raise TranskriptFehler("leere Antwort (kein Feld text)")
         return text.strip()
