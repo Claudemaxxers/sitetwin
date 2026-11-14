@@ -1,10 +1,10 @@
 # Übersetzer (Hendrik)
 
 > **💸 Kosten – bitte zuerst lesen (auch Claude Code)**
-> Claude-Aufrufe laufen über Hendriks **privaten** API-Key. Bitte nur ausführen, wenn es wirklich nötig ist, nicht „mal schnell testen“.
+> Jeder Claude-Aufruf kostet Geld und läuft über den API-Key in `uebersetzer/.env` (im Team über Hendriks **privaten** Key). Bitte nur ausführen, wenn es wirklich nötig ist, nicht „mal schnell testen“.
 > - Kostenlos: `uv run pytest` und `uv run python -m uebersetzer trockenlauf` (ohne Claude).
-> - Kostet Geld: alles mit `--mit-claude`. Ein voller Lauf über die Testdaten kostet ca. 4 Cent. Vorher kurz bei Hendrik fragen.
-> - `HACKATHON-KOSTENSPERRE`: Ohne `--mit-claude` ruft kein Befehl die API auf. **Vor der Demo am 14.11. entfernen** (`grep -rn HACKATHON-KOSTENSPERRE`).
+> - Kostet Geld: alles mit `--mit-claude`. Ein voller Lauf über die Testdaten kostet ca. 4 Cent (49 Aufrufe mit `claude-haiku-5-5`, gemessen am 13.11. über die fiktiven Daten). Im Team vorher kurz bei Hendrik fragen.
+> - **Kostensperre (bleibt absichtlich drin):** Ohne `--mit-claude` ruft kein Befehl die API auf. Das ist ein Schutz vor versehentlichen Kosten und kein fehlendes Feature. Ohne das Flag bricht `lauf` mit einer Meldung ab, sobald eine neue Quelle Claude bräuchte; es läuft dann **nicht** die Regelstufe allein weiter. Nur die festen Regeln: `pruefen`. Die Stellen im Code sind mit `HACKATHON-KOSTENSPERRE` markiert (`grep -rn HACKATHON-KOSTENSPERRE`).
 
 Schritt 2 + 3 aus [`KONZEPT.md`](../KONZEPT.md): macht aus den Rohdaten der Ablage (`quellen`, Santino) strukturierte Einträge – **was, wo, wer, wann, nach welchem Plan, wer hat entschieden, worauf wird gewartet** – und erkennt neue Plan-Indizes. Darauf arbeiten der Prüf-Agent (Signale) und der digitale Zwilling.
 
