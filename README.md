@@ -10,7 +10,7 @@ How this maps to the Talona brief:
 |---|---|
 | Catch it before the rework: missed change, work out of sequence, outdated drawing | Prüf-Agent (checking agent) in `uebersetzer/`, signals in the table `signale` |
 | Live picture of the place | Web app: changes, inbox, daily log, record, alerts per project (`app/`, `components/app/`) |
-| Dock onto what the site already uses | Ablage (ingest layer) in `ablage/`: WhatsApp export or Twilio, `.eml`/Gmail, Drive folder, call transcripts |
+| Dock onto what the site already uses | Ablage (ingest layer) in `ablage/`: WhatsApp (export, linked-device reader or Twilio), `.eml`/Gmail, Drive folder, call transcripts |
 | Live log: what changed, who decided, what waits on whom | Table `eintraege` (columns for decision and "waits on"), view `eintraege_mit_quelle`, table `signal_verlauf` |
 | Crews ask, decisions go to the foreman | "Ask" drawer in the web app (answers only from the record); signal lifecycle in `KONZEPT.md` |
 
@@ -34,7 +34,7 @@ All test data is **fictional** (see [Assumptions and limits](#8-assumptions-and-
 ## 1. Architecture
 
 ```
- WhatsApp export / Twilio    .eml / Gmail (n8n)    Drive folder (n8n)    call JSON
+ WhatsApp export / live      .eml / Gmail (n8n)    Drive folder (n8n)    call JSON
             \                       |                     |                 /
              v                      v                     v                v
         +--------------------------------------------------------------------+
@@ -65,7 +65,7 @@ All test data is **fictional** (see [Assumptions and limits](#8-assumptions-and-
         +-------------------------------+   +-----------------------------------+
 ```
 
-**Ablage** (`ablage/`, owner: Santino). Ingest layer. Reads WhatsApp chat exports (`.zip`/`.txt`, Android and iPhone, German and English), `.eml` files, a Drive-style folder, call-transcript JSON, and live inputs (Twilio WhatsApp webhook, Gmail and Drive via n8n). Stores everything unchanged: one row per message/mail/file/call in `quellen`, files in the private bucket `ablage`. Duplicates are detected by `content_hash`, so importing twice yields 0 new rows. Voice messages are transcribed on import if a transcription key is set, PDFs get their text via `pypdf`. Interface: FastAPI (`ablage/ablage/api.py`) and the CLI `python -m ablage`.
+**Ablage** (`ablage/`, owner: Santino). Ingest layer. Reads WhatsApp chat exports (`.zip`/`.txt`, Android and iPhone, German and English), `.eml` files, a Drive-style folder, call-transcript JSON, and live inputs (WhatsApp through a linked-device reader or the Twilio webhook, Gmail and Drive via n8n). Stores everything unchanged: one row per message/mail/file/call in `quellen`, files in the private bucket `ablage`. Duplicates are detected by `content_hash`, so importing twice yields 0 new rows. Voice messages are transcribed on import if a transcription key is set, PDFs get their text via `pypdf`. Interface: FastAPI (`ablage/ablage/api.py`) and the CLI `python -m ablage`.
 
 **`quellen` is the interface** between Ablage and Übersetzer. Ablage only inserts; the Übersetzer reads it directly with the service key and writes back only `status` and `meta.fehler`. Evidence elsewhere refers to `quellen.content_hash`, never to `id`, so `quellen` can be emptied and re-imported. Contract: [`ablage/SPEC.md`](ablage/SPEC.md) sections 5 and 6.
 
@@ -275,6 +275,7 @@ Open `http://localhost:3000`. The card "BV Simmering" opens the twin; the cards 
 |---|---|---|
 | Ablage | `cd ablage` then `.venv\Scripts\python -m pytest -q` | no Supabase, uses `fake_data/` as fixtures |
 | Übersetzer + Prüf-Agent | `cd uebersetzer` then `uv run pytest` (or `.venv\Scripts\python -m pytest` with the `pip` route) | no Claude, no Supabase |
+| WhatsApp reader | `cd ablage/whatsapp-mitleser` then `npm install` and `npm test` | no network, no WhatsApp account |
 | Web app and first prototype | `npm test` (Vitest, rules and twin derivation of the `/v1` prototype); `npm run typecheck` | nothing |
 
 The Übersetzer tests use fake Claude answers; the Claude stage of the Prüf-Agent was only tested that way (see limits). `npm test` covers the first prototype's rule engine (`tests/rules.test.ts`), not the Supabase-based views.
@@ -290,7 +291,7 @@ Chain from raw data to the office view, using the fictional data. The scenario i
    - **Changes**: detected changes per unit with the sources behind each (WhatsApp, voice, photo, mail).
    - **Inbox**, **Daily log**, **Record**: the raw messages and the structured record, each entry linked to its source.
    - **Ask** drawer: e.g. a question about Top 5; the answer cites record entries.
-4. Live feeling: leave `uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30` running, import another message (for example the Twilio route, section 6, or `python -m ablage import ...`), and watch the web app pick it up within a few seconds (it polls every 6 s). A message that reports the fix moves the signal to resolved.
+4. Live feeling: leave `uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30` running, import another message (for example through the WhatsApp reader, section 6, or `python -m ablage import ...`), and watch the web app pick it up within a few seconds (it polls every 6 s). A message that reports the fix moves the signal to resolved.
 
 What you will not see: an actual phone call (no phone agent in the repo) and the status `in_bearbeitung` being set automatically.
 
@@ -298,6 +299,7 @@ What you will not see: an actual phone call (no phone agent in the repo) and the
 
 All of these are optional and none is needed for the walkthrough above. Status of each is in section 8.
 
+- **WhatsApp via a linked device (unofficial, prototype)**: a small Node service (`ablage/whatsapp-mitleser/`, Baileys) logs in to a WhatsApp account as a linked device, reads along only in chats that are explicitly allowed, and forwards new messages, photos, voice notes and documents to `POST /import/whatsapp/nachricht`. It sends nothing. Setup in [`ablage/whatsapp-mitleser/README.md`](ablage/whatsapp-mitleser/README.md).
 - **WhatsApp via Twilio sandbox**: `POST /import/whatsapp/twilio`; setup in [`ablage/README.md`](ablage/README.md), section "WhatsApp live über Twilio".
 - **Gmail and Google Drive via n8n**: `POST /import/email/gmail-felder` and `POST /import/drive/datei`, two importable n8n flows; setup in [`ablage/n8n/README.md`](ablage/n8n/README.md). Needs a public tunnel to the Ablage API and `ABLAGE_IMPORT_TOKEN`.
 - **Voice-message transcription**: set `TRANSKRIPT_API_KEY` (and optionally base URL and model) in `ablage/.env`; any OpenAI-compatible transcription API; details in [`ablage/README.md`](ablage/README.md), section "Sprachnachrichten transkribieren".
@@ -350,6 +352,7 @@ Status as of the night before submission. Built beats promised: what is not list
 - **Gmail -> n8n Cloud -> tunnel -> Ablage -> Supabase** ran once for real on 14.11.2026, triggered by hand, with a fictional test mail without attachment (`POST /import/email/gmail-felder`, the mail as n8n's Gmail node delivers it, parsed into fields). Not checked on the live path: mails with attachments, a second run as duplicate, hash equality with the `.eml` import of the same mail, continuous operation. In tests, the six fictional mails give the same rows and hashes as the `.eml` import. The older raw-mail endpoint `POST /import/email/gmail` does not work with n8n Cloud, which does not allow its managed Google credential in an HTTP Request node. Importing `.eml` files works and is tested.
 - **Voice-message transcription** is built for an OpenAI-compatible API but was only tested against a mocked interface, never with a real key or a real WhatsApp voice message. A voice message stored without a transcript does not get one later (insert-only table; delete the row and import again).
 - The **Twilio WhatsApp endpoint** is built to Twilio's documented format and tested, but has never run against a real Twilio account.
+- The **WhatsApp reader** ran for real on 14.11.2026 with one team member's own account and a test group created for it: a text, a photo with caption and a voice note arrived in `quellen`, and one dropped connection was re-established automatically. Not checked: messages from other participants, documents and videos, longer operation, large groups. It uses Baileys (7.0.0-rc14, a release candidate), which is **not** the WhatsApp Business API and is against WhatsApp's terms of use; the number can be restricted. A linked device receives all chats of the account; the service discards everything outside the allowlist without storing or logging it. Prototype only: Twilio or the WhatsApp Business API is the route for production.
 - The same WhatsApp message imported once live and once via export gives two rows (different identity). Two identical messages by the same person within the same minute collapse into one.
 - The Ablage API has no authentication except the optional token on the n8n endpoints.
 
@@ -386,6 +389,7 @@ Status as of the night before submission. Built beats promised: what is not list
 ├── ablage/                 Ablage: ingest layer (Python, FastAPI, CLI)
 │   ├── ablage/             package: adapters/, api.py, store.py, ...
 │   ├── n8n/                two n8n flows (Gmail, Drive) and setup
+│   ├── whatsapp-mitleser/  WhatsApp reader via linked device (Node, Baileys; unofficial prototype)
 │   └── tests/
 ├── uebersetzer/            Übersetzer + Prüf-Agent (Python, Claude)
 │   ├── uebersetzer/        package: lauf.py, pruefung.py, extraktion.py, ...
@@ -406,6 +410,7 @@ Status as of the night before submission. Built beats promised: what is not list
 | [`ablage/README.md`](ablage/README.md) | Ablage setup, CLI, endpoints, Twilio, transcription |
 | [`ablage/SPEC.md`](ablage/SPEC.md) | contract of the table `quellen` (sections 5 and 6), adapters, API |
 | [`ablage/n8n/README.md`](ablage/n8n/README.md) | Gmail and Drive via n8n, with known limits |
+| [`ablage/whatsapp-mitleser/README.md`](ablage/whatsapp-mitleser/README.md) | WhatsApp reader: setup, allowlist, limits |
 | [`uebersetzer/README.md`](uebersetzer/README.md) | Übersetzer, component register, Prüf-Agent, views for the front end |
 | [`uebersetzer/schema.sql`](uebersetzer/schema.sql) | structured database schema |
 | [`TALONA.md`](TALONA.md) | what the web app imitates from the Talona product |
