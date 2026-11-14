@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Sequence
-from pathlib import Path, PurePath
+from pathlib import PurePath
 from typing import Protocol
 
+from . import transkript
 from .models import Anhang, ImportErgebnis, ParseFehler, RawItem, Status
 
 TABELLE = "quellen"
@@ -51,14 +52,15 @@ def zeile(item: RawItem, content_hash: str) -> dict:
 
 
 def _inhalt(anhang: Anhang) -> bytes:
-    if anhang.inhalt is not None:
-        return anhang.inhalt
-    if anhang.lokaler_pfad:
-        return Path(anhang.lokaler_pfad).read_bytes()
-    raise ValueError(f"Anhang {anhang.dateiname}: kein Inhalt")
+    return anhang.lies()
 
 
-def speichern(eintraege: Iterable[RawItem | ParseFehler], backend: Backend) -> ImportErgebnis:
+def speichern(
+    eintraege: Iterable[RawItem | ParseFehler],
+    backend: Backend,
+    transkribierer: transkript.Transkribierer | None = None,
+) -> ImportErgebnis:
+    """Zentrale Stelle aller Wege: neue Sprachnachrichten werden vor dem Speichern transkribiert."""
     ergebnis = ImportErgebnis()
     kandidaten: dict[str, RawItem] = {}
     for e in eintraege:
@@ -74,9 +76,9 @@ def speichern(eintraege: Iterable[RawItem | ParseFehler], backend: Backend) -> I
     schon_da = backend.vorhandene_hashes(list(kandidaten))
     zeilen: list[dict] = []
     fehlgeschlagen = 0
-    for h, item in kandidaten.items():
-        if h in schon_da:
-            continue
+    neue = {h: i for h, i in kandidaten.items() if h not in schon_da}
+    transkript.ergaenze(neue.values(), transkribierer)  # nur Neues; Bestehendes bleibt unberührt
+    for h, item in neue.items():
         try:
             if item.anhang is not None:
                 item.anhang.storage_pfad = storage_pfad(item, item.anhang)

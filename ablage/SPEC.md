@@ -23,7 +23,7 @@ Demo-Fall ist ein Elektro-Subunternehmer auf dem BV Simmering; das Golden Set in
 | Dateien in Supabase Storage ablegen | UI, Dashboard, Zwilling (→ Henrik, Melih) |
 | Duplikate verhindern | Telefonie (→ Melih, liefert nur das JSON) |
 | Status `neu` setzen | Status weitersetzen (→ Henrik, direkt in der Tabelle) |
-| Sidecar-Transkripte und PDF-Text nach `text` übernehmen | Whisper-Transkription (Stretch, s. 11) |
+| Sidecar-Transkripte, PDF-Text und Whisper-Transkripte (7.9) nach `text` übernehmen | Inhaltliche Auswertung des Textes |
 
 ## 3. Architektur
 
@@ -134,7 +134,7 @@ Storage: Bucket `ablage` (privat). Pfad: `{projekt_slug}/{typ}/{sha256}{endung}`
 - Belege in `aenderungen` referenzieren **`content_hash`**, nicht `id`. Die `id` ändert sich bei jedem Neuimport, der Hash nicht.
 - Eine Änderung hat mehrere Belege (Golden Set: bis zu 6) → n:m.
 - Für einen Nachtrag die ganze Projekt-Zeitachse lesen (`where projekt = …`), `status = 'neu'` ist nur der Marker für Neues. Belege verteilen sich über WhatsApp, Mail und Call.
-- Fotos, Sprachnachrichten und PDFs sind eigene Zeilen mit `anhang_pfad`. **PDF-Zeilen (Mail-Anhang und Drive) haben den per `pypdf` extrahierten Text in `text`** (`meta.text_quelle = "pypdf"`; kaputtes PDF → `text` leer + `meta.pdf_fehler`). Fotos: `text` leer. Sprachnachrichten: Transkript nur, wenn ein Sidecar daneben liegt, sonst leer → Transkription macht der Übersetzer (s. 12).
+- Fotos, Sprachnachrichten und PDFs sind eigene Zeilen mit `anhang_pfad`. **PDF-Zeilen (Mail-Anhang und Drive) haben den per `pypdf` extrahierten Text in `text`** (`meta.text_quelle = "pypdf"`; kaputtes PDF → `text` leer + `meta.pdf_fehler`). Fotos: `text` leer. Sprachnachrichten: Transkript aus einem Sidecar, sonst (wenn `TRANSKRIPT_API_KEY` gesetzt ist) per Whisper-Schnittstelle beim Import (7.9, `meta.transkript_quelle = "whisper"`), sonst leer.
 
 ## 6. Identität und Duplikate
 
@@ -225,6 +225,7 @@ Twilio-Webhook "When a message comes in", `POST /import/whatsapp/twilio`, `appli
 - Medien: Download per HTTP GET mit Basic Auth (`TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`). Dateiname = `MessageSid` + Endung aus dem Content-Type (Sprachnachricht `audio/ogg` → `.ogg`). Schlägt der Download fehl, wird die Nachricht ohne Anhang gespeichert, `meta.anhang_fehler` und `meta.anhang_url` halten den Grund.
 - Signatur: sind `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` gesetzt, wird `X-Twilio-Signature` geprüft (HMAC-SHA1 über URL + Parameter sortiert als Key+Value, Base64), sonst 403. Ohne beide Werte keine Prüfung.
 - Antwort: 200 mit leerem TwiML `<Response></Response>` (`text/xml`), keine Auto-Antwort. Pflichtfeld fehlt → 422, Storage-Fehler → 502.
+- Sprachnachrichten kommen mit leerem `text` an und werden, wenn `TRANSKRIPT_API_KEY` gesetzt ist, vor dem Speichern transkribiert (7.9). Die Anfrage läuft im Threadpool; ihr Timeout (12 s) liegt unter Twilios 15 s.
 
 ### 7.7 Gmail über n8n (`POST /import/email/gmail`, JSON)
 n8n (Cloud) holt die Mails per Gmail-OAuth und liefert sie fertig an. OAuth liegt komplett in n8n, die Ablage kennt keine Google-Zugangsdaten. Gebaut nach dem dokumentierten Gmail-Format, noch nicht gegen eine echte n8n-Instanz gelaufen.
@@ -235,11 +236,21 @@ n8n (Cloud) holt die Mails per Gmail-OAuth und liefert sie fertig an. OAuth lieg
 - Token: siehe `ABLAGE_IMPORT_TOKEN` in §9.
 
 ### 7.8 Drive über n8n (`POST /import/drive/datei`, Rohdaten)
-n8n lädt die Datei aus Google Drive und schickt die Bytes unverändert als Body (beliebiger Content-Type, bewusst kein multipart, damit `python-multipart` keine Dependency wird). Gebaut nach dem dokumentierten Format, noch nicht gegen eine echte n8n-Instanz gelaufen.
+n8n lädt die Datei aus Google Drive und schickt die Bytes unverändert als Body (beliebiger Content-Type, bewusst kein multipart, damit `python-multipart` keine Dependency wird). Am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst, Test-PDF → `neu: 1`); der Dauerbetrieb ist ungetestet.
 - Query: `pfad` (Pflicht, relativer Pfad inkl. Dateiname, wird `original_ref`; `\` → `/`, führende `/` weg), `kanal` (Default `"Google Drive"`), `projekt` (Default `DEFAULT_PROJEKT`), `datei_id` (Drive-File-ID → `meta.drive_id`), `geaendert_am` (ISO-Zeit → `meta.mtime`).
 - Das Item entsteht in derselben Funktion wie bei 7.3 (`ordner.item_aus_bytes`): `typ = drive`, `zeitpunkt = None`, `absender = None`, `anhang` = die Datei, `.csv/.md/.txt` → Inhalt als `text`, `.pdf` → Text per pypdf, `meta.groesse`. Zusätzlich `meta.quelle = "n8n"`. Bei gleichem `projekt`, `kanal`, `pfad` und Inhalt ist der Hash identisch zu 7.3.
 - Dateien, die 7.3 ignoriert (versteckt, `~$…`, `desktop.ini`, `thumbs.db`), werden nicht gespeichert: 200 mit `gelesen = 0`.
 - Leerer Body oder fehlender `pfad` → 422. Antwort: `ImportErgebnis`.
+
+### 7.9 Transkription von Sprachnachrichten (`transkript.py`)
+Ein Item mit Audio-Anhang (`anhang.typ = audio`) und leerem `text` wird **vor dem Speichern** transkribiert. Eingebaut an einer Stelle, `store.speichern(…, transkribierer)`, damit alle Wege profitieren: Twilio (7.6), `/import/whatsapp/nachricht` (7.5), Gmail-Anhänge (7.7), Drive-Dateien (7.8) und der CLI-Import (nicht bei `--dry-run`). Die API reicht den Transkribierer als Dependency `get_transkribierer` durch; ohne `TRANSKRIPT_API_KEY` ist er `None` und alles läuft wie vorher.
+- Schnittstelle: OpenAI-kompatibel, `POST {TRANSKRIPT_BASE_URL}/audio/transcriptions`, multipart mit `file`, `model`, `language=de`, Header `Authorization: Bearer <Schlüssel>`; Antwort-JSON-Feld `text`. Timeout 12 s. Dateien mit Endung `.opus` gehen als `.ogg` hinaus (Ogg/Opus, die Schnittstelle lehnt `.opus` ab). Der Schlüssel wird weder geloggt noch in `meta` geschrieben.
+- Erfolg: `text` = Transkript, `meta.transkript_quelle = "whisper"`, `meta.transkript_modell = <TRANSKRIPT_MODELL>`.
+- Fehler (Netz, Timeout, 4xx/5xx, leere Antwort): Item bleibt unverändert, `meta.transkript_fehler = "<Typ>: <Grund>"`. Eine Nachricht geht wegen der Transkription nie verloren, der Endpunkt antwortet deshalb nicht mit 5xx.
+- Items mit Text (Sidecar) und alle Nicht-Audio-Anhänge werden nicht angefasst. Schon gespeicherte Items (gleicher `content_hash`) werden nicht erneut transkribiert.
+- Identität unverändert: `text` geht bei Items mit Anhang als `""` in den Hash (6), mit und ohne Transkript gleicher `content_hash`. Der Vertrag aus 5 und 6 ändert sich nicht.
+- **Grenze:** Wegen Upsert mit `ignore_duplicates` (6) bekommt eine bereits gespeicherte Sprachnachricht nachträglich kein Transkript, auch nicht nach einem fehlgeschlagenen ersten Versuch. Einen Nachtrags-Befehl gibt es nicht; Abhilfe: Zeile löschen und neu importieren.
+- **Stand:** in Tests mit nachgebauter Schnittstelle (`httpx.MockTransport`) geprüft, noch nicht gegen einen echten Anbieter und eine echte WhatsApp-Sprachnachricht gelaufen. Die Audiodateien in `fake_data/` sind Platzhalter, keine Aufnahmen.
 
 ## 8. API (`api.py`, FastAPI)
 
@@ -284,7 +295,12 @@ TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_WEBHOOK_URL=
 ABLAGE_IMPORT_TOKEN=
+TRANSKRIPT_API_KEY=
+TRANSKRIPT_BASE_URL=https://api.openai.com/v1
+TRANSKRIPT_MODELL=whisper-1
 ```
+
+Die drei `TRANSKRIPT_*`-Werte sind optional und nur für 7.9. Leerer `TRANSKRIPT_API_KEY` = keine Transkription. Beispiel Groq: `TRANSKRIPT_BASE_URL=https://api.groq.com/openai/v1`, `TRANSKRIPT_MODELL=whisper-large-v3`.
 
 Die vier Twilio-Werte sind optional und nur für 7.6. `TWILIO_WEBHOOK_URL` ist die öffentliche URL des Endpunkts, genau wie im Twilio-Dashboard eingetragen.
 
@@ -310,7 +326,7 @@ Die vier Twilio-Werte sind optional und nur für 7.6. `TWILIO_WEBHOOK_URL` ist d
 Nicht heute: echte WhatsApp-Business-API, Outlook-OAuth, Auth, Mandantenfähigkeit. Gmail-OAuth und Google-Drive-API-Zugriff liegen in n8n (7.7, 7.8), nicht in der Ablage: sie bekommt nur fertige Daten.
 Pitch-Satz: *„Connectors sind austauschbare Adapter. Die Demo nutzt Exporte, Produktion nutzt die APIs.“*
 
-Stretch (in dieser Reihenfolge): (1) Whisper für Sprachnachrichten ohne Sidecar, füllt dasselbe Feld `text` mit `meta.transkript_quelle = "whisper"`, (2) iOS-WhatsApp-Format, (3) `GET /quellen` + `PATCH` (Abschnitt 8), (4) Drive-Ordner beobachten (Watcher).
+Stretch (in dieser Reihenfolge): (1) ~~Whisper für Sprachnachrichten ohne Sidecar~~ gebaut (7.9), in Tests mit nachgebauter Schnittstelle geprüft, noch nicht gegen einen echten Anbieter, (2) iOS-WhatsApp-Format, (3) `GET /quellen` + `PATCH` (Abschnitt 8), (4) Drive-Ordner beobachten (Watcher).
 
 ## 12. Offene Fragen
 
@@ -320,7 +336,7 @@ Entschieden:
 - [x] **Henrik (13.11., 21:21):** Vertrag aus 5 + 6 bestätigt, für die Ablage ändert sich nichts. Belege über `content_hash` ohne Fremdschlüssel → `quellen` darf jederzeit geleert und neu importiert werden. Sein Schema (`eintraege`, `plaene`, `signale`) liegt in `uebersetzer/schema.sql`.
 - [x] `quellen` + Bucket `ablage` existieren im gemeinsamen Supabase-Projekt.
 - [x] **PDF-Text:** macht die Ablage (pypdf), Henrik muss PDFs nicht selbst auslesen.
-- [x] **Sprachnachrichten ohne Sidecar:** Transkription übernimmt Henrik im Übersetzer. Whisper in der Ablage bleibt Stretch.
+- [x] **Sprachnachrichten ohne Sidecar:** Die Ablage transkribiert beim Import, wenn `TRANSKRIPT_API_KEY` gesetzt ist (7.9). Ohne Schlüssel bleibt `text` leer; dann müsste der Übersetzer es tun (mit Henrik klären, ob er die Datei aus dem Bucket sonst selbst transkribiert).
 
 Offen:
 - [ ] **Melih:** Bestätigt Call-Vertrag v1 (7.4) und mappt sein Provider-Format dorthin.

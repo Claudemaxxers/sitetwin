@@ -1,6 +1,6 @@
 # n8n: Gmail und Google Drive an die Ablage
 
-> **Stand:** Beide Abläufe sind nach der Dokumentation und dem Quellcode von n8n geschrieben und **noch nicht in einer echten n8n-Instanz gelaufen**. Beim ersten Import kann n8n einzelne Felder anders anzeigen als hier beschrieben.
+> **Stand 14.11.2026:** Beide Abläufe sind in eine n8n-Cloud-Instanz importiert, alle Felder kamen richtig an. Der Drive-Ablauf ist dort einmal von Hand gelaufen: Test-PDF im Ordner → Ablage meldet `neu: 1`, der PDF-Text steht in `quellen`. Der Gmail-Ablauf ist **noch nicht gelaufen**. Der Dauerbetrieb (aktiviert, Abfrage jede Minute) ist für beide ungetestet.
 
 Die zwei Dateien hier reichen echte Eingänge an die Ablage weiter, ohne dass jemand seine Arbeitsweise ändert: Mails mit einem bestimmten Gmail-Label und Dateien aus einem bestimmten Google-Drive-Ordner. Die Google-Anmeldung liegt komplett in n8n. Die Ablage bekommt nur fertige Daten über `POST /import/email/gmail` und `POST /import/drive/datei` (Vertrag: `../SPEC.md` §7.7 und §7.8) und erkennt Wiederholungen selbst.
 
@@ -14,7 +14,7 @@ Für Tests `projekt` auf `Test Santino` lassen, damit nichts im Demo-Projekt `BV
 ## Voraussetzungen
 
 1. Ablage-API läuft: im Ordner `ablage` `.venv\Scripts\python -m uvicorn ablage.api:app --port 8000`.
-2. Die API ist öffentlich erreichbar, weil n8n Cloud nicht auf `localhost` zugreifen kann, z. B. mit `ngrok http 8000`. Die angezeigte `https://…`-Adresse ist später `ablage_url`.
+2. Die API ist öffentlich erreichbar, weil n8n Cloud nicht auf `localhost` zugreifen kann, z. B. mit `cloudflared tunnel --url http://localhost:8000` (braucht kein Konto) oder `ngrok http 8000`. Die angezeigte `https://…`-Adresse ist später `ablage_url`.
 3. `ABLAGE_IMPORT_TOKEN` in `ablage/.env` auf einen langen Zufallswert setzen und uvicorn neu starten. Der Tunnel steht offen im Netz; ohne Token könnte jeder, der die Adresse kennt, Daten in die Ablage schreiben.
 4. In Gmail ein Label anlegen, z. B. `SiteTwin`, und einen Gmail-Filter, der dieses Label **beim Eingang** setzt (z. B. für bestimmte Absender oder für eine Plus-Adresse wie `name+sitetwin@…`). Mails, die erst später von Hand ein Label bekommen, sieht der Trigger nicht (siehe Grenzen).
 5. In Google Drive einen Ordner, dessen Dateien in die Ablage sollen.

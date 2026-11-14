@@ -24,6 +24,9 @@ class Einstellungen:
     twilio_auth_token: str = ""
     twilio_webhook_url: str = ""
     import_token: str = ""
+    transkript_api_key: str = ""  # leer = Transkription aus; nie loggen
+    transkript_base_url: str = "https://api.openai.com/v1"
+    transkript_modell: str = "whisper-1"
 
 
 def laden() -> Einstellungen:
@@ -39,4 +42,8 @@ def laden() -> Einstellungen:
         twilio_auth_token=os.environ.get("TWILIO_AUTH_TOKEN", "").strip(),
         twilio_webhook_url=os.environ.get("TWILIO_WEBHOOK_URL", "").strip(),
         import_token=os.environ.get("ABLAGE_IMPORT_TOKEN", "").strip(),
+        transkript_api_key=os.environ.get("TRANSKRIPT_API_KEY", "").strip(),
+        transkript_base_url=os.environ.get("TRANSKRIPT_BASE_URL", "").strip()
+        or "https://api.openai.com/v1",
+        transkript_modell=os.environ.get("TRANSKRIPT_MODELL", "").strip() or "whisper-1",
     )

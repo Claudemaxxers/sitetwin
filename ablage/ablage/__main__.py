@@ -8,7 +8,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from . import config, store
+from . import config, store, transkript
 from .models import ImportKontext
 
 ADAPTER = {"whatsapp": "whatsapp", "email": "eml", "ordner": "ordner", "call": "call"}
@@ -86,7 +86,12 @@ def main(argv: list[str] | None = None) -> int:
 
     backend = store.FakeBackend() if args.dry_run else store.supabase_backend()
     ctx = ImportKontext(projekt=args.projekt, tz=cfg.tz)
-    ergebnis = store.speichern(adapter.parse(args.pfad, ctx), backend)
+    transkribierer = None  # --dry-run ruft keine Schnittstelle auf
+    if not args.dry_run:
+        transkribierer = transkript.transkribierer_aus(
+            cfg.transkript_api_key, cfg.transkript_base_url, cfg.transkript_modell
+        )
+    ergebnis = store.speichern(adapter.parse(args.pfad, ctx), backend, transkribierer)
     print(ergebnis.model_dump_json(indent=2))
     return 1 if ergebnis.fehler else 0
 

@@ -61,7 +61,21 @@ Gebaut nach dem dokumentierten Twilio-Format und in Tests geprüft, aber **noch 
 4. Vom Handy den Join-Code an die Sandbox-Nummer schicken, danach eine Testnachricht.
 5. Prüfen: `.venv\Scripts\python -m ablage zeige --projekt "Test Santino"`
 
-Sprachnachrichten kommen als Datei (`<MessageSid>.ogg`) mit leerem `text` an, weil noch nichts transkribiert. Schlägt der Mediendownload fehl, bleibt die Nachricht ohne Anhang erhalten, der Grund steht in `meta.anhang_fehler`. Ohne `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` wird die Signatur nicht geprüft.
+Sprachnachrichten kommen als Datei (`<MessageSid>.ogg`) an; `text` ist leer, solange keine Transkription eingerichtet ist (nächster Abschnitt). Schlägt der Mediendownload fehl, bleibt die Nachricht ohne Anhang erhalten, der Grund steht in `meta.anhang_fehler`. Ohne `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` wird die Signatur nicht geprüft.
+
+## Sprachnachrichten transkribieren
+
+Mit `TRANSKRIPT_API_KEY` in `.env` wird jede neue Sprachnachricht ohne Text vor dem Speichern transkribiert; das Ergebnis steht in `text`, dazu `meta.transkript_quelle = "whisper"` und `meta.transkript_modell`. Das gilt für alle Wege (Twilio, `/import/whatsapp/nachricht`, Gmail-Anhänge, Drive, CLI-Import, bei `--dry-run` nicht). Ohne Schlüssel bleibt alles wie bisher.
+
+```
+TRANSKRIPT_API_KEY=<Schlüssel>
+TRANSKRIPT_BASE_URL=https://api.openai.com/v1     # Groq: https://api.groq.com/openai/v1
+TRANSKRIPT_MODELL=whisper-1                       # Groq: whisper-large-v3
+```
+
+Schlägt die Transkription fehl (Netz, Timeout, Fehlerstatus, leere Antwort), wird die Nachricht trotzdem gespeichert, `text` bleibt leer und `meta.transkript_fehler` nennt den Grund. Grenze: Eine schon gespeicherte Sprachnachricht bekommt nachträglich kein Transkript (Upsert mit `ignore_duplicates`); dafür Zeile löschen und neu importieren. Der Hash ändert sich durch das Transkript nicht.
+
+Ehrlicher Stand: in Tests mit nachgebauter Schnittstelle geprüft, noch nicht gegen einen echten Anbieter und eine echte WhatsApp-Sprachnachricht gelaufen. Die Audiodateien in `fake_data/` sind Platzhalter, keine Aufnahmen.
 
 ## Gmail und Drive live über n8n
 
@@ -72,7 +86,7 @@ Zwei Endpunkte nehmen echte Eingänge aus Gmail und Google Drive an. Die OAuth-A
 - Token: `ABLAGE_IMPORT_TOKEN` in `.env` setzen, n8n sendet ihn als Header `X-Ablage-Token`. Ohne Wert keine Prüfung. Gilt nur für diese beiden Endpunkte.
 - Einrichtung in n8n: siehe `n8n/README.md`.
 
-Gebaut nach dem dokumentierten Format und in Tests geprüft, aber **noch nicht gegen eine echte n8n-Instanz gelaufen**.
+In Tests geprüft. Der Drive-Weg ist am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst), der Gmail-Weg **noch nicht**.
 
 ## Eigenen WhatsApp-Chat testen
 
@@ -85,7 +99,7 @@ Gebaut nach dem dokumentierten Format und in Tests geprüft, aber **noch nicht g
 .venv\Scripts\python -m ablage zeige --projekt "Test Santino"
 ```
 
-Gelesen werden Android- und iPhone-Exporte (`WhatsApp Chat mit ….txt` bzw. `_chat.txt` im Zip), deutsch und englisch. Sprachnachrichten landen als Datei im Bucket; `text` bleibt leer, solange keine Transkription läuft. Ein eigener Projektname hält die Testzeilen von „BV Simmering“ getrennt. Alles in `quellen` kann vom Übersetzer gelesen und an Claude geschickt werden, deshalb keine privaten Chats importieren.
+Gelesen werden Android- und iPhone-Exporte (`WhatsApp Chat mit ….txt` bzw. `_chat.txt` im Zip), deutsch und englisch. Sprachnachrichten landen als Datei im Bucket; `text` bleibt leer, solange keine Transkription eingerichtet ist (siehe „Sprachnachrichten transkribieren“). Ein eigener Projektname hält die Testzeilen von „BV Simmering“ getrennt. Alles in `quellen` kann vom Übersetzer gelesen und an Claude geschickt werden, deshalb keine privaten Chats importieren.
 
 ## Architektur
 
@@ -106,7 +120,7 @@ Supabase `quellen` (status = 'neu')  ◀── Übersetzer liest direkt
 ## Annahmen
 
 - Rohdaten sind unveränderlich; `quellen` wird nur eingefügt. Ein später ergänztes Transkript aktualisiert bestehende Zeilen nicht → Tabelle leeren und neu importieren (Belege hängen an `content_hash`, nicht an `id`).
-- WhatsApp: Android/DE-Export ist Pflicht, iOS-Format wird mitgelesen. Sprachnachrichten bekommen ihr Transkript nur aus einer Sidecar-Datei `<audio>.txt`; ohne Sidecar bleibt `text` leer.
+- WhatsApp: Android/DE-Export ist Pflicht, iOS-Format wird mitgelesen. Sprachnachrichten bekommen ihr Transkript aus einer Sidecar-Datei `<audio>.txt` oder, mit `TRANSKRIPT_API_KEY`, per Whisper-Schnittstelle (noch nicht gegen einen echten Anbieter gelaufen); sonst bleibt `text` leer.
 - Dieselbe WhatsApp-Nachricht einmal live und einmal per Export ergibt zwei Zeilen (unterschiedliche Identität).
 - Zwei identische Nachrichten derselben Person in derselben Minute fallen zusammen.
 - Keine Auth auf der API: nur lokal oder hinter einem Tunnel betreiben.

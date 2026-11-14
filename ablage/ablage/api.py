@@ -16,7 +16,7 @@ from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, Resp
 from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
-from . import config, store
+from . import config, store, transkript
 from .adapters import call, eml, ordner, whatsapp_live, whatsapp_twilio
 from .models import ImportErgebnis, ImportKontext, ParseFehler, RawItem
 
@@ -34,9 +34,13 @@ def get_kontext() -> ImportKontext:
     return ImportKontext(projekt=cfg.default_projekt, tz=cfg.tz)
 
 
-def _speichern(eintraege: Iterable[RawItem | ParseFehler], backend: store.Backend) -> ImportErgebnis:
+def _speichern(
+    eintraege: Iterable[RawItem | ParseFehler],
+    backend: store.Backend,
+    transkribierer: transkript.Transkribierer | None = None,
+) -> ImportErgebnis:
     try:
-        return store.speichern(eintraege, backend)
+        return store.speichern(eintraege, backend, transkribierer)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Supabase nicht erreichbar: {e}") from e
 
@@ -59,6 +63,15 @@ def get_downloader(cfg: config.Einstellungen = Depends(get_einstellungen)) -> wh
         return r.content
 
     return lade
+
+
+def get_transkribierer(
+    cfg: config.Einstellungen = Depends(get_einstellungen),
+) -> transkript.Transkribierer | None:
+    """Ohne TRANSKRIPT_API_KEY None: Sprachnachrichten bleiben ohne Text."""
+    return transkript.transkribierer_aus(
+        cfg.transkript_api_key, cfg.transkript_base_url, cfg.transkript_modell
+    )
 
 
 @app.get("/health")
@@ -85,8 +98,9 @@ def import_whatsapp_nachricht(
     nachricht: whatsapp_live.LiveNachricht,
     backend: store.Backend = Depends(get_backend),
     ctx: ImportKontext = Depends(get_kontext),
+    transkribierer: transkript.Transkribierer | None = Depends(get_transkribierer),
 ) -> ImportErgebnis:
-    return _speichern([whatsapp_live.aus_nachricht(nachricht, ctx)], backend)
+    return _speichern([whatsapp_live.aus_nachricht(nachricht, ctx)], backend, transkribierer)
 
 
 @app.post("/import/whatsapp/twilio")
@@ -97,6 +111,7 @@ async def import_whatsapp_twilio(
     cfg: config.Einstellungen = Depends(get_einstellungen),
     lade: whatsapp_twilio.Downloader = Depends(get_downloader),
     jetzt: Callable[[], datetime] = Depends(get_jetzt),
+    transkribierer: transkript.Transkribierer | None = Depends(get_transkribierer),
 ) -> Response:
     params = parse_qs((await request.body()).decode("utf-8", "replace"), keep_blank_values=True)
     if cfg.twilio_auth_token and cfg.twilio_webhook_url:
@@ -111,7 +126,7 @@ async def import_whatsapp_twilio(
     item = await run_in_threadpool(
         whatsapp_twilio.aus_formular, n, ctx, jetzt(), cfg.whatsapp_live_kanal, lade
     )
-    await run_in_threadpool(_speichern, [item], backend)
+    await run_in_threadpool(_speichern, [item], backend, transkribierer)
     return Response(content="<Response></Response>", media_type="text/xml")
 
 
@@ -150,6 +165,7 @@ def import_email_gmail(
     mail: GmailMail,
     backend: store.Backend = Depends(get_backend),
     ctx: ImportKontext = Depends(get_kontext),
+    transkribierer: transkript.Transkribierer | None = Depends(get_transkribierer),
 ) -> ImportErgebnis:
     daten = _base64url(mail.raw)
     if mail.projekt:
@@ -160,7 +176,7 @@ def import_email_gmail(
         raise HTTPException(status_code=422, detail=f"Mail nicht lesbar: {e}") from e
     for item in items:
         item.meta.update({"quelle": "gmail", "gmail_id": mail.gmail_id})
-    return _speichern(items, backend)
+    return _speichern(items, backend, transkribierer)
 
 
 @app.post("/import/drive/datei", response_model=ImportErgebnis, dependencies=[Depends(token_pruefen)])
@@ -173,6 +189,7 @@ async def import_drive_datei(
     geaendert_am: str | None = None,
     backend: store.Backend = Depends(get_backend),
     ctx: ImportKontext = Depends(get_kontext),
+    transkribierer: transkript.Transkribierer | None = Depends(get_transkribierer),
 ) -> ImportErgebnis:
     ref = pfad.replace("\\", "/").strip().lstrip("/")
     if not ref or ref.endswith("/"):
@@ -192,4 +209,4 @@ async def import_drive_datei(
     item.meta["quelle"] = "n8n"
     if datei_id:
         item.meta["drive_id"] = datei_id
-    return await run_in_threadpool(_speichern, [item], backend)
+    return await run_in_threadpool(_speichern, [item], backend, transkribierer)

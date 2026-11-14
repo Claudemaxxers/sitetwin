@@ -6,7 +6,7 @@ import mimetypes
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field
@@ -75,6 +75,14 @@ class Anhang(BaseModel):
     mimetype: str | None = None
     # Dateiinhalt, nur während des Imports; wird nie serialisiert.
     inhalt: bytes | None = Field(default=None, exclude=True, repr=False)
+
+    def lies(self) -> bytes:
+        """Dateiinhalt: im Speicher oder von der Platte (CLI-Import)."""
+        if self.inhalt is not None:
+            return self.inhalt
+        if self.lokaler_pfad:
+            return Path(self.lokaler_pfad).read_bytes()
+        raise ValueError(f"Anhang {self.dateiname}: kein Inhalt")
 
     @classmethod
     def aus_bytes(
