@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
 import { parseAllowlist } from './mapping.js';
+import { bewertenKonfig } from './bewertung.js';
 import { warnKonfig } from './melder.js';
 
 export const ORDNER = import.meta.dirname;
@@ -46,12 +47,14 @@ export function supabaseZugang(env = process.env, ablageEnv = ABLAGE_ENV) {
 
 export function konfig(env) {
   const maxMb = Number(env.WHATSAPP_MAX_MB);
+  const warnen = warnKonfig(env, parseAllowlist(env.WHATSAPP_CHATS));
   return {
     ablageUrl: (env.ABLAGE_URL || 'http://localhost:8000').trim(),
     projekt: (env.ABLAGE_PROJEKT || 'Test Santino').trim(),
     allowlist: parseAllowlist(env.WHATSAPP_CHATS),
     nummer: (env.WHATSAPP_NUMMER || '').replace(/\D/g, '') || null,
-    warnen: warnKonfig(env, parseAllowlist(env.WHATSAPP_CHATS)),
+    warnen,
+    bewerten: bewertenKonfig(env, warnen),
     maxBytes: (Number.isFinite(maxMb) && maxMb > 0 ? maxMb : 20) * 1024 * 1024,
   };
 }

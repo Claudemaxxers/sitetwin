@@ -67,7 +67,7 @@ WHATSAPP_CHATS=<muss denselben Chat enthalten, gleiche Schreibweise>
 
 Alle Einstellungen: `WHATSAPP_WARN_AB` (nur Signale ab diesem ISO-Zeitpunkt, Standard Startzeit des Dienstes, damit ein Neustart nie alte Signale in den Chat kippt), `WHATSAPP_WARN_ERLEDIGT` (Standard 1), `WARN_INTERVALL_S` (Standard 5), `WARN_MAX_PRO_10MIN` (Standard 6), `SUPABASE_URL` und `SUPABASE_SERVICE_KEY` (aus dieser `.env`, sonst aus `../.env`; aus der Ablage-`.env` werden nur diese zwei Werte gelesen). Das Projekt ist `ABLAGE_PROJEKT`.
 
-**Ablauf.** Alle `WARN_INTERVALL_S` Sekunden werden die offenen Signale des Projekts gelesen (nur `GET`, der Melder schreibt nie in Supabase). Jedes Signal mit `erstellt_am >= WHATSAPP_WARN_AB` bekommt genau eine Warnung. Wird ein gemeldetes Signal später `geloest`, folgt einmal `✅ SiteTwin: erledigt – <Titel>`. Der Stand (gemeldete Signal-IDs, IDs gesendeter Nachrichten) liegt in `zustand/melder.json` (git-ignoriert, nicht in `auth/`), damit ein Neustart nichts wiederholt.
+**Ablauf.** Alle `WARN_INTERVALL_S` Sekunden werden die offenen Signale des Projekts gelesen (nur `GET`; geschrieben wird nur bei der Rückmeldung, siehe unten). Jedes Signal mit `erstellt_am >= WHATSAPP_WARN_AB` bekommt genau eine Warnung. Wird ein gemeldetes Signal später `geloest`, folgt einmal `✅ SiteTwin: erledigt – <Titel>`. Der Stand (gemeldete Signal-IDs, IDs gesendeter Nachrichten) liegt in `zustand/melder.json` (git-ignoriert, nicht in `auth/`), damit ein Neustart nichts wiederholt.
 
 Genutzte Spalten von `signale`: `id`, `projekt`, `status`, `erstellt_am`, `titel`, `schwere`, `top`, `raum`, `element`, `anruf_text` (ersatzweise `begruendung`), `zustaendig`. `telefon` wird nie gelesen oder gesendet. Beispieltext:
 
@@ -92,11 +92,52 @@ Leere Felder entfallen, Rufnummern werden aus dem Text entfernt, Obergrenze 700 
 
 **Trockenlauf ohne WhatsApp:** `npm run warn-test` liest Supabase (nur lesen), zeigt Spaltennamen, Zahl der offenen Signale und den Text der bis zu 5 neuesten offenen Signale (ohne Rücksicht auf `WHATSAPP_WARN_AB`). Es öffnet keinen WhatsApp-Socket. Anderes Projekt: `$env:ABLAGE_PROJEKT="BV Simmering"; npm run warn-test`.
 
-**Probe mit echtem Senden:** `npm run warn-probe` (braucht dieselben Schalter wie der Melder) verbindet sich, schickt genau eine als „TEST“ markierte Warnung in den Warn-Chat, gebaut aus dem neuesten Signal des Projekts gleich welchen Status, prüft die Rückkopplungs-Sperre und beendet sich nach 10 Sekunden.
+**Probe mit echtem Senden:** `npm run warn-probe` (braucht dieselben Schalter wie der Melder) verbindet sich, schickt genau eine als „TEST“ markierte Warnung in den Warn-Chat, gebaut aus dem neuesten Signal des Projekts gleich welchen Status, prüft die Rückkopplungs-Sperre und beendet sich nach 10 Sekunden (mit Rückmeldung: nach 180).
 
 **Geprüft:** Unit-Tests (Text mit leeren Feldern und Längengrenze, Auswahl, Erledigt-Meldung genau einmal, Schleifenschutz, Rate-Limit, Wiederholungen, Start-Verweigerung bei Chat außerhalb der Allowlist, Melder aus per Standard; Supabase per Fake-Fetch) und der Trockenlauf gegen die echte Supabase.
 
 **Echter Lauf am 14.11.2026:** eine Probe-Warnung über `npm run warn-probe` kam in der Testgruppe an (Text aus einem gelösten Signal des fiktiven Projekts). `sendMessage` lieferte die Nachrichten-Id, die eigene Nachricht kam über `messages.upsert` zurück und wurde per Id erkannt und nicht an die Ablage weitergereicht. **Nicht geprüft:** der Melder im Dauerlauf mit einem neu entstandenen Signal (dafür muss der Übersetzer laufen), die Erledigt-Nachricht, die Bremse unter Last.
+
+## Rückmeldung zu Warnungen (Lernschleife, erster Teil)
+
+Wer im Warn-Chat eine Warnung als **berechtigt** oder **Fehlalarm** bewertet, dessen Urteil wird am Signal gespeichert. Der Prüf-Agent kann es bei seinem nächsten Lauf nutzen. Dieser zweite Teil (Auswerten der Bewertungen im Prüf-Agenten) ist **nicht** Teil dieses Dienstes.
+
+**Aus per Standard.** Einschalten in `.env`:
+
+```
+WHATSAPP_WARNEN=1
+WHATSAPP_WARN_CHAT=<Chat>
+WHATSAPP_CHATS=<derselbe Chat>
+WHATSAPP_BEWERTEN=1
+```
+
+`WHATSAPP_BEWERTEN=1` ohne `WHATSAPP_WARNEN=1` wird verweigert: der Dienst startet nicht und sagt warum. Mit `WHATSAPP_BEWERTEN_BESTAETIGEN=0` entfällt die Bestätigung im Chat (Standard 1). Ist der Schalter aus, wird nichts Neues geschrieben, weder in Supabase noch in `zustand/melder.json`.
+
+**So bewertet man** (nur im Warn-Chat):
+
+| Form | Beispiel | Gilt für |
+|---|---|---|
+| Reaktion auf die Warnung | 👍 oder ✅ = berechtigt, 👎 oder ❌ = Fehlalarm (Reaktion entfernen wird ignoriert) | diese Warnung |
+| Antwort (Zitat) auf die Warnung, Wort irgendwo im Text | „Das war ein Fehlalarm, Plan C liegt vor“ | die zitierte Warnung |
+| Kurze Nachricht ohne Zitat (höchstens 80 Zeichen), beginnt mit dem Wort, bis 10 Minuten nach der letzten Warnung | „Stimmt“ | die jüngste Warnung |
+
+Wörter (ganze Wörter, Groß/Klein egal): Fehlalarm = `fehlalarm`, `falscher alarm`, `stimmt nicht`, `falsch`. Berechtigt = `stimmt`, `richtig`, `korrekt`, `passt`. Verneinendes zuerst: `stimmt nicht` ist nie „stimmt“. Zusatz über den Auftrag hinaus: kommt `nicht`, `kein`, `keine`, `keinen` oder `nie` vor und kein Fehlalarm-Wort, gilt die Nachricht gar nicht als Bewertung (z. B. „passt nicht“), damit nie das Gegenteil gespeichert wird. Eigene Nachrichten des Kontos zählen, Nachrichten des Melders (Warnung, Erledigt, Bestätigung) nie. Die Nachricht selbst wird wie jede andere an die Ablage weitergereicht; Reaktionen bleiben unweitergereicht.
+
+**Was wohin geschrieben wird.** Genau ein `PATCH` je Bewertung auf `signale?id=eq.<id>` mit nur zwei Spalten:
+
+```
+{"bewertung": "berechtigt" | "fehlalarm", "bewertung_notiz": "per WhatsApp, <Name>, <Zeit>: <Text bis 200 Zeichen oder Emoji>"}
+```
+
+Die erlaubten Werte stammen aus `uebersetzer/schema.sql` (`check (bewertung in ('berechtigt','fehlalarm'))`). `status` wird nie angefasst. Keine Telefonnummern in der Notiz. Eine spätere Bewertung desselben Signals überschreibt die frühere. Fehlgeschlagene Schreibzugriffe werden zweimal wiederholt, dann geloggt und aufgegeben. Danach eine kurze Bestätigung im Chat: `✅ SiteTwin: Rückmeldung gespeichert (Fehlalarm) – <Titel>`, über denselben Sendeweg und dasselbe Rate-Limit wie die Warnungen. Lokal merkt `zustand/melder.json` zusätzlich, welche Nachrichten-Id zu welchem Signal gehört (`warnungen`; alte Dateien ohne das Feld laden weiter). Pro Bewertung eine Logzeile (Signal-Id gekürzt, Urteil, Form), keine Chat-Texte.
+
+**Das ist die einzige Stelle, an der dieser Dienst in Supabase schreibt.** Der Schlüssel muss dafür schreiben dürfen (der Service-Key tut das).
+
+**Grenze des Prototyps:** Jede Person im Warn-Chat kann bewerten. Es wird nicht geprüft, wer entscheiden darf.
+
+`npm run warn-test` zeigt zusätzlich, wie viele Signale des Projekts schon eine `bewertung` haben (nur lesen), und ob die Rückmeldung an ist. `npm run warn-probe` wartet bei eingeschalteter Rückmeldung 180 statt 10 Sekunden, merkt sich dabei Nachricht und Signal der Probe-Warnung und schreibt eine Bewertung der Probe wirklich ins Signal (Vorsicht: das ist das echte Signal, aus dem der Probetext gebaut wurde).
+
+**Geprüft:** Unit-Tests ohne Netz mit Fake-Fetch (alle drei Formen, Wortreihenfolge, Nicht-Bewertungen, fremder Chat, eigene Melder-Nachrichten, entfernte Reaktion, 10-Minuten-Fenster, PATCH-Aufbau, Überschreiben, Aus-per-Standard, Verweigerung ohne Melder, alter Zustand). **Nicht geprüft:** kein echter Bewertungslauf in WhatsApp, kein echter Schreibzugriff auf Supabase, Form von Reaktions- und Zitat-Nachrichten in Baileys 7 nur nach den Typdefinitionen und handgebauten Testnachrichten.
 
 ## Was gespeichert wird
 
@@ -117,7 +158,7 @@ Wird das Gerät am Handy entfernt, meldet sich der laufende Dienst mit einer kla
 npm test
 ```
 
-Node-Testrunner, kein Netz, 37 Tests (21 Mitleser, 16 Melder): Abbildung handgebauter Baileys-Nachrichten (Gruppentext, erweiterter Text, Bild mit Beschriftung, Sprachnachricht, Dokument, eigene Nachricht, Reaktion, Protokoll, Status, Sticker, LID-Absender, Einzelchat), Allowlist-Logik, Wiederholungen beim Senden, Konfiguration. Die Abbildung steckt in `mapping.js` (rein, ohne Socket).
+Node-Testrunner, kein Netz, 57 Tests (21 Mitleser, 16 Melder, 20 Rückmeldung): Abbildung handgebauter Baileys-Nachrichten (Gruppentext, erweiterter Text, Bild mit Beschriftung, Sprachnachricht, Dokument, eigene Nachricht, Reaktion, Protokoll, Status, Sticker, LID-Absender, Einzelchat), Allowlist-Logik, Wiederholungen beim Senden, Konfiguration. Die Abbildung steckt in `mapping.js` (rein, ohne Socket).
 
 **Geprüft:** diese Tests; der Start ohne Sitzung kommt bis zum QR-Code (Verbindung zu WhatsApp mit der installierten Version steht); ein Testrequest aus der Abbildung (nur Text, fiktiv) wurde von der laufenden Ablage mit `neu: 1` angenommen, ein zweiter identischer mit `duplikate: 1`.
 
@@ -132,6 +173,7 @@ index.js     Verbindung, Login, Ereignisse, Medien-Download
 mapping.js   Nachricht -> Anfrage, Allowlist (rein)
 forward.js   POST mit Wiederholungen
 config.js    Umgebung und .env
+bewertung.js Rückmeldung: Bewertung erkennen, PATCH auf signale (rein, ohne Baileys)
 melder.js    Warnungen: Auswahl, Text, Rate-Limit, Schleifenschutz, Zustand (rein, ohne Baileys)
 warn-test.js Trockenlauf des Melders ohne WhatsApp; `npm run warn-probe` sendet eine Test-Warnung
 zustand/     Stand des Melders (git-ignoriert)

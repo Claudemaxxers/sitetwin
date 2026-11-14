@@ -12,7 +12,7 @@ const MAX_GESENDETE_IDS = 500;
 
 const ohneVS = (s) => String(s ?? '').replace(/️/g, '');
 const leer = (v) => v == null || String(v).trim() === '';
-const sauber = (v) =>
+export const sauber = (v) =>
   String(v ?? '')
     .replace(/\+?\d[\d\s/().-]{6,}\d/g, '') // keine Telefonnummern im Text
     .replace(/[ \t]+/g, ' ')
@@ -91,7 +91,7 @@ export function baueErledigt(s, max = 200) {
 // ---- Schleifenschutz ------------------------------------------------------
 
 /** Text einer Baileys-Nachricht (ohne Import von mapping.js, damit dieses Modul eigenstaendig bleibt). */
-function textVon(msg) {
+export function textVon(msg) {
   let m = msg?.message;
   for (let i = 0; i < 5 && m; i++) {
     const w = ['ephemeralMessage', 'viewOnceMessage', 'viewOnceMessageV2', 'documentWithCaptionMessage'].find((k) => m[k]?.message);
@@ -124,7 +124,10 @@ export function ladeZustand(datei) {
   try {
     if (!existsSync(datei)) return leererZustand();
     const z = JSON.parse(readFileSync(datei, 'utf8'));
-    return { gewarnt: z.gewarnt && typeof z.gewarnt === 'object' ? z.gewarnt : {}, gesendeteIds: Array.isArray(z.gesendeteIds) ? z.gesendeteIds : [] };
+    const k = { gewarnt: z.gewarnt && typeof z.gewarnt === 'object' ? z.gewarnt : {}, gesendeteIds: Array.isArray(z.gesendeteIds) ? z.gesendeteIds : [] };
+    // Nur Rueckmeldung (WHATSAPP_BEWERTEN): welche gesendete Nachricht gehoert zu welchem Signal. Alte Dateien haben das Feld nicht.
+    if (z.warnungen && typeof z.warnungen === 'object' && !Array.isArray(z.warnungen)) k.warnungen = z.warnungen;
+    return k;
   } catch {
     return leererZustand();
   }
@@ -141,6 +144,20 @@ export function merkeGesendet(zustand, id) {
   if (!id || zustand.gesendeteIds.includes(id)) return;
   zustand.gesendeteIds.push(id);
   if (zustand.gesendeteIds.length > MAX_GESENDETE_IDS) zustand.gesendeteIds.splice(0, zustand.gesendeteIds.length - MAX_GESENDETE_IDS);
+}
+
+/**
+ * Merkt, welches Signal zu einer gesendeten Warnung gehoert: warnungen[nachrichtenId] = {signal, ts, titel}.
+ * Wird nur mit WHATSAPP_BEWERTEN=1 aufgerufen. Das Feld entsteht erst hier (alte Zustandsdateien bleiben gueltig).
+ */
+export function merkeWarnung(zustand, msgId, signalId, ts, titel = '') {
+  if (!msgId || !signalId) return;
+  const w = (zustand.warnungen ??= {});
+  w[msgId] = { signal: signalId, ts, titel: sauber(titel).slice(0, 120) };
+  const ids = Object.keys(w);
+  if (ids.length > MAX_GESENDETE_IDS) {
+    ids.sort((a, b) => w[a].ts - w[b].ts).slice(0, ids.length - MAX_GESENDETE_IDS).forEach((i) => delete w[i]);
+  }
 }
 
 // ---- Rate-Limit -----------------------------------------------------------
@@ -223,14 +240,14 @@ const vorschau = (t) => t.replace(/\s+/g, ' ').slice(0, 40);
  * @param opts.senden     async (text) => Nachrichten-ID (string) | null; wirft bei Fehler
  * @param opts.speichern  (zustand) => void
  */
-export function neuerMelder({ cfg, projekt, sb, zustand, senden, speichern = () => {}, log = () => {}, jetzt = Date.now, schlafen = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen = false, speichern = () => {}, log = () => {}, jetzt = Date.now, schlafen = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const limit = neuesLimit({ max: cfg.maxPro10Min });
   const verworfen = new Set();
   let timer = null;
   let laeuft = false;
   let gestoppt = false;
 
-  async function schicke(text, signalId, eintrag, feld) {
+  async function schicke(text, signalId, eintrag, feld, titel = '') {
     for (;;) {
       const p = limit.pruefe(jetzt());
       if (p.art === 'voll') {
@@ -245,6 +262,7 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, speichern = () 
     try {
       const id = await senden(text);
       merkeGesendet(zustand, id);
+      if (merkeWarnungen && feld === 'gesendet') merkeWarnung(zustand, id, signalId, jetzt(), titel);
       eintrag[feld] = true;
       speichern(zustand);
       log(`Warnung gesendet: ${kurzId(signalId)} | ${vorschau(text)}`);
@@ -267,7 +285,7 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, speichern = () 
       for (const s of waehleNeue(offen, { ab: cfg.ab, zustand, verworfen, projekt })) {
         if (gestoppt) break;
         const eintrag = (zustand.gewarnt[s.id] ??= { gesendet: false, erledigt: false, versuche: 0 });
-        const r = await schicke(baueText(s), s.id, eintrag, 'gesendet');
+        const r = await schicke(baueText(s), s.id, eintrag, 'gesendet', s.titel);
         if (r === 'verworfen') verworfen.add(s.id);
       }
       if (cfg.erledigt && !gestoppt) {
@@ -291,8 +309,15 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, speichern = () 
     }
   }
 
+  /** Kurze Folgenachricht (Bestaetigung einer Rueckmeldung) ueber denselben Weg und dasselbe Rate-Limit. Wirft nie. */
+  async function meldeKurz(text, signalId) {
+    if (gestoppt) return 'gestoppt';
+    return schicke(text, signalId, {}, 'kurz');
+  }
+
   return {
     tick,
+    meldeKurz,
     start() {
       gestoppt = false;
       clearInterval(timer);

@@ -14,7 +14,8 @@ import makeWASocket, {
 import { AUTH_ORDNER, QR_DATEI, ZUSTAND_DATEI, ladeEnv } from './config.js';
 import { sende } from './forward.js';
 import { baueAnfrage, inhalt, istErlaubt, kanalName } from './mapping.js';
-import { alleSignale, baueText, istMelderNachricht, ladeZustand, merkeGesendet, neuerMelder, speichereZustand } from './melder.js';
+import { neuerBewerter } from './bewertung.js';
+import { alleSignale, baueText, istMelderNachricht, ladeZustand, merkeGesendet, merkeWarnung, neuerMelder, speichereZustand } from './melder.js';
 
 const nurChats = process.argv.includes('--chats');
 const cfg = ladeEnv();
@@ -43,6 +44,12 @@ const warnAn = !nurChats && cfg.warnen.an;
 const warnProbe = process.argv.includes('--warn-probe'); // eine als TEST markierte Warnung senden, dann beenden
 let melderZustand = null;
 let melder = null;
+let bewerter = null;
+const bewertenAn = warnAn && cfg.bewerten.an; // Rueckmeldung zu Warnungen (einziger Schreibzugriff auf Supabase)
+if (!nurChats && cfg.bewerten.fehler) {
+  console.error(`Rueckmeldung: ${cfg.bewerten.fehler}`);
+  process.exit(1);
+}
 if (warnAn) {
   if (cfg.warnen.fehler) {
     console.error(`Melder: ${cfg.warnen.fehler}`);
@@ -54,6 +61,7 @@ if (warnAn) {
   }
   melderZustand = ladeZustand(ZUSTAND_DATEI);
   console.log(`Melder AN: warnt nur in "${cfg.warnen.chat}" (Projekt ${cfg.projekt}, ab ${cfg.warnen.ab.toISOString()}, alle ${cfg.warnen.intervallS} s).`);
+  if (bewertenAn) console.log(`Rueckmeldung AN: Reaktion, Antwort oder Kurznachricht im Warn-Chat wird am Signal gespeichert${cfg.bewerten.bestaetigen ? ', mit Bestaetigung im Chat' : ''}.`);
 }
 
 /** Ziel-JID des Warn-Chats: JID direkt, sonst ueber den Gruppennamen aus der bekannten Gruppenliste. */
@@ -83,16 +91,20 @@ async function probe(sock) {
   const id = res?.key?.id ?? null;
   if (id) {
     merkeGesendet(melderZustand, id);
+    if (bewertenAn) merkeWarnung(melderZustand, id, alle[0].id, Date.now(), alle[0].titel);
     speichereZustand(ZUSTAND_DATEI, melderZustand);
   }
-  log(`Probe gesendet an "${cfg.warnen.chat}" (Nachrichten-Id ${id ? 'erhalten' : 'FEHLT'}). Warte 10 s auf die eigene Nachricht ...`);
+  const warteS = bewertenAn ? 180 : 10;
+  if (bewertenAn) richteBewertungEin(sock); // Melder nur fuer die Bestaetigung, ohne start(): kein Abruf, keine weiteren Warnungen
+  log(`Probe gesendet an "${cfg.warnen.chat}" (Nachrichten-Id ${id ? 'erhalten' : 'FEHLT'}). Warte ${warteS} s auf die eigene Nachricht${bewertenAn ? ' und auf eine Bewertung (Reaktion, Antwort oder Kurznachricht im Warn-Chat)' : ''} ...`);
   setTimeout(() => {
     log('Probe beendet.');
     process.exit(0);
-  }, 10000);
+  }, warteS * 1000);
 }
 
-function starteMelder(sock) {
+/** Melder-Objekt (Sendeweg, Rate-Limit, Zustand) und Bewerter. Mit start() laeuft der Abruf, ohne nur der Sendeweg. */
+function richteBewertungEin(sock) {
   melder?.stop();
   melder = neuerMelder({
     cfg: cfg.warnen,
@@ -101,6 +113,7 @@ function starteMelder(sock) {
     zustand: melderZustand,
     speichern: (z) => speichereZustand(ZUSTAND_DATEI, z),
     log,
+    merkeWarnungen: bewertenAn,
     senden: async (text) => {
       const jid = warnJid();
       if (!jid) throw new Error('Warn-Chat nicht in der Gruppenliste gefunden');
@@ -108,6 +121,18 @@ function starteMelder(sock) {
       return res?.key?.id ?? null;
     },
   });
+  if (bewertenAn) {
+    bewerter = neuerBewerter({
+      sb: cfg.supabase,
+      zustand: melderZustand,
+      log,
+      bestaetigen: cfg.bewerten.bestaetigen ? (text, signalId) => melder.meldeKurz(text, signalId) : null,
+    });
+  }
+}
+
+function starteMelder(sock) {
+  richteBewertungEin(sock);
   melder.start();
 }
 
@@ -244,6 +269,9 @@ async function verarbeite(sock, msg) {
   const name = await gruppenname(sock, jid);
   // Ab hier nichts loggen, was nicht auf der Allowlist steht.
   if (!istErlaubt(cfg.allowlist, { jid, jidAlt: msg.key.remoteJidAlt, gruppenname: name })) return;
+
+  // Rueckmeldung zu einer Warnung (nur Warn-Chat, nur mit WHATSAPP_BEWERTEN=1). Weitergereicht wird danach wie sonst.
+  if (bewerter) await bewerter.verarbeite(msg, { chatJid: warnJid(), eigenerName: sock.user?.name });
 
   const i = inhalt(msg);
   if (i.art === 'ignoriert') return;
