@@ -95,10 +95,29 @@ uv run python -m uebersetzer pruefen --mit-claude  # zusätzlich Claude-Prüfung
 | Feste Regel `unklar` | Gemeldete Arbeit, bei der unklar ist, was oder wo → Rückfrage statt Raten. Kurze Antworten wie „ok“ lösen nichts aus. | 0 |
 | Claude-Prüfung | Arbeit außer Reihenfolge (z. B. Wand zu vor Installation/Abnahme), Abweichung von Plan/LV ohne Anordnung, nicht weitergegebene Anweisungen; erkennt auch, wenn ein neuer Eintrag ein offenes Signal löst. | pro Quelle 1 Aufruf |
 
-- Signale sind idempotent über `(projekt, schluessel)`: weitere Belege ergänzen ein Signal, statt ein neues anzulegen; ein gelöstes Signal geht bei neuer Abweichung wieder auf `offen`.
+- Signale sind idempotent über `(projekt, schluessel)`: weitere Belege ergänzen ein Signal, statt ein neues anzulegen; ein gelöstes Signal geht bei neuer Abweichung wieder auf `offen` (außer es ist als Fehlalarm bewertet, siehe Lernschleife).
 - Lebenszyklus laut `KONZEPT.md`: `offen` (Prüf-Agent) → `in_bearbeitung` (setzt der Telefon-Agent nach dem Anruf) → `geloest` (Prüf-Agent). `signal_verlauf` protokolliert jeden Wechsel per Trigger.
 - `anruf_text` ist der Text für den Telefon-Agenten, `zustaendig` die Person aus der Meldung.
 - Geprüfte Einträge bekommen `geprueft_am`. Zum erneuten Prüfen: `update eintraege set geprueft_am = null`.
+
+### Lernschleife: Rückmeldungen der Baustelle
+
+Der WhatsApp-Mitleser (`ablage/whatsapp-mitleser`, Abschnitt „Rückmeldung zu Warnungen“) schreibt die Antwort der Baustelle auf eine Warnung in `signale.bewertung` (`berechtigt` | `fehlalarm`) und `bewertung_notiz` („per WhatsApp, <Name>, <Zeit>: <Text>“). Der Prüf-Agent liest das so:
+
+| Bewertung | Was der Prüf-Agent tut |
+|---|---|
+| `fehlalarm` | Taucht dieselbe Lage wieder auf, wird das bewertete Signal **weder ergänzt noch wieder geöffnet**. Es bleibt samt Bewertung stehen. Stattdessen entsteht ein Folgesignal (`<schluessel>#nach-fehlalarm-1`). Es ist auf **`mittel` abgestuft**, der Titel beginnt mit „Früher als Fehlalarm bewertet: …“, die Begründung nennt die Notiz, der Anruftext bittet um kurze Bestätigung. Weitere Belege landen im Folgesignal, es löst sich wie das Original. |
+| `berechtigt` | Wie bisher: ergänzen, wieder öffnen, eskalieren. Die Bewertung bleibt beim Wiederöffnen stehen, ein späteres Urteil überschreibt sie. |
+| Claude-Stufe | Die letzten 10 bewerteten Signale des Projekts gehen als Block `<rueckmeldungen_der_baustelle>` in den Prompt (nach den offenen Signalen, vor den neuen Einträgen, nicht im gecachten Teil). Die Regel dazu: als Fehlalarm bewertete Lagen und ähnliche Fälle nicht wieder melden, außer ein neuer Eintrag zeigt klar etwas anderes. |
+
+Warum eine neue Zeile statt Wiederöffnen: Das Folgesignal trägt den Hinweis im Titel und die abgestufte Schwere, und das bewertete Signal bleibt unverändert stehen. (Der WhatsApp-Melder warnt inzwischen auch bei einem wieder geöffneten Signal erneut, mit „Wieder offen:“ im Titel.) Ganz unterdrückt wird nichts, weil auch ein Fehlalarm-Urteil falsch sein kann.
+
+Was sie **nicht** tut:
+- Sie lernt keine Regeln dazu. Die festen Regeln stufen nur genau dieselbe Lage ab (gleicher `schluessel`). Ähnliche Fälle an anderen Orten erkennt nur die Claude-Stufe, über den Prompt-Block.
+- Ein offenes Signal mit Bewertung `fehlalarm` wird nicht geschlossen (dafür gibt es keinen Status). Erscheint die Lage erneut, stehen in der Web-App beide Signale.
+- Der Telefon-Agent ruft auch beim abgestuften Folgesignal an, weil er jedes offene Signal anruft. Dann mit dem Hinweis im Anruftext.
+
+**Stand:** nur mit der Fake-DB getestet (`tests/test_pruefung.py`, ohne Claude). Auf echten Bewertungen aus Supabase lief der Prüf-Agent mit dieser Logik noch nicht. Die Claude-Stufe mit dem neuen Block wurde nicht echt aufgerufen.
 
 ## Vertrag mit der Ablage (ablage/SPEC.md §5)
 

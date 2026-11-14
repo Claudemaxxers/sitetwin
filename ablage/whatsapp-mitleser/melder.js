@@ -64,11 +64,11 @@ export function pruefeChat(chat, allowlist) {
 // ---- Text -----------------------------------------------------------------
 
 /** Warntext aus einer Zeile der Tabelle `signale`. Rein. Leere Felder fallen weg, Obergrenze MAX_ZEICHEN. */
-export function baueText(s, max = MAX_ZEICHEN) {
+export function baueText(s, max = MAX_ZEICHEN, { wieder = false } = {}) {
   const kopf = PRAEFIX_WARNUNG;
   const titel = sauber(s.titel);
   const ort = [s.top, s.raum, s.element].filter((x) => !leer(x)).map(sauber).filter(Boolean).join(', ');
-  const was = [titel ? `${titel}${s.schwere === 'kritisch' ? ' (kritisch)' : ''}` : '', ort ? `Wo: ${ort}` : '']
+  const was = [titel ? `${wieder ? 'Wieder offen: ' : ''}${titel}${s.schwere === 'kritisch' ? ' (kritisch)' : ''}` : (wieder ? 'Wieder offen' : ''), ort ? `Wo: ${ort}` : '']
     .filter(Boolean)
     .join('\n');
   const tun = sauber(s.anruf_text) || sauber(s.begruendung);
@@ -196,7 +196,7 @@ async function rest({ url, key, fetchImpl = fetch }, pfad) {
 
 /** Offene Signale eines Projekts, aelteste zuerst. */
 export const offeneSignale = (sb, projekt) =>
-  rest(sb, `signale?select=*&projekt=${eq(projekt)}&status=eq.offen&order=erstellt_am.asc`);
+  rest(sb, `signale?select=*&projekt=${eq(projekt)}&status=in.(offen,in_bearbeitung)&order=erstellt_am.asc`);
 
 /** Neueste offene Signale (fuer den Trockenlauf). */
 export const neuesteOffene = (sb, projekt, n = 5) =>
@@ -214,17 +214,30 @@ export async function geloesteAus(sb, ids) {
 
 // ---- Auswahl --------------------------------------------------------------
 
-/** Welche der offenen Signale bekommen jetzt eine Warnung? Rein. */
+/** Letzte Aenderung des Signals in ms: max(erstellt_am, aktualisiert_am); fehlt eines, zaehlt das andere. NaN, wenn beide fehlen. */
+export function stand(s) {
+  const t = [s?.erstellt_am, s?.aktualisiert_am].map((x) => (x == null ? NaN : new Date(x).getTime())).filter(Number.isFinite);
+  return t.length ? Math.max(...t) : NaN;
+}
+
+/**
+ * Welche der offenen Signale bekommen jetzt eine Warnung? Rein.
+ * Regel: Status offen/in_bearbeitung, Projekt passt, max(erstellt_am, aktualisiert_am) >= ab, und das Signal ist
+ * nicht "gewarnt und noch offen". Ein Signal, dessen Erledigt-Meldung schon kam (entry.erledigt), ist wieder
+ * wartbar: wer es wieder oeffnet, bekommt eine neue Warnung. Spaetere Updates eines offenen, gewarnten Signals
+ * (mehr Belege, Bewertung) loesen nichts aus.
+ */
 export function waehleNeue(signale, { ab, zustand, verworfen = new Set(), projekt }) {
   const abMs = ab instanceof Date ? ab.getTime() : new Date(ab).getTime();
   return signale.filter((s) => {
-    if (!s?.id || s.status !== 'offen') return false;
+    // auch 'in_bearbeitung': setzt ein Telefon-Agent den Status, bevor der Melder abfragt, soll die Warnung nicht ausfallen
+    if (!s?.id || !['offen', 'in_bearbeitung'].includes(s.status)) return false;
     if (projekt && s.projekt !== projekt) return false;
-    const t = new Date(s.erstellt_am).getTime();
+    const t = stand(s);
     if (!Number.isFinite(t) || t < abMs) return false;
     if (verworfen.has(s.id)) return false;
     const e = zustand.gewarnt[s.id];
-    if (e && (e.gesendet || (e.versuche ?? 0) > MAX_WIEDERHOLUNGEN)) return false;
+    if (e && !e.erledigt && (e.gesendet || (e.versuche ?? 0) > MAX_WIEDERHOLUNGEN)) return false;
     return true;
   });
 }
@@ -284,16 +297,26 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen 
       const offen = await offeneSignale(sb, projekt);
       for (const s of waehleNeue(offen, { ab: cfg.ab, zustand, verworfen, projekt })) {
         if (gestoppt) break;
-        const eintrag = (zustand.gewarnt[s.id] ??= { gesendet: false, erledigt: false, versuche: 0 });
-        const r = await schicke(baueText(s), s.id, eintrag, 'gesendet', s.titel);
+        let eintrag = zustand.gewarnt[s.id];
+        if (!eintrag || eintrag.erledigt) {
+          // neuer Zyklus: erstes Mal oder wieder geoeffnet nach Erledigt-Meldung
+          eintrag = zustand.gewarnt[s.id] = { gesendet: false, erledigt: false, versuche: 0, zyklus: (eintrag?.zyklus ?? 0) + (eintrag ? 1 : 0), wieder: Boolean(eintrag) };
+        }
+        const r = await schicke(baueText(s, MAX_ZEICHEN, { wieder: Boolean(eintrag.wieder) }), s.id, eintrag, 'gesendet', s.titel);
         if (r === 'verworfen') verworfen.add(s.id);
       }
-      if (cfg.erledigt && !gestoppt) {
+      if (!gestoppt) {
         const ids = Object.entries(zustand.gewarnt).filter(([, e]) => e.gesendet && !e.erledigt).map(([id]) => id);
         for (const s of await geloesteAus(sb, ids)) {
           if (gestoppt) break;
           const eintrag = zustand.gewarnt[s.id];
           if (!eintrag || eintrag.erledigt || (eintrag.versuchteErledigt ?? 0) > MAX_WIEDERHOLUNGEN) continue;
+          if (!cfg.erledigt) {
+            // Meldung abgeschaltet: Zyklus trotzdem schliessen, damit ein Wieder-Oeffnen neu warnt
+            eintrag.erledigt = true;
+            speichern(zustand);
+            continue;
+          }
           const r = await schicke(baueErledigt(s), s.id, eintrag, 'erledigt');
           if (r === 'fehler') eintrag.versuchteErledigt = (eintrag.versuchteErledigt ?? 0) + 1;
           if (r === 'verworfen') {

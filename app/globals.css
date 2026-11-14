@@ -65,3 +65,6 @@ details > summary::-webkit-details-marker { display: none; }
 @keyframes tw-pulse { 50% { opacity: .45; } }
 .tw-cloud { animation: tw-pulse 1.6s ease-in-out infinite; }
 .tw-dots { background-image: radial-gradient(rgba(12,10,8,.12) 1px, transparent 1px); background-size: 16px 16px; }
+
+@keyframes tw-pulse-bar { 50% { opacity: .35; } }
+.tw-pulse { animation: tw-pulse-bar 1.4s ease-in-out infinite; }

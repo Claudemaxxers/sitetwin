@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { gewerkLabel, istAudio, istFoto, nachrichtTitel, type Nachricht } from "@/lib/vm";
 import { anhangUrl, type Modell, type Nav } from "./modell";
+import { SignalPill } from "./Signal";
 import { Avatar, I, Pill, Welle, tagZeit, zeit } from "./ui";
 
 /** Talona's inbox: messages grouped by person, one opened on the right with its write-up. */
@@ -111,8 +112,8 @@ function Detail({ n, m, nav }: { n: Nachricht; m: Modell; nav: Nav }) {
       {signale.map((s) => (
         <div key={s.id} className="mt-7 rounded-[6px] border border-[#f0b48f] bg-[#fff8f3] px-7 py-5">
           <div className="flex items-center gap-4 text-[16px]">
-            <span className="text-[#b45624]">Abweichung erkannt</span>
-            <Pill ton={s.status === "geloest" ? "gruen" : "orange"}>{s.status === "offen" ? "Offen" : s.status === "in_bearbeitung" ? "Beim Vorarbeiter" : "Gelöst"}</Pill>
+            <span className="text-[#b45624]">Abweichung erkannt · {s.status === "geloest" ? "inzwischen gelöst" : `${m.pers(s.zustaendig).vorname} wird angerufen`}</span>
+            <SignalPill s={s} />
           </div>
           <div className="mt-2 text-[15px]">{s.titel}</div>
         </div>

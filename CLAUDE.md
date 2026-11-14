@@ -65,13 +65,15 @@ Was laut Brief gut aussieht:
 - Interne Recherche-Dokumente (z. B. die Bauprozess-Recherche zu Regie und Nachtrag) gehören **nicht** ins Repo.
 - Vor dem Pushen: `git pull`, Tests des eigenen Teils grün.
 
-## Offen für die Abgabe (Stand 14.11., 11:30)
+## Offen für die Abgabe (Stand 14.11., 12:00)
 
 - Root-`README.md` (Gesamtkette, Umgebung, Start, Grenzen) und der Entwurf des Abgabetexts `ABGABE.md` liegen im Pull Request 9, noch nicht gemergt. Im Abgabetext sind Platzhalter zu füllen.
 - Demo-Video.
 - Die Kette ist nie als Ganzes live gelaufen: WhatsApp → Ablage ist geprüft, ab dem Übersetzer nicht. Übersetzer für die Demo mit `--projekt "BV Simmering"` starten, im Projekt „Test Santino“ liegen Testzeilen.
-- Telefon-Agent: kein Code im Repo, nur die Schnittstelle. Als Text gibt es die Warnung in die WhatsApp-Gruppe (`ablage/whatsapp-mitleser/`).
-- Lernschleife: Bewertungen aus WhatsApp landen in `signale.bewertung` (`berechtigt` oder `fehlalarm`). Der Prüf-Agent liest sie noch nicht.
+- Telefon-Agent: liegt im Pull Request 10 (Melih), noch nicht gemergt, noch kein echter Anruf. Der PR ändert das Root-README und kollidiert mit dem README aus Pull Request 9. Als Text gibt es die Warnung in die WhatsApp-Gruppe (`ablage/whatsapp-mitleser/`).
+- Der WhatsApp-Melder warnt auch, wenn der Prüf-Agent ein gelöstes Signal wieder öffnet („Wieder offen:“). Getestet, nicht live gelaufen.
+- Lernschleife: Bewertungen aus WhatsApp landen in `signale.bewertung` (`berechtigt` oder `fehlalarm`), der Prüf-Agent liest sie (`uebersetzer/README.md`, Abschnitt „Lernschleife“). Getestet, nicht live gelaufen.
+- n8n: Die Abläufe für Gmail und Drive sind aktiv und hängen an einer Tunnel-Adresse, die sich bei jedem Neustart des Tunnels ändert. Eingänge landen im Projekt „Test Santino“, nicht in „BV Simmering“.
 - Transkription von Sprachnachrichten liegt in der Ablage (`ablage/ablage/transkript.py`), nicht im Übersetzer. Mit echtem Schlüssel ist sie noch nicht gelaufen.
 - Die Web-App hat bereits eine Ask-Funktion (`app/api/fragen`). Nicht doppelt bauen.
 - Das Repo ist privat (geprüft 14.11.). Offen: wo es laut Organisatoren liegen soll.
