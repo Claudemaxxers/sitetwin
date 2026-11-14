@@ -132,9 +132,43 @@ export interface Quelle {
   content_hash: string;
 }
 
+/** Change ordered during construction (Hendrik: soll_aenderungen). Only the site management may approve. */
+export interface SollAenderung {
+  id: string;
+  titel: string;
+  neues_soll: string | null;
+  top: string | null;
+  raum: string | null;
+  status: "vorgeschlagen" | "freigegeben" | "abgelehnt";
+  vorgeschlagen_von: string | null;
+  vorgeschlagen_am: string | null;
+  freigegeben_von: string | null;
+  freigegeben_am: string | null;
+  nachweis_status: "fehlt" | "vorhanden";
+  nachweis_am: string | null;
+  signal_ids: string[];
+}
+
+/** Hendrik's view check_first: what gets covered next and whether that is safe. */
+export interface CheckFirst {
+  eintrag_id: string;
+  zeitpunkt: string | null;
+  art: string;
+  top: string | null;
+  raum: string | null;
+  person: string | null;
+  gewerk: string | null;
+  zusammenfassung: string;
+  status: "At risk" | "Resolved" | "Clear";
+  signal_id: string | null;
+  signal_titel: string | null;
+}
+
 export interface ProjektDaten {
   projekt: Projekt;
   quellen: Quelle[];
+  sollAenderungen: SollAenderung[];
+  checkFirst: CheckFirst[] | null; // null = view not available
   tops: Top[];
   eintraege: Eintrag[];
   signale: Signal[];
