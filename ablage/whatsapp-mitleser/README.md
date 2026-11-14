@@ -92,7 +92,11 @@ Leere Felder entfallen, Rufnummern werden aus dem Text entfernt, Obergrenze 700 
 
 **Trockenlauf ohne WhatsApp:** `npm run warn-test` liest Supabase (nur lesen), zeigt Spaltennamen, Zahl der offenen Signale und den Text der bis zu 5 neuesten offenen Signale (ohne Rücksicht auf `WHATSAPP_WARN_AB`). Es öffnet keinen WhatsApp-Socket. Anderes Projekt: `$env:ABLAGE_PROJEKT="BV Simmering"; npm run warn-test`.
 
+**Probe mit echtem Senden:** `npm run warn-probe` (braucht dieselben Schalter wie der Melder) verbindet sich, schickt genau eine als „TEST“ markierte Warnung in den Warn-Chat, gebaut aus dem neuesten Signal des Projekts gleich welchen Status, prüft die Rückkopplungs-Sperre und beendet sich nach 10 Sekunden.
+
 **Geprüft:** Unit-Tests (Text mit leeren Feldern und Längengrenze, Auswahl, Erledigt-Meldung genau einmal, Schleifenschutz, Rate-Limit, Wiederholungen, Start-Verweigerung bei Chat außerhalb der Allowlist, Melder aus per Standard; Supabase per Fake-Fetch) und der Trockenlauf gegen die echte Supabase. **Nicht geprüft:** ein echter Versand über `sock.sendMessage`. Offen bleibt, ob die Antwort von `sendMessage` die Nachrichten-ID in `key.id` liefert (der Textanfang fängt es sonst ab) und ob Warnungen im Chat wie erwartet ankommen.
+
+**Echter Lauf am 14.11.2026:** eine Probe-Warnung über `npm run warn-probe` kam in der Testgruppe an (Text aus einem gelösten Signal des fiktiven Projekts). `sendMessage` lieferte die Nachrichten-Id, die eigene Nachricht kam über `messages.upsert` zurück und wurde per Id erkannt und nicht an die Ablage weitergereicht. **Nicht geprüft:** der Melder im Dauerlauf mit einem neu entstandenen Signal (dafür muss der Übersetzer laufen), die Erledigt-Nachricht, die Bremse unter Last.
 
 ## Was gespeichert wird
 
@@ -129,7 +133,7 @@ mapping.js   Nachricht -> Anfrage, Allowlist (rein)
 forward.js   POST mit Wiederholungen
 config.js    Umgebung und .env
 melder.js    Warnungen: Auswahl, Text, Rate-Limit, Schleifenschutz, Zustand (rein, ohne Baileys)
-warn-test.js Trockenlauf des Melders ohne WhatsApp
+warn-test.js Trockenlauf des Melders ohne WhatsApp; `npm run warn-probe` sendet eine Test-Warnung
 zustand/     Stand des Melders (git-ignoriert)
 test/        Node-Tests und Fixtures (alles erfunden)
 ```
