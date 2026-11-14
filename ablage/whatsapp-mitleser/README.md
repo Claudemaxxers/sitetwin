@@ -137,7 +137,9 @@ Die erlaubten Werte stammen aus `uebersetzer/schema.sql` (`check (bewertung in (
 
 `npm run warn-test` zeigt zusätzlich, wie viele Signale des Projekts schon eine `bewertung` haben (nur lesen), und ob die Rückmeldung an ist. `npm run warn-probe` wartet bei eingeschalteter Rückmeldung 180 statt 10 Sekunden, merkt sich dabei Nachricht und Signal der Probe-Warnung und schreibt eine Bewertung der Probe wirklich ins Signal (Vorsicht: das ist das echte Signal, aus dem der Probetext gebaut wurde).
 
-**Geprüft:** Unit-Tests ohne Netz mit Fake-Fetch (alle drei Formen, Wortreihenfolge, Nicht-Bewertungen, fremder Chat, eigene Melder-Nachrichten, entfernte Reaktion, 10-Minuten-Fenster, PATCH-Aufbau, Überschreiben, Aus-per-Standard, Verweigerung ohne Melder, alter Zustand). **Nicht geprüft:** kein echter Bewertungslauf in WhatsApp, kein echter Schreibzugriff auf Supabase, Form von Reaktions- und Zitat-Nachrichten in Baileys 7 nur nach den Typdefinitionen und handgebauten Testnachrichten.
+**Geprüft:** Unit-Tests ohne Netz mit Fake-Fetch (alle drei Formen, Wortreihenfolge, Nicht-Bewertungen, fremder Chat, eigene Melder-Nachrichten, entfernte Reaktion, 10-Minuten-Fenster, PATCH-Aufbau, Überschreiben, Aus-per-Standard, Verweigerung ohne Melder, alter Zustand).
+
+**Echter Lauf am 14.11.2026:** Auf eine Probe-Warnung in der Testgruppe wurde vom Handy mit 👎 reagiert. Die Reaktion kam über `messages.upsert` an, wurde der Warnung zugeordnet und als `fehlalarm` am Signal gespeichert (in Supabase nachgesehen), die Bestätigung kam im Chat an und wurde weder als Bewertung gelesen noch an die Ablage weitergereicht. **Nicht geprüft:** Bewertung per Antwort und per Kurznachricht, Bewertung durch andere Teilnehmer, Überschreiben durch eine zweite Bewertung. Die Bewertungen werden im Prüf-Agenten noch nicht genutzt.
 
 ## Was gespeichert wird
 
