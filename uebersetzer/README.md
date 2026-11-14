@@ -39,7 +39,7 @@ uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30  # für die Demo: 
 ## Wie es arbeitet
 
 - **Eine Quelle pro Claude-Aufruf**, chronologisch. Mitgeschickt werden die letzten 40 Quellen als Zeitachse (damit „ok machen wir“ oder „laut unserem Plan“ zuordenbar sind), die gültigen Pläne und die Stammdaten (Tops, LV). Extrahiert wird nur aus der neuen Quelle.
-- **Anhänge:** Fotos gehen als Bild an Claude. PDFs als Text (`pypdf`), falls die Ablage `text` leer lässt; PDFs ohne Textebene als Dokument. Sprachnachrichten nur über das Transkript in `text` – fehlt es, entsteht ein Eintrag mit `unklar = true` und Rückfrage statt geratenem Inhalt.
+- **Anhänge:** Fotos gehen als Bild an Claude. iPhone-Fotos im Format HEIC/HEIF wandelt der Übersetzer vorher in JPEG um (`pillow-heif`, aufrecht gedreht, längste Kante 1568 px), erkannt an Endung oder Dateikopf; mit erzeugten Testbildern geprüft, nicht mit einem echten iPhone-Foto. PDFs als Text (`pypdf`), falls die Ablage `text` leer lässt; PDFs ohne Textebene als Dokument. Sprachnachrichten nur über das Transkript in `text` – fehlt es, entsteht ein Eintrag mit `unklar = true` und Rückfrage statt geratenem Inhalt.
 - **Ohne Claude erledigt:** gelöschte Nachrichten, Stammdaten-Dateien aus dem Drive (CSV, MD, TXT), leere Quellen.
 - **Idempotent:** Wird eine Quelle erneut verarbeitet, werden ihre Einträge ersetzt (`unique (quelle_hash, nr)`), nicht verdoppelt. Pläne werden gemergt; gültig ist der jüngste Index (Sicht `plaene_aktuell`).
 - **Fehler:** Rate Limit / Netzwerk → Quelle bleibt `neu`, nächster Lauf versucht es wieder. Sonst `status = fehler` mit Grund in `meta.fehler`.

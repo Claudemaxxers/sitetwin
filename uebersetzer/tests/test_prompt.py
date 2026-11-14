@@ -36,3 +36,66 @@ def test_pdf_ohne_text_wird_ausgelesen():
     assert bloecke[0]["type"] == "text" and "Index C" in bloecke[0]["text"]
     q["text"] = "schon da"
     assert anhang.inhaltsbloecke(q, pdf) == ([], None)
+
+
+def _heic(breite=64, hoehe=48) -> bytes:
+    import io
+
+    import pillow_heif
+    from PIL import Image
+
+    pillow_heif.register_heif_opener()
+    aus = io.BytesIO()
+    Image.new("RGB", (breite, hoehe), (200, 120, 40)).save(aus, format="HEIF")
+    return aus.getvalue()
+
+
+def _bild(block) -> "Image.Image":
+    import base64
+    import io
+
+    from PIL import Image
+
+    return Image.open(io.BytesIO(base64.b64decode(block["source"]["data"])))
+
+
+def test_heic_wird_zu_jpeg():
+    """iPhone-Fotos (HEIC) nimmt Claude nicht an: der Übersetzer wandelt sie in JPEG um."""
+    q = {"anhang_pfad": "x/IMG_0042.HEIC", "anhang_name": "IMG_0042.HEIC", "anhang_typ": "image", "text": ""}
+    bloecke, hinweis = anhang.inhaltsbloecke(q, _heic())
+    assert bloecke[0]["type"] == "image" and bloecke[0]["source"]["media_type"] == "image/jpeg"
+    bild = _bild(bloecke[0])
+    assert bild.format == "JPEG" and bild.size == (64, 48)
+    assert "Foto" in hinweis
+
+
+def test_heic_wird_verkleinert():
+    q = {"anhang_pfad": "x/gross.heic", "anhang_name": "gross.heic", "anhang_typ": "image", "text": ""}
+    bloecke, _ = anhang.inhaltsbloecke(q, _heic(4032, 3024))
+    assert max(_bild(bloecke[0]).size) == anhang.MAX_KANTE
+
+
+def test_heic_mit_falscher_endung_und_heif_ohne_bildtyp():
+    # HEIC-Inhalt unter .jpg: am Dateikopf erkannt, sonst ginge kaputtes "JPEG" an Claude.
+    q = {"anhang_pfad": "x/foto.jpg", "anhang_name": "foto.jpg", "anhang_typ": "image", "text": ""}
+    bloecke, _ = anhang.inhaltsbloecke(q, _heic())
+    assert _bild(bloecke[0]).format == "JPEG"
+    # .heif stuft die Ablage nicht als Bild ein; die Endung reicht.
+    q = {"anhang_pfad": "x/foto.heif", "anhang_name": "foto.heif", "anhang_typ": "sonstiges", "text": ""}
+    bloecke, _ = anhang.inhaltsbloecke(q, _heic())
+    assert bloecke[0]["source"]["media_type"] == "image/jpeg"
+
+
+def test_kaputtes_heic_gibt_hinweis_statt_absturz():
+    q = {"anhang_pfad": "x/kaputt.heic", "anhang_name": "kaputt.heic", "anhang_typ": "image", "text": ""}
+    bloecke, hinweis = anhang.inhaltsbloecke(q, b"kein bild")
+    assert bloecke == [] and "konnte nicht gelesen werden" in hinweis
+
+
+def test_jpeg_bleibt_unveraendert():
+    daten = b"\xff\xd8\xff\xe0" + b"0" * 32
+    q = {"anhang_pfad": "x/a.jpg", "anhang_name": "a.jpg", "anhang_typ": "image", "text": ""}
+    bloecke, _ = anhang.inhaltsbloecke(q, daten)
+    import base64
+
+    assert base64.b64decode(bloecke[0]["source"]["data"]) == daten
