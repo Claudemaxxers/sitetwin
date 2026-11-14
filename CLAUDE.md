@@ -65,11 +65,13 @@ Was laut Brief gut aussieht:
 - Interne Recherche-Dokumente (z. B. die Bauprozess-Recherche zu Regie und Nachtrag) gehören **nicht** ins Repo.
 - Vor dem Pushen: `git pull`, Tests des eigenen Teils grün.
 
-## Offen für die Abgabe (Stand 14.11., 12:00)
+## Offen für die Abgabe (Stand 14.11., 13:20)
 
-- Root-`README.md` (Gesamtkette, Umgebung, Start, Grenzen) und der Entwurf des Abgabetexts `ABGABE.md` liegen im Pull Request 9, noch nicht gemergt. Im Abgabetext sind Platzhalter zu füllen.
+- Alle Pull Requests sind gemergt (Stand 13:15), kein offener Branch. Im Abgabetext `ABGABE.md` sind noch Platzhalter in eckigen Klammern zu füllen.
 - Demo-Video.
-- Die Kette ist nie als Ganzes live gelaufen: WhatsApp → Ablage ist geprüft, ab dem Übersetzer nicht. Übersetzer für die Demo mit `--projekt "BV Simmering"` starten, im Projekt „Test Santino“ liegen Testzeilen.
+- Die Kette ist nie als Ganzes live gelaufen. Einzeln belegt: WhatsApp → Ablage → Übersetzer (eine Nachricht eines zweiten Teilnehmers, 12:14) und neues Signal → Warnung im Chat (drei Test-Signale aus den Anruf-Tests, etwa 3 Sekunden). Offen: eine echte Nachricht, aus der ein Signal entsteht. Übersetzer für die Demo mit `--projekt "BV Simmering"` starten, im Projekt „Test Santino“ liegen Testzeilen.
+- Im Demo-Projekt „BV Simmering“ liegen Testreste (Test-Signale der Anruf-Tests, Probe-Nachrichten aus der Gruppe). Vor der Aufnahme aufräumen, Test-Signale nur nach Absprache mit Melih.
+- Ask-Feld auf Vercel: `ANTHROPIC_API_KEY` war um 13:00 dort nicht gesetzt, die Antwort ist dann nur eine Stichwortsuche.
 - Telefon-Agent: Pull Request 10 (Melih) ist gemergt (`lib/telefon/`, `app/api/telefon/`). Ob ein echter Anruf lief, mit Melih klären und im README (Abschnitt 8) und in `ABGABE.md` eintragen. Auf Vercel ist er nicht konfiguriert. Als Text gibt es die Warnung in die WhatsApp-Gruppe (`ablage/whatsapp-mitleser/`).
 - Der WhatsApp-Melder warnt auch, wenn der Prüf-Agent ein gelöstes Signal wieder öffnet („Wieder offen:“). Getestet, nicht live gelaufen.
 - Lernschleife: Bewertungen aus WhatsApp landen in `signale.bewertung` (`berechtigt` oder `fehlalarm`), der Prüf-Agent liest sie (`uebersetzer/README.md`, Abschnitt „Lernschleife“). Getestet, nicht live gelaufen.
