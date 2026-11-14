@@ -111,7 +111,7 @@ Der WhatsApp-Mitleser (`ablage/whatsapp-mitleser`, Abschnitt „Rückmeldung zu 
 | `berechtigt` | Wie bisher: ergänzen, wieder öffnen, eskalieren. Die Bewertung bleibt beim Wiederöffnen stehen, ein späteres Urteil überschreibt sie. |
 | Claude-Stufe | Die letzten 10 bewerteten Signale des Projekts gehen als Block `<rueckmeldungen_der_baustelle>` in den Prompt (nach den offenen Signalen, vor den neuen Einträgen, nicht im gecachten Teil). Die Regel dazu: als Fehlalarm bewertete Lagen und ähnliche Fälle nicht wieder melden, außer ein neuer Eintrag zeigt klar etwas anderes. |
 
-Warum eine neue Zeile statt Wiederöffnen: Der WhatsApp-Melder warnt pro Signal-ID nur einmal. Ein wieder geöffnetes Signal käme in WhatsApp nicht noch einmal an, das Folgesignal schon, und zwar mit dem Hinweis im Titel. Ganz unterdrückt wird nichts, weil auch ein Fehlalarm-Urteil falsch sein kann.
+Warum eine neue Zeile statt Wiederöffnen: Das Folgesignal trägt den Hinweis im Titel und die abgestufte Schwere, und das bewertete Signal bleibt unverändert stehen. (Der WhatsApp-Melder warnt inzwischen auch bei einem wieder geöffneten Signal erneut, mit „Wieder offen:“ im Titel.) Ganz unterdrückt wird nichts, weil auch ein Fehlalarm-Urteil falsch sein kann.
 
 Was sie **nicht** tut:
 - Sie lernt keine Regeln dazu. Die festen Regeln stufen nur genau dieselbe Lage ab (gleicher `schluessel`). Ähnliche Fälle an anderen Orten erkennt nur die Claude-Stufe, über den Prompt-Block.
