@@ -11,9 +11,10 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
 } from 'baileys';
-import { AUTH_ORDNER, QR_DATEI, ladeEnv } from './config.js';
+import { AUTH_ORDNER, QR_DATEI, ZUSTAND_DATEI, ladeEnv } from './config.js';
 import { sende } from './forward.js';
 import { baueAnfrage, inhalt, istErlaubt, kanalName } from './mapping.js';
+import { istMelderNachricht, ladeZustand, neuerMelder, speichereZustand } from './melder.js';
 
 const nurChats = process.argv.includes('--chats');
 const cfg = ladeEnv();
@@ -35,6 +36,50 @@ if (!nurChats) {
   } else {
     console.log(`Erlaubt: ${cfg.allowlist.namen.size} Name(n), ${cfg.allowlist.jids.size} JID(s). Ablage: ${cfg.ablageUrl}, Projekt: ${cfg.projekt}`);
   }
+}
+
+// Melder (Warnungen in einen Chat): standardmaessig aus, dann bleibt der Dienst rein lesend.
+const warnAn = !nurChats && cfg.warnen.an;
+let melderZustand = null;
+let melder = null;
+if (warnAn) {
+  if (cfg.warnen.fehler) {
+    console.error(`Melder: ${cfg.warnen.fehler}`);
+    process.exit(1);
+  }
+  if (!cfg.supabase) {
+    console.error('Melder: SUPABASE_URL und SUPABASE_SERVICE_KEY fehlen (weder hier noch in ../.env). Der Melder startet nicht.');
+    process.exit(1);
+  }
+  melderZustand = ladeZustand(ZUSTAND_DATEI);
+  console.log(`Melder AN: warnt nur in "${cfg.warnen.chat}" (Projekt ${cfg.projekt}, ab ${cfg.warnen.ab.toISOString()}, alle ${cfg.warnen.intervallS} s).`);
+}
+
+/** Ziel-JID des Warn-Chats: JID direkt, sonst ueber den Gruppennamen aus der bekannten Gruppenliste. */
+function warnJid() {
+  const c = cfg.warnen.chat;
+  if (/@(g\.us|s\.whatsapp\.net|lid)$/.test(c)) return c;
+  for (const [jid, name] of gruppen) if (name?.trim().toLowerCase() === c.toLowerCase()) return jid;
+  return null;
+}
+
+function starteMelder(sock) {
+  melder?.stop();
+  melder = neuerMelder({
+    cfg: cfg.warnen,
+    projekt: cfg.projekt,
+    sb: cfg.supabase,
+    zustand: melderZustand,
+    speichern: (z) => speichereZustand(ZUSTAND_DATEI, z),
+    log,
+    senden: async (text) => {
+      const jid = warnJid();
+      if (!jid) throw new Error('Warn-Chat nicht in der Gruppenliste gefunden');
+      const res = await sock.sendMessage(jid, { text });
+      return res?.key?.id ?? null;
+    },
+  });
+  melder.start();
 }
 
 mkdirSync(AUTH_ORDNER, { recursive: true });
@@ -100,6 +145,7 @@ async function verbinden() {
           process.exit(0);
         }
         log(`${gruppen.size} Gruppen bekannt. Warte auf neue Nachrichten (Strg+C beendet).`);
+        if (warnAn) starteMelder(sock);
       } catch (e) {
         console.error(`Gruppenliste nicht abrufbar: ${e.message}`);
         if (nurChats) process.exit(1);
@@ -107,6 +153,7 @@ async function verbinden() {
     }
 
     if (connection === 'close') {
+      melder?.stop();
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
         console.error(
@@ -154,6 +201,8 @@ async function gruppenname(sock, jid) {
 
 async function verarbeite(sock, msg) {
   if (!msg?.key?.remoteJid || !msg.message) return;
+  // Eigene Warnungen des Melders nie an die Ablage weiterreichen (keine Rueckkopplung).
+  if (melderZustand && istMelderNachricht(msg, melderZustand)) return;
   if (cfg.allowlist.leer) return;
   const zeit = Number(msg.messageTimestamp?.toNumber?.() ?? msg.messageTimestamp ?? 0);
   if (zeit && zeit < startSekunden - 60) return; // Verlauf, nicht live

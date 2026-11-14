@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node index.js",
     "chats": "node index.js --chats",
+    "warn-test": "node warn-test.js",
     "test": "node --test \"test/*.test.js\""
   },
   "engines": {
