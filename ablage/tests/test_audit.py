@@ -1,4 +1,4 @@
-"""Das Audit muss saubere Daten durchwinken und jede Art von Schaden finden."""
+"""The audit must wave clean data through and find every kind of damage."""
 
 import copy
 
@@ -17,7 +17,7 @@ def sauber():
     backend = store.FakeBackend()
     quelle = audit.originale(FAKE_DATA, CTX)
     ergebnis = store.speichern(quelle, backend)
-    assert ergebnis.neu == 65  # 54 Basis + 11 Szenario wand_top5
+    assert ergebnis.neu == 65  # 54 base + 11 scenario wand_top5
     return list(backend.zeilen.values()), dict(backend.dateien), quelle
 
 
@@ -53,7 +53,7 @@ def test_findet_verfaelschten_text(sauber):
 
     befunde = _kaputt(sauber, aendere)
     assert "content_hash aus Spalten nachrechenbar" in befunde
-    assert "alles aus den Originalen ist in der Tabelle" not in befunde  # Hash-Spalte selbst blieb
+    assert "alles aus den Originalen ist in der Tabelle" not in befunde  # hash column itself stayed
 
 
 def test_findet_verfaelschtes_transkript_trotz_gleichem_hash(sauber):
@@ -93,7 +93,7 @@ def test_findet_verlorene_zeile_und_mojibake(sauber):
 def test_findet_zeitverschiebung_und_wertebereich(sauber):
     def stunde(zeilen, dateien):
         z = _zeile(zeilen, typ="call")
-        z["zeitpunkt"] = z["zeitpunkt"].replace("16:10:04+01:00", "16:10:04+00:00")  # UTC statt Wien
+        z["zeitpunkt"] = z["zeitpunkt"].replace("16:10:04+01:00", "16:10:04+00:00")  # UTC instead of Vienna
 
     def status(zeilen, dateien):
         zeilen[0]["status"] = "erledigt"

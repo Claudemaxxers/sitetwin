@@ -6,9 +6,9 @@ import { supabaseSignalDB } from "@/lib/telefon/supabase";
 export const dynamic = "force-dynamic";
 
 /**
- * Telefon-Agent, Schritt 5 aus KONZEPT.md.
- * GET  → Zustand (konfiguriert? trocken? Testnummer? offene Signale)
- * POST → ein Durchlauf: offene Signale anrufen (npm run telefon ruft das alle 30 s auf)
+ * Phone agent, step 5 in KONZEPT.md.
+ * GET  → state (configured? dry run? test number? open signals)
+ * POST → one pass: call open signals (npm run telefon triggers this every 30 s)
  */
 
 function db() {

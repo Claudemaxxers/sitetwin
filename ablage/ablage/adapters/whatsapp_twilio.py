@@ -1,4 +1,4 @@
-"""Twilio-WhatsApp-Webhook (SPEC §7.6). Form-Felder -> RawItem, Identität = MessageSid als wa_id."""
+"""Twilio WhatsApp webhook (SPEC §7.6). Form fields -> RawItem, identity = MessageSid as wa_id."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..models import Anhang, ImportKontext, QuellTyp, RawItem
 
-# Bytes + Content-Type kommen von außen (api.py: HTTP mit Basic Auth, Tests: Fake).
+# Bytes + Content-Type come from outside (api.py: HTTP with Basic Auth, tests: fake).
 Downloader = Callable[[str], bytes]
 
 _ENDUNG = {"audio/ogg": ".ogg", "audio/opus": ".opus", "audio/mpeg": ".mp3", "image/jpeg": ".jpg"}
@@ -42,7 +42,7 @@ def nummer(von: str) -> str:
 
 
 def signatur(url: str, params: dict[str, list[str]], token: str) -> str:
-    """HMAC-SHA1(token, url + Key+Value sortiert nach Key), Base64."""
+    """HMAC-SHA1(token, url + key+value sorted by key), Base64."""
     daten = url + "".join(k + v for k in sorted(params) for v in sorted(params[k]))
     mac = hmac.new(token.encode(), daten.encode(), hashlib.sha1).digest()
     return base64.b64encode(mac).decode()
@@ -72,7 +72,7 @@ def aus_formular(
             if lade is None:
                 raise RuntimeError("kein Downloader")
             anhang = Anhang.aus_bytes(name, lade(n.MediaUrl0), mimetype=n.MediaContentType0)
-        except Exception as e:  # Nachricht darf nicht verloren gehen
+        except Exception as e:  # message must not be lost
             meta["anhang_fehler"] = f"{type(e).__name__}: {e}"
             meta["anhang_url"] = n.MediaUrl0
     return RawItem(

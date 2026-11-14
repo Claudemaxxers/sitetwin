@@ -1,4 +1,4 @@
-"""n8n-Eingang: POST /import/email/gmail und POST /import/drive/datei (SPEC §7.7, §7.8)."""
+"""n8n intake: POST /import/email/gmail and POST /import/drive/datei (SPEC §7.7, §7.8)."""
 
 import base64
 import json

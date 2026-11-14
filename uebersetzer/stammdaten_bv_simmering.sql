@@ -1,6 +1,6 @@
--- Stammdaten BV Simmering, erzeugt aus fake_data/drive/Projekt_Simmering/*.csv
--- Nach schema.sql ausführen. Wiederholbar (on conflict do nothing).
--- Pläne (plaene) befüllt der Übersetzer aus den Quellen, weil er dafür den content_hash braucht.
+-- Master data BV Simmering, generated from fake_data/drive/Projekt_Simmering/*.csv
+-- Run after schema.sql. Repeatable (on conflict do nothing).
+-- Plans (plaene) are filled by the Übersetzer from the sources, because it needs the content_hash for that.
 
 insert into projekte (projekt, name, adresse) values
   ('BV Simmering', 'BV Simmeringer Hauptstraße 112 (fiktiv)', 'Simmeringer Hauptstraße 112, 1110 Wien')
@@ -41,8 +41,8 @@ insert into tops (projekt, top, geschoss, raeume, kaeufer_status) values
   ('BV Simmering', 'TG', 'UG', 'Fahrgasse,Stellplätze 1-24,Technikraum', '-')
 on conflict do nothing;
 
--- Personen und Rollen (aus fake_data/drive/Projekt_Simmering/Projekt.md).
--- Nur die Bauleitung des GU darf das Soll ändern (Entscheidung Team, 13.11.).
+-- Persons and roles (from fake_data/drive/Projekt_Simmering/Projekt.md).
+-- Only the GC's site management may change the Soll (team decision, 13 Nov).
 insert into personen (projekt, name, aliase, firma, rolle, darf_soll_aendern, telefon) values
   ('BV Simmering', 'Thomas Meier', '{"Thomas Meier (Krenn Bau)","Thomas Meier <t.meier@krenn-bau.example>","Meier"}', 'Krenn Bau GmbH', 'bauleitung', true, null),
   ('BV Simmering', 'Andrea Gruber', '{"Andrea Gruber <a.gruber@elektro-gruber.example>","Gruber"}', 'Elektro Gruber GmbH', 'projektleitung', false, null),

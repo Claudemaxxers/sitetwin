@@ -1,19 +1,19 @@
-"""Prüf-Agent (Schritt 4 aus KONZEPT.md): erkennt in neuen Einträgen Abweichungen vom gültigen Plan
-und legt Signale an, solange noch jemand eingreifen kann (Talona-Brief: "a change that never reached
+"""Checking agent (step 4 in KONZEPT.md): detects deviations from the valid plan in new entries
+and creates signals while someone can still intervene (Talona brief: "a change that never reached
 the crew, work done out of sequence, a drawing that's out of date").
 
-Zwei Stufen:
-1. Feste Regeln – kostenlos, deterministisch, immer aktiv:
-   - plan_veraltet: Arbeit nach einem Plan-Index, obwohl zu dem Zeitpunkt schon ein neuerer ausgegeben war.
-   - reihenfolge: Wand oder Raum wird zugemacht (oder ist es), obwohl laut Plan noch Installation fehlt.
-   - bauteil_entfaellt: Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht.
-   - unklar: Nachricht ließ sich nicht sicher zuordnen → Rückfrage statt Raten.
-   Plus Lösung: Arbeit nach dem gültigen Index am selben Ort löst ein plan_veraltet-Signal.
-2. Claude-Prüfung (optional, kostet Geld): Abweichung von Plan/LV, nicht weitergegebene Anweisungen –
-   und ob ein neuer Eintrag ein offenes Signal löst. Reihenfolge-Signale kommen nur aus den festen
-   Regeln; Claude-Vorschläge dieser Art werden verworfen.
+Two stages:
+1. Fixed rules – free, deterministic, always active:
+   - plan_veraltet: work to a plan index although a newer one had already been issued at that time.
+   - reihenfolge: a wall or room is being closed (or already is) although installation is still missing per the plan.
+   - bauteil_entfaellt: work on a component that the valid plan no longer contains.
+   - unklar: the message could not be assigned reliably → ask back instead of guessing.
+   Plus resolution: work to the valid index at the same location resolves a plan_veraltet signal.
+2. Claude check (optional, costs money): deviation from plan/LV, instructions not passed on –
+   and whether a new entry resolves an open signal. Sequence signals come only from the fixed
+   rules; Claude proposals of that kind are discarded.
 
-Lebenszyklus (KONZEPT.md): offen → in_bearbeitung (setzt der Telefon-Agent nach dem Anruf) → geloest.
+Lifecycle (KONZEPT.md): offen → in_bearbeitung (set by the phone agent after the call) → geloest.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from .soll import SOLL_ARTEN, SollAblauf
 
 log = logging.getLogger("pruefer")
 
-# Arten, bei denen sich eine Claude-Prüfung lohnt (der Rest ist Kontext).
+# Kinds of entries worth a Claude check (the rest is context).
 PRUEF_ARTEN = {"arbeit_erledigt", "arbeit_geplant", "anweisung", "problem_behoben", "bestaetigung"}
 KONFIDENZ_RUECKFRAGE = 0.5
 
@@ -49,8 +49,8 @@ class PruefBericht:
     geloest: list[str] = field(default_factory=list)
     claude_aufrufe: int = 0
     fehler: list[str] = field(default_factory=list)
-    soll: list[str] = field(default_factory=list)  # Soll-Änderungen: vorgeschlagen/freigegeben/Nachweis
-    abgestuft: list[str] = field(default_factory=list)  # Lernschleife: früher als Fehlalarm bewertete Lagen
+    soll: list[str] = field(default_factory=list)  # Soll changes: proposed/approved/proof
+    abgestuft: list[str] = field(default_factory=list)  # learning loop: situations previously rated as false alarm
 
 
 def _ts(z: Any) -> datetime | None:
@@ -63,7 +63,7 @@ def _vorname(person: str | None) -> str:
     if not person:
         return ""
     name = re.sub(r"\(.*?\)|<.*?>", "", person).strip()
-    teile = [t for t in name.split() if not t.endswith(".")]  # "DI", "Dr." überspringen
+    teile = [t for t in name.split() if not t.endswith(".")]  # skip "DI", "Dr."
     return teile[0] if teile else ""
 
 
@@ -75,10 +75,10 @@ def _gleich(a: str | None, b: str | None) -> bool:
     return bool(a and b and a.strip().lower() == b.strip().lower())
 
 
-# --- Stufe 1: feste Regeln ----------------------------------------------------
+# --- Stage 1: fixed rules -----------------------------------------------------
 
 def neuester_plan(plaene: list[Zeile], plan_nr: str, bis: datetime | None) -> Zeile | None:
-    """Jüngster ausgegebene Index eines Plans, der zum Zeitpunkt `bis` schon bekannt war."""
+    """Most recently issued index of a plan that was already known at time `bis`."""
     kandidaten = [
         p for p in plaene
         if p["plan_nr"] == plan_nr and p.get("gueltig_ab") and (bis is None or _ts(p["gueltig_ab"]) <= bis)
@@ -122,10 +122,10 @@ def regel_plan_veraltet(e: Zeile, plaene: list[Zeile]) -> Zeile | None:
     }
 
 
-# --- Regeln auf dem Bauteil-Register -------------------------------------------
+# --- Rules on the component register -------------------------------------------
 
 ARBEIT = ("arbeit_erledigt", "arbeit_geplant")
-# Was an einem Bauteil erledigt sein muss, bevor die Wand, in der es sitzt, geschlossen wird.
+# What must be done on a component before the wall it sits in is closed.
 VOR_DEM_SCHLIESSEN = {
     "leitung": {"verrohrung", "leitung_eingezogen", "angeschlossen"},
     "dose": {"gesetzt", "angeschlossen"},
@@ -136,7 +136,7 @@ VOR_DEM_SCHLIESSEN = {
 
 
 def ist_stand(alle: list[Zeile], bis: Any, ausser: str | None = None) -> dict[str, set[str]]:
-    """Erledigte Schritte je Bauteil bis zum Zeitpunkt `bis` (inklusive)."""
+    """Completed steps per component up to time `bis` (inclusive)."""
     stand: dict[str, set[str]] = {}
     grenze = str(bis or "")
     for x in alle:
@@ -161,8 +161,8 @@ def _n(s: str | None) -> str:
 
 
 def bauteile_im_bereich(top: str | None, raum: str | None, wand_id: str | None, elemente: dict[str, Zeile]) -> list[Zeile]:
-    """Installations-Bauteile, die fertig sein müssen, bevor in diesem Bereich zugemacht wird:
-    die Bauteile in der Wand (falls bekannt) und alle im selben Raum (Raum darf mehrere nennen, z. B. 'Abstellraum, Vorraum')."""
+    """Installation components that must be finished before this area is closed:
+    the components in the wall (if known) and all in the same room (room may name several, e.g. 'Abstellraum, Vorraum')."""
     if not top:
         return []
     treffer = []
@@ -181,7 +181,7 @@ def offene_installation(bauteile: list[Zeile], stand: dict[str, set[str]]) -> li
 
 
 def zustaendig_fuer(fehlend: list[Zeile], personen: list[Zeile], fallback: str | None) -> str | None:
-    """Wer muss handeln? Der Vorarbeiter des Gewerks, dessen Installation fehlt (alle Bauteile hier sind Elektro)."""
+    """Who has to act? The foreman of the trade whose installation is missing (all components here are electrical)."""
     if fehlend:
         for p in personen:
             if p.get("rolle") == "vorarbeiter" and "elektro" in _n(p.get("firma")):
@@ -192,7 +192,7 @@ def zustaendig_fuer(fehlend: list[Zeile], personen: list[Zeile], fallback: str |
 def regel_wand_zu_vor_installation(
     e: Zeile, elemente: dict[str, Zeile], alle: list[Zeile], personen: list[Zeile] | None = None
 ) -> Zeile | None:
-    """Jemand will zumachen (oder hat zugemacht), obwohl laut Plan noch Installation in Wand/Raum fehlt."""
+    """Someone wants to close (or has closed) although installation in the wall/room is still missing per the plan."""
     if e["art"] not in ARBEIT or e.get("schritt") != "beplankung":
         return None
     wand = _wand_von(e, elemente)
@@ -240,7 +240,7 @@ def regel_wand_zu_vor_installation(
 
 
 def regel_bauteil_entfaellt(e: Zeile, elemente: dict[str, Zeile]) -> Zeile | None:
-    """Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht (z. B. Verteiler im Vorraum nach Index C)."""
+    """Work on a component that the valid plan no longer contains (e.g. distribution board in the Vorraum after index C)."""
     el = elemente.get(e.get("element_id") or "")
     if not el or el.get("soll_aktiv", True) or e["art"] not in ARBEIT or e.get("schritt") == "rueckbau":
         return None
@@ -272,9 +272,9 @@ def regel_bauteil_entfaellt(e: Zeile, elemente: dict[str, Zeile]) -> Zeile | Non
 
 
 def loest_bauteil_signal(signal: Zeile, e: Zeile, elemente: dict[str, Zeile], alle: list[Zeile]) -> bool:
-    """Bauteil-bezogene Signale lösen:
-    - reihenfolge: alle offenen Punkte der Wand sind inzwischen erledigt.
-    - plan_veraltet an einem entfallenen Bauteil: gleichartiges Bauteil am gültigen Ort ist erledigt."""
+    """Resolve component-related signals:
+    - reihenfolge: all open items of the wall are done by now.
+    - plan_veraltet on a dropped component: a component of the same kind at the valid location is done."""
     el_id = signal.get("element_id")
     if e["art"] not in ("arbeit_erledigt", "problem_behoben"):
         return False
@@ -292,7 +292,7 @@ def loest_bauteil_signal(signal: Zeile, e: Zeile, elemente: dict[str, Zeile], al
         alt, neu = elemente.get(el_id), elemente.get(e.get("element_id") or "")
         fertig = e["art"] == "arbeit_erledigt" and e.get("schritt") in VOR_DEM_SCHLIESSEN.get((neu or {}).get("art"), set())
         if alt and alt["art"] in ("verteiler", "dose", "auslass", "schalter"):
-            fertig = fertig and e.get("schritt") in ("gesetzt", "angeschlossen")  # Verrohrung allein reicht nicht
+            fertig = fertig and e.get("schritt") in ("gesetzt", "angeschlossen")  # conduit alone is not enough
         return bool(
             fertig and alt and neu and not alt.get("soll_aktiv", True) and neu.get("soll_aktiv", True)
             and neu["id"] != alt["id"] and neu["art"] == alt["art"] and neu.get("top") == alt.get("top")
@@ -301,8 +301,8 @@ def loest_bauteil_signal(signal: Zeile, e: Zeile, elemente: dict[str, Zeile], al
 
 
 def regel_unklar(e: Zeile) -> Zeile | None:
-    """Nur gemeldete Arbeit, bei der unklar ist, was oder wo ("bin hinten fertig mit dem zeug").
-    Kurze Antworten ("ok", "kläre ich"), bei denen nur der Bezug offen ist, lösen keinen Anruf aus."""
+    """Only reported work where it is unclear what or where ("bin hinten fertig mit dem zeug").
+    Short replies ("ok", "kläre ich") where only the reference is open do not trigger a call."""
     if e["art"] not in ("arbeit_erledigt", "arbeit_geplant") or not e.get("rueckfrage"):
         return None
     if not e.get("unklar") or float(e.get("konfidenz") or 0) >= KONFIDENZ_RUECKFRAGE:
@@ -320,12 +320,12 @@ def regel_unklar(e: Zeile) -> Zeile | None:
 
 
 def loest_plan_veraltet(signal: Zeile, e: Zeile, plaene: list[Zeile]) -> bool:
-    """Arbeit nach dem gültigen Index am selben Ort löst ein plan_veraltet-Signal (ohne Bauteil-Bezug)."""
+    """Work to the valid index at the same location resolves a plan_veraltet signal (without component reference)."""
     if signal["art"] != "plan_veraltet" or e["art"] not in ("arbeit_erledigt", "problem_behoben"):
         return False
     teile = grundschluessel(signal["schluessel"]).split("|")
     if len(teile) != 4:
-        return False  # Bauteil-Signal → loest_bauteil_signal
+        return False  # component signal → loest_bauteil_signal
     _, top, plan_nr, element = teile
     if not _gleich(e.get("top"), top) or e.get("plan_nr") != plan_nr:
         return False
@@ -335,17 +335,17 @@ def loest_plan_veraltet(signal: Zeile, e: Zeile, plaene: list[Zeile]) -> bool:
     return bool(aktuell and e.get("plan_index") == aktuell["plan_index"])
 
 
-# --- Lernschleife: Rückmeldungen der Baustelle ------------------------------------
-# Der WhatsApp-Mitleser (ablage/whatsapp-mitleser/bewertung.js) schreibt signale.bewertung
-# ('berechtigt' | 'fehlalarm') und bewertung_notiz („per WhatsApp, <Name>, <Zeit>: <Text>“).
+# --- Learning loop: feedback from the site ----------------------------------------
+# The WhatsApp listener (ablage/whatsapp-mitleser/bewertung.js) writes signale.bewertung
+# ('berechtigt' | 'fehlalarm') and bewertung_notiz („per WhatsApp, <Name>, <Zeit>: <Text>“).
 #
-# Fehlalarm: Das bewertete Signal wird weder ergänzt noch wieder geöffnet. Es bleibt mit seiner Bewertung
-# stehen (Beleg, worauf sich das Urteil bezog). Taucht dieselbe Lage wieder auf, entsteht ein Folgesignal
-# „<schluessel>#nach-fehlalarm-<n>“: neue Zeile, also neue Warnung im WhatsApp-Melder (der warnt je Signal-ID
-# nur einmal) und neuer Anruf, aber abgestuft auf `mittel` und mit sichtbarem Hinweis. Ganz unterdrückt wird
-# nichts: ein Fehlalarm-Urteil kann selbst falsch sein, und ein verpasster echter Fehler kostet Nacharbeit.
-# Berechtigt: alles wie bisher; die Bewertung bleibt auch beim Wiederöffnen stehen (ein späteres Urteil
-# überschreibt sie ohnehin, siehe bewertung.js).
+# False alarm: the rated signal is neither extended nor reopened. It stays as it is with its rating
+# (evidence of what the verdict referred to). If the same situation comes up again, a follow-up signal
+# „<schluessel>#nach-fehlalarm-<n>“ is created: new row, hence a new warning in the WhatsApp notifier (which warns
+# only once per signal ID) and a new call, but downgraded to `mittel` and with a visible note. Nothing is
+# suppressed entirely: a false-alarm verdict can itself be wrong, and a missed real error costs rework.
+# Justified: everything as before; the rating also stays when the signal is reopened (a later verdict
+# overwrites it anyway, see bewertung.js).
 
 FOLGE = "#nach-fehlalarm-"
 RUECKMELDUNGEN_IM_PROMPT = 10
@@ -356,7 +356,7 @@ def grundschluessel(schluessel: str) -> str:
 
 
 def nach_fehlalarm(vorschlag: Zeile, fehlalarm: Zeile, schluessel: str) -> Zeile:
-    """Vorschlag für eine Lage, die die Baustelle schon einmal als Fehlalarm bewertet hat: abgestuft, mit Hinweis."""
+    """Proposal for a situation the site has already rated as a false alarm once: downgraded, with a note."""
     notiz = " ".join((fehlalarm.get("bewertung_notiz") or "").split())
     vorher = vorschlag.get("schwere") or "mittel"
     begruendung = (vorschlag.get("begruendung") or "").strip()
@@ -378,7 +378,7 @@ def nach_fehlalarm(vorschlag: Zeile, fehlalarm: Zeile, schluessel: str) -> Zeile
 
 
 def rueckmeldungen(signale: list[Zeile], n: int = RUECKMELDUNGEN_IM_PROMPT) -> list[Zeile]:
-    """Die zuletzt bewerteten Signale (jüngste zuerst)."""
+    """The most recently rated signals (newest first)."""
     bewertet = [s for s in signale if s.get("bewertung") in ("berechtigt", "fehlalarm")]
     bewertet.sort(key=lambda s: str(s.get("aktualisiert_am") or s.get("erstellt_am") or ""), reverse=True)
     return bewertet[:n]
@@ -392,7 +392,7 @@ def rueckmeldungen_block(bewertet: list[Zeile]) -> str:
     return "\n".join(zeilen) or "(keine)"
 
 
-# --- Stufe 2: Claude ------------------------------------------------------------
+# --- Stage 2: Claude ------------------------------------------------------------
 
 PRUEF_SYSTEM = """Du bist der Prüf-Agent von SiteTwin, einem Live-Protokoll für Baustellen. Du bekommst neue, schon strukturierte Einträge (was, wo, wer, wann, nach welchem Plan) und den bisherigen Stand der Baustelle.
 
@@ -421,7 +421,7 @@ Lösungen: Wenn ein neuer Eintrag belegt, dass die Abweichung auf der Baustelle 
 
 anruf_text: 2–3 Sätze in Du-Form an die zuständige Person, konkret, was nicht passieren soll und warum. Kein Smalltalk."""
 
-# Signale der festen Regeln löst nur die Regel selbst; Claude darf nur seine eigenen ("ki|…") lösen.
+# Signals from the fixed rules are resolved only by the rule itself; Claude may only resolve its own ("ki|…").
 def _von_claude(s: Zeile) -> bool:
     return s["schluessel"].startswith("ki|")
 
@@ -478,10 +478,10 @@ def pruefe_mit_claude(client, modell: str, effort: str, system, messages) -> Pru
     return response.parsed_output
 
 
-# --- Ablauf ---------------------------------------------------------------------
+# --- Flow -----------------------------------------------------------------------
 
 class _Signale:
-    """Signale eines Projekts im Speicher halten und Änderungen in die DB schreiben."""
+    """Keep the signals of a project in memory and write changes to the DB."""
 
     def __init__(self, db: DB, projekt: str, bericht: PruefBericht):
         self.db, self.projekt, self.bericht = db, projekt, bericht
@@ -494,11 +494,11 @@ class _Signale:
         ids = [e["id"] for e in eintraege]
         hashes = sorted({e["quelle_hash"] for e in eintraege})
         alt = self.nach_schluessel.get(vorschlag["schluessel"])
-        # Lernschleife: eine als Fehlalarm bewertete Lage nie stumm übernehmen (siehe nach_fehlalarm)
+        # Learning loop: never silently carry over a situation rated as false alarm (see nach_fehlalarm)
         fehlalarm, n, schluessel = None, 0, vorschlag["schluessel"]
         while alt is not None and alt.get("bewertung") == "fehlalarm":
             if set(ids) <= set(alt.get("eintrag_ids") or []):
-                return  # Beleg gehört schon zum bewerteten Signal (erneute Prüfung)
+                return  # evidence already belongs to the rated signal (re-check)
             fehlalarm, n = alt, n + 1
             schluessel = f"{grundschluessel(vorschlag['schluessel'])}{FOLGE}{n}"
             alt = self.nach_schluessel.get(schluessel)
@@ -518,12 +518,12 @@ class _Signale:
         }
         rang = {"mittel": 0, "hoch": 1, "kritisch": 2}
         if rang.get(vorschlag.get("schwere"), 0) > rang.get(alt.get("schwere"), 0):
-            # Die schwerere Meldung beschreibt die Lage besser (z. B. "will Samstag zumachen" → noch Zeit zu handeln)
+            # The more severe message describes the situation better (e.g. "will Samstag zumachen" → still time to act)
             felder.update({k: vorschlag[k] for k in ("schwere", "titel", "begruendung", "anruf_text", "zustaendig") if vorschlag.get(k)})
         if felder["eintrag_ids"] == list(alt.get("eintrag_ids") or []) and alt["status"] != "geloest" and "schwere" not in felder:
-            return  # nichts Neues (z. B. erneute Prüfung)
+            return  # nothing new (e.g. re-check)
         if alt["status"] == "geloest":
-            # Anruf-Felder leeren: der Telefon-Agent ruft nur bei status='offen' und angerufen_am null an
+            # Clear the call fields: the phone agent only calls when status='offen' and angerufen_am is null
             felder.update(status="offen", geloest_am=None, geloest_durch=None, angerufen_am=None, anruf_id=None)
             self.bericht.wieder_offen += 1
             log.info("⚑ wieder offen: %s", alt["titel"])
@@ -543,7 +543,7 @@ class _Signale:
 
 
 def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_eintraege: int = 80) -> PruefBericht:
-    """Alle ungeprüften Einträge prüfen, gruppiert nach Quelle, in zeitlicher Reihenfolge."""
+    """Check all unchecked entries, grouped by source, in chronological order."""
     bericht = PruefBericht()
     ungeprueft = db.ungepruefte_eintraege(projekt_filter)
     bericht.eintraege = len(ungeprueft)
@@ -563,14 +563,14 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
         for quelle_hash, gruppe_iter in groupby(eigene, key=lambda e: e["quelle_hash"]):
             gruppe = list(gruppe_iter)
             raeume = list(dict.fromkeys(x["raum"] for x in gruppe if x.get("raum")))
-            for x in gruppe:  # z. B. Sprachnachricht: "Ständerwerk im Abstellraum und Vorraum … Samstag machen wir zu"
+            for x in gruppe:  # e.g. voice message: "Ständerwerk im Abstellraum und Vorraum … Samstag machen wir zu"
                 if not x.get("raum") and x.get("schritt") == "beplankung" and raeume:
                     x["raum"] = ", ".join(raeume)
             try:
                 for e in gruppe:
                     if e["art"] in SOLL_ARTEN:
                         soll_ablauf.verarbeiten(e)
-                        elemente = {x["id"]: x for x in db.elemente(projekt)}  # Register kann sich geändert haben
+                        elemente = {x["id"]: x for x in db.elemente(projekt)}  # register may have changed
                     for vorschlag in (
                         regel_bauteil_entfaellt(e, elemente),
                         regel_plan_veraltet(e, plaene),
@@ -605,7 +605,7 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
                             signale.loesen(nach_schluessel[g.schluessel], gruppe[g.eintrag_nr - 1], g.begruendung)
 
                 db.als_geprueft([e["id"] for e in gruppe])
-            except Exception as err:  # Gruppe bleibt ungeprüft und wird beim nächsten Lauf wiederholt
+            except Exception as err:  # group stays unchecked and is retried on the next run
                 import anthropic
 
                 bericht.fehler.append(f"{quelle_hash[:12]}: {type(err).__name__}: {err}")

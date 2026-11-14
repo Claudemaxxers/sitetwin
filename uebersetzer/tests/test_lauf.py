@@ -1,4 +1,4 @@
-"""Tests ohne Claude und ohne Supabase: Pipeline, Idempotenz, Pläne, Fehlerbehandlung."""
+"""Tests without Claude and without Supabase: pipeline, idempotency, plans, error handling."""
 
 from pathlib import Path
 
@@ -33,8 +33,8 @@ def db(tmp_path):
 def test_testquellen_mengen(db):
     typen = [q["typ"] for q in db.quellen]
     assert typen.count("whatsapp") == 39
-    assert typen.count("email") == 8  # 6 Mails + 2 PDF-Anhänge
-    assert typen.count("drive") == 6  # inkl. Plan E-03 Top 3 (Bauteil-Register)
+    assert typen.count("email") == 8  # 6 mails + 2 PDF attachments
+    assert typen.count("drive") == 6  # incl. plan E-03 Top 3 (component register)
     assert typen.count("call") == 1
     assert len({q["content_hash"] for q in db.quellen}) == len(db.quellen)
 
@@ -43,7 +43,7 @@ def test_alles_wird_verarbeitet_und_ohne_llm_faelle_uebersprungen(db):
     aufrufe = []
     bericht = verarbeite(db, lambda s, m: aufrufe.append(m) or Ergebnis(eintraege=[], plaene=[], soll=[], elemente=[]), None)
     assert bericht.verarbeitet == 54 and not bericht.fehler
-    # 3 Stammdaten-Dateien (2 CSV, 1 MD) + 1 gelöschte Nachricht brauchen kein Claude
+    # 3 master data files (2 CSV, 1 MD) + 1 deleted message need no Claude
     assert bericht.uebersprungen == 4
     assert len(aufrufe) == 50
     assert all(q["status"] == "verarbeitet" for q in db.quellen)
@@ -85,7 +85,7 @@ def test_gueltiger_plan_ist_der_neueste_index(db):
     verarbeite(db, extr, None)
     aktuell = db.aktuelle_plaene(PROJEKT)
     assert [(p["plan_nr"], p["plan_index"]) for p in aktuell] == [("E-05", "C")]
-    # Drive-PDF (ohne Datum) und Mail-Anhang (mit Datum) ergeben einen Plan C mit Ausgabedatum der Mail
+    # Drive PDF (without date) and mail attachment (with date) yield one plan C with the mail's issue date
     c = [p for p in db.plaene if p["plan_index"] == "C"]
     assert len(c) == 1 and c[0]["gueltig_ab"].startswith("2026-11-10")
 

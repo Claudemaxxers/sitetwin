@@ -1,6 +1,6 @@
 # SiteTwin Ablage
 
-Eingangsschicht von SiteTwin: holt alles, was auf der Baustelle kommuniziert wird (WhatsApp, E-Mail, Drive-Dateien, Anruf-Transkripte), **unverändert** in die Supabase-Tabelle `quellen` und den Bucket `ablage`. Die Ablage interpretiert nichts; das macht der Übersetzer. Vertrag und Details: [SPEC.md](SPEC.md).
+Intake layer of SiteTwin: brings everything that is communicated on the construction site (WhatsApp, e-mail, Drive files, call transcripts) **unchanged** into the Supabase table `quellen` and the bucket `ablage`. The Ablage interprets nothing; that is the Übersetzer's job. Contract and details: [SPEC.md](SPEC.md).
 
 ## Setup (Windows, PowerShell, Python 3.11+)
 
@@ -8,31 +8,31 @@ Eingangsschicht von SiteTwin: holt alles, was auf der Baustelle kommuniziert wir
 cd ablage
 py -3 -m venv .venv
 .venv\Scripts\python -m pip install -e .
-copy .env.example .env   # SUPABASE_URL + SUPABASE_SERVICE_KEY eintragen
+copy .env.example .env   # fill in SUPABASE_URL + SUPABASE_SERVICE_KEY
 ```
 
-Tabelle `quellen` (SQL in SPEC §5) und privater Bucket `ablage` müssen in Supabase existieren.
+The table `quellen` (SQL in SPEC §5) and the private bucket `ablage` must exist in Supabase.
 
-## Benutzen
+## Usage
 
 ```powershell
-# Tests (laufen ohne Supabase, Fixtures = ../fake_data)
+# Tests (run without Supabase, fixtures = ../fake_data)
 .venv\Scripts\python -m pytest -q
 
-# Import per CLI (--dry-run: nur parsen, nichts schreiben)
+# Import via CLI (--dry-run: parse only, write nothing)
 .venv\Scripts\python -m ablage import whatsapp ..\fake_data\whatsapp --projekt "BV Simmering"
 .venv\Scripts\python -m ablage import email    ..\fake_data\email    --projekt "BV Simmering"
 .venv\Scripts\python -m ablage import ordner   ..\fake_data\drive    --projekt "BV Simmering"
 .venv\Scripts\python -m ablage import call     ..\fake_data\calls    --projekt "BV Simmering"
 
-# Szenario "Wand Top 5" (Kernbeispiel aus KONZEPT.md) zusätzlich einspielen
+# Additionally load the scenario "Wand Top 5" (core example from KONZEPT.md)
 .venv\Scripts\python -m ablage import whatsapp ..\fake_data\szenarien\wand_top5\whatsapp --projekt "BV Simmering"
 .venv\Scripts\python -m ablage import call     ..\fake_data\szenarien\wand_top5\calls    --projekt "BV Simmering"
 
-# Die zuletzt importierten Zeilen ansehen
+# Show the most recently imported rows
 .venv\Scripts\python -m ablage zeige --projekt "BV Simmering" --limit 10
 
-# Datenqualität von quellen + Bucket prüfen (liest nur, 22 Prüfungen, Abgleich mit ..\fake_data)
+# Check data quality of quellen + bucket (read-only, 22 checks, comparison with ..\fake_data)
 .venv\Scripts\python -m ablage audit --projekt "BV Simmering"
 
 # API
@@ -40,33 +40,33 @@ Tabelle `quellen` (SQL in SPEC §5) und privater Bucket `ablage` müssen in Supa
 curl.exe -X POST localhost:8000/import/call -H "Content-Type: application/json" --data-binary "@..\fake_data\calls\call_2026-11-13_1610_huber.json"
 ```
 
-| Endpunkt | Body | Identität |
+| Endpoint | Body | Identity |
 |---|---|---|
 | `GET /health` | – | – |
-| `POST /import/call` | Call-JSON v1 (SPEC §7.4) | `call_id` |
-| `POST /import/whatsapp/nachricht` | eine Live-Nachricht (SPEC §7.5) | `wa_id` |
-| `POST /import/whatsapp/twilio` | Twilio-Webhook, Form-encoded (SPEC §7.6) | `MessageSid` |
-| `POST /import/email/gmail` | Gmail-Rohmail als JSON von n8n (SPEC §7.7) | `Message-ID` |
-| `POST /import/email/gmail-felder` | Gmail-Mail zerlegt (Felder + Anhänge) als JSON von n8n (SPEC §7.10) | wie `.eml` |
-| `POST /import/drive/datei` | Drive-Datei als Rohdaten von n8n (SPEC §7.8) | Pfad + Inhalt |
+| `POST /import/call` | Call JSON v1 (SPEC §7.4) | `call_id` |
+| `POST /import/whatsapp/nachricht` | one live message (SPEC §7.5) | `wa_id` |
+| `POST /import/whatsapp/twilio` | Twilio webhook, form-encoded (SPEC §7.6) | `MessageSid` |
+| `POST /import/email/gmail` | Gmail raw mail as JSON from n8n (SPEC §7.7) | `Message-ID` |
+| `POST /import/email/gmail-felder` | Gmail mail split up (fields + attachments) as JSON from n8n (SPEC §7.10) | same as `.eml` |
+| `POST /import/drive/datei` | Drive file as raw data from n8n (SPEC §7.8) | path + content |
 
-Antwort jeweils `{"gelesen", "neu", "duplikate", "fehler"}`, nur der Twilio-Endpunkt antwortet mit leerem TwiML. Interaktive Doku: `http://localhost:8000/docs`.
+The response is always `{"gelesen", "neu", "duplikate", "fehler"}`, only the Twilio endpoint replies with empty TwiML. Interactive docs: `http://localhost:8000/docs`.
 
-## WhatsApp live über Twilio (Sandbox)
+## WhatsApp live via Twilio (sandbox)
 
-Gebaut nach dem dokumentierten Twilio-Format und in Tests geprüft, aber **noch nicht gegen einen echten Twilio-Account gelaufen**.
+Built to the documented Twilio format and checked in tests, but **not yet run against a real Twilio account**.
 
-1. `.env` ergänzen: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (für Mediendownload und Signaturprüfung), `TWILIO_WEBHOOK_URL` (öffentliche URL aus Schritt 3), optional `WHATSAPP_LIVE_KANAL`. `DEFAULT_PROJEKT` auf einen eigenen Testnamen setzen, z. B. `Test Santino`, damit die Zeilen von „BV Simmering“ getrennt bleiben.
-2. API starten: `.venv\Scripts\python -m uvicorn ablage.api:app --port 8000`
-3. Tunnel öffnen (z. B. `ngrok http 8000`) und `https://<tunnel>/import/whatsapp/twilio` in der Twilio-Konsole unter Messaging → Try it out → WhatsApp Sandbox → **When a message comes in** eintragen (Methode POST). Dieselbe URL als `TWILIO_WEBHOOK_URL` setzen, uvicorn neu starten.
-4. Vom Handy den Join-Code an die Sandbox-Nummer schicken, danach eine Testnachricht.
-5. Prüfen: `.venv\Scripts\python -m ablage zeige --projekt "Test Santino"`
+1. Add to `.env`: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (for media download and signature check), `TWILIO_WEBHOOK_URL` (public URL from step 3), optionally `WHATSAPP_LIVE_KANAL`. Set `DEFAULT_PROJEKT` to a test name of your own, e.g. `Test Santino`, so that the rows stay separate from "BV Simmering".
+2. Start the API: `.venv\Scripts\python -m uvicorn ablage.api:app --port 8000`
+3. Open a tunnel (e.g. `ngrok http 8000`) and enter `https://<tunnel>/import/whatsapp/twilio` in the Twilio console under Messaging → Try it out → WhatsApp Sandbox → **When a message comes in** (method POST). Set the same URL as `TWILIO_WEBHOOK_URL`, restart uvicorn.
+4. Send the join code from the phone to the sandbox number, then a test message.
+5. Check: `.venv\Scripts\python -m ablage zeige --projekt "Test Santino"`
 
-Sprachnachrichten kommen als Datei (`<MessageSid>.ogg`) an; `text` ist leer, solange keine Transkription eingerichtet ist (nächster Abschnitt). Schlägt der Mediendownload fehl, bleibt die Nachricht ohne Anhang erhalten, der Grund steht in `meta.anhang_fehler`. Ohne `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` wird die Signatur nicht geprüft.
+Voice messages arrive as a file (`<MessageSid>.ogg`); `text` is empty as long as no transcription is set up (next section). If the media download fails, the message is kept without attachment, the reason is in `meta.anhang_fehler`. Without `TWILIO_AUTH_TOKEN` and `TWILIO_WEBHOOK_URL` the signature is not checked.
 
-## Sprachnachrichten transkribieren
+## Transcribing voice messages
 
-Mit `TRANSKRIPT_API_KEY` in `.env` wird jede neue Sprachnachricht ohne Text vor dem Speichern transkribiert; das Ergebnis steht in `text`, dazu `meta.transkript_quelle = "whisper"` und `meta.transkript_modell`. Das gilt für alle Wege (Twilio, `/import/whatsapp/nachricht`, Gmail-Anhänge, Drive, CLI-Import, bei `--dry-run` nicht). Ohne Schlüssel bleibt alles wie bisher.
+With `TRANSKRIPT_API_KEY` in `.env`, every new voice message without text is transcribed before it is stored; the result is in `text`, plus `meta.transkript_quelle = "whisper"` and `meta.transkript_modell`. This applies to all paths (Twilio, `/import/whatsapp/nachricht`, Gmail attachments, Drive, CLI import, not with `--dry-run`). Without a key everything stays as before.
 
 ```
 TRANSKRIPT_API_KEY=<Schlüssel>
@@ -74,32 +74,32 @@ TRANSKRIPT_BASE_URL=https://api.openai.com/v1     # Groq: https://api.groq.com/o
 TRANSKRIPT_MODELL=whisper-1                       # Groq: whisper-large-v3
 ```
 
-Stille wird erkannt: Meldet der Anbieter für alle Segmente „keine Sprache“ (`no_speech_prob >= 0.5`), bleibt `text` leer und `meta.transkript_fehler` lautet `KeineSprache: keine Sprache erkannt`. Ohne das erfindet Whisper bei Stille Text wie „Vielen Dank.“. Rauschen ohne Sprache wird so nicht erkannt.
+Silence is detected: if the provider reports "no speech" for all segments (`no_speech_prob >= 0.5`), `text` stays empty and `meta.transkript_fehler` reads `KeineSprache: keine Sprache erkannt`. Without that, Whisper invents text such as "Vielen Dank." on silence. Noise without speech is not detected this way.
 
-Schlägt die Transkription fehl (Netz, Timeout, Fehlerstatus, leere Antwort), wird die Nachricht trotzdem gespeichert, `text` bleibt leer und `meta.transkript_fehler` nennt den Grund. Grenze: Eine schon gespeicherte Sprachnachricht bekommt nachträglich kein Transkript (Upsert mit `ignore_duplicates`); dafür Zeile löschen und neu importieren. Der Hash ändert sich durch das Transkript nicht.
+If the transcription fails (network, timeout, error status, empty response), the message is stored anyway, `text` stays empty and `meta.transkript_fehler` gives the reason. Limit: a voice message that is already stored does not get a transcript afterwards (upsert with `ignore_duplicates`); for that, delete the row and re-import. The hash does not change because of the transcript.
 
-Ehrlicher Stand: in Tests mit nachgebauter Schnittstelle geprüft, außerdem gegen Groq (`whisper-large-v3`) am 14.11.2026 mit dem Transkribierer direkt aufgerufen: ein synthetisch gesprochener deutscher Satz (Opus und M4A) kam wortgenau zurück, Stille wurde verworfen. Noch nicht gelaufen: eine echte WhatsApp-Sprachnachricht über die laufende Ablage. Die Audiodateien in `fake_data/` sind Platzhalter, keine Aufnahmen.
+Honest status: checked in tests with a mocked interface, and additionally against Groq (`whisper-large-v3`) on 14 Nov 2026 by calling the transcriber directly: a synthetically spoken German sentence (Opus and M4A) came back word for word, silence was discarded. Not yet run: a real WhatsApp voice message through the running Ablage. The audio files in `fake_data/` are placeholders, not recordings.
 
-## Gmail und Drive live über n8n
+## Gmail and Drive live via n8n
 
-Drei Endpunkte nehmen echte Eingänge aus Gmail und Google Drive an. Die OAuth-Anmeldung bei Google liegt komplett in n8n (Cloud), die Ablage bekommt nur fertige Daten.
+Three endpoints accept real input from Gmail and Google Drive. The OAuth sign-in with Google lives entirely in n8n (Cloud), the Ablage only receives finished data.
 
-- `POST /import/email/gmail-felder` (diesen nutzt der Gmail-Ablauf in `n8n/`): JSON `{"projekt": "optional", "mail": <$json des Gmail Triggers, Simplify aus>, "anhaenge": [{"name", "mime", "base64"}]}`. Braucht keine Rohmail, weil n8n Cloud den Rohabruf mit seiner Google-Anmeldung sperrt. Die Ablage baut daraus dieselben Zeilen und Hashes wie beim `.eml`-Import; Ausnahmen beim Body stehen in `n8n/README.md` unter „Grenzen“.
-- `POST /import/email/gmail`: JSON `{"raw": "<base64url, Gmail format=raw>", "gmail_id": "...", "projekt": "optional"}`. Läuft durch denselben Parser wie `.eml`-Dateien, dieselbe Mail ergibt keine zweite Zeile. Bleibt für den Fall, dass eine eigene Google-OAuth-App die Rohmail liefert.
-- `POST /import/drive/datei`: Dateibytes als Body, Query `pfad` (Pflicht), `kanal`, `projekt`, `datei_id`, `geaendert_am`. Das Item sieht aus wie eines aus dem Drive-Ordner-Import.
-- Token: `ABLAGE_IMPORT_TOKEN` in `.env` setzen, n8n sendet ihn als Header `X-Ablage-Token`. Ohne Wert keine Prüfung. Gilt nur für diese drei Endpunkte.
-- Einrichtung in n8n: siehe `n8n/README.md`.
+- `POST /import/email/gmail-felder` (this is the one the Gmail workflow in `n8n/` uses): JSON `{"projekt": "optional", "mail": <$json of the Gmail Trigger, Simplify off>, "anhaenge": [{"name", "mime", "base64"}]}`. Needs no raw mail, because n8n Cloud blocks the raw fetch with its Google sign-in. The Ablage builds the same rows and hashes from it as with the `.eml` import; exceptions regarding the body are in `n8n/README.md` under "Limits".
+- `POST /import/email/gmail`: JSON `{"raw": "<base64url, Gmail format=raw>", "gmail_id": "...", "projekt": "optional"}`. Runs through the same parser as `.eml` files, the same mail does not produce a second row. Stays for the case that a custom Google OAuth app delivers the raw mail.
+- `POST /import/drive/datei`: file bytes as body, query `pfad` (required), `kanal`, `projekt`, `datei_id`, `geaendert_am`. The item looks like one from the Drive folder import.
+- Token: set `ABLAGE_IMPORT_TOKEN` in `.env`, n8n sends it as the header `X-Ablage-Token`. Without a value no check. Applies only to these three endpoints.
+- Setup in n8n: see `n8n/README.md`.
 
-In Tests geprüft (für `gmail-felder` mit n8n-Items, die aus den sechs `.eml` in `fake_data/email/` nachgebaut sind). Der Drive-Weg ist am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst), der Gmail-Weg über `gmail-felder` ebenfalls einmal (von Hand ausgelöst, Testmail ohne Anhang, `neu: 1`). Anhänge, Duplikat-Lauf und Dauerbetrieb sind dort ungeprüft. Der Rohweg `gmail` scheitert auf n8n Cloud an der Sperre der Google-Anmeldung.
+Checked in tests (for `gmail-felder` with n8n items rebuilt from the six `.eml` files in `fake_data/email/`). The Drive path ran once on 14 Nov 2026 through a real n8n Cloud instance (triggered by hand), the Gmail path via `gmail-felder` likewise once (triggered by hand, test mail without attachment, `neu: 1`). Attachments, duplicate run and continuous operation are unchecked there. The raw path `gmail` fails on n8n Cloud because of the block on the Google sign-in.
 
-## WhatsApp mitlesen (inoffiziell, nur Prototyp)
+## Reading along in WhatsApp (unofficial, prototype only)
 
-`whatsapp-mitleser/` ist ein eigenständiger Node-Dienst (Baileys), der als gekoppeltes Gerät im eigenen WhatsApp mitliest und neue Nachrichten ausgewählter Chats an `POST /import/whatsapp/nachricht` schickt. Nur lesen, Allowlist, ohne Chats in `WHATSAPP_CHATS` geht nichts raus. Inoffiziell und gegen die Nutzungsbedingungen von WhatsApp; Sperrrisiko für die Nummer. Offizieller Weg bleibt Twilio. Setup und Grenzen: [whatsapp-mitleser/README.md](whatsapp-mitleser/README.md).
+`whatsapp-mitleser/` is a standalone Node service (Baileys) that reads along in your own WhatsApp as a linked device and sends new messages from selected chats to `POST /import/whatsapp/nachricht`. Read-only, allowlist, without chats in `WHATSAPP_CHATS` nothing goes out. Unofficial and against WhatsApp's terms of service; risk of the number being banned. The official path remains Twilio. Setup and limits: [whatsapp-mitleser/README.md](whatsapp-mitleser/README.md).
 
-## Eigenen WhatsApp-Chat testen
+## Testing your own WhatsApp chat
 
-1. In WhatsApp einen Test-Chat öffnen (am besten eine neue Gruppe nur mit Testnachrichten) → Menü → **Chat exportieren → Medien einschließen**. Die `.zip` auf den Rechner legen.
-2. Erst ohne Schreiben prüfen, dann unter eigenem Projektnamen importieren und ansehen:
+1. Open a test chat in WhatsApp (ideally a new group with test messages only) → menu → **Chat exportieren → Medien einschließen** (export chat, include media). Put the `.zip` on the computer.
+2. First check without writing, then import under a project name of your own and look at it:
 
 ```powershell
 .venv\Scripts\python -m ablage import whatsapp "C:\Pfad\WhatsApp Chat - Testgruppe.zip" --projekt "Test Santino" --dry-run
@@ -107,9 +107,9 @@ In Tests geprüft (für `gmail-felder` mit n8n-Items, die aus den sechs `.eml` i
 .venv\Scripts\python -m ablage zeige --projekt "Test Santino"
 ```
 
-Gelesen werden Android- und iPhone-Exporte (`WhatsApp Chat mit ….txt` bzw. `_chat.txt` im Zip), deutsch und englisch. Sprachnachrichten landen als Datei im Bucket; `text` bleibt leer, solange keine Transkription eingerichtet ist (siehe „Sprachnachrichten transkribieren“). Ein eigener Projektname hält die Testzeilen von „BV Simmering“ getrennt. Alles in `quellen` kann vom Übersetzer gelesen und an Claude geschickt werden, deshalb keine privaten Chats importieren.
+Android and iPhone exports are read (`WhatsApp Chat mit ….txt` or `_chat.txt` in the zip), German and English. Voice messages land as a file in the bucket; `text` stays empty as long as no transcription is set up (see "Transcribing voice messages"). A project name of your own keeps the test rows separate from "BV Simmering". Everything in `quellen` can be read by the Übersetzer and sent to Claude, so do not import private chats.
 
-## Architektur
+## Architecture
 
 ```
 adapters/whatsapp.py  eml.py  ordner.py  call.py  whatsapp_live.py  whatsapp_twilio.py
@@ -121,15 +121,15 @@ store.py   Upload in den Bucket + Insert mit content_hash (Backend per Dependenc
 Supabase `quellen` (status = 'neu')  ◀── Übersetzer liest direkt
 ```
 
-- `models.py` Datenmodell, `hashing.py` Identität (SPEC §6), `pdf.py` PDF-Text via pypdf, `api.py` FastAPI, `__main__.py` CLI.
-- Idempotent: gleicher Input zweimal → 0 neue Zeilen, kein Doppel-Upload.
-- Eine kaputte Zeile/Datei bricht den Import nicht ab, sie landet in `fehler`.
+- `models.py` data model, `hashing.py` identity (SPEC §6), `pdf.py` PDF text via pypdf, `api.py` FastAPI, `__main__.py` CLI.
+- Idempotent: same input twice → 0 new rows, no double upload.
+- A broken row/file does not abort the import, it lands in `fehler`.
 
-## Annahmen
+## Assumptions
 
-- Rohdaten sind unveränderlich; `quellen` wird nur eingefügt. Ein später ergänztes Transkript aktualisiert bestehende Zeilen nicht → Tabelle leeren und neu importieren (Belege hängen an `content_hash`, nicht an `id`).
-- WhatsApp: Android/DE-Export ist Pflicht, iOS-Format wird mitgelesen. Sprachnachrichten bekommen ihr Transkript aus einer Sidecar-Datei `<audio>.txt` oder, mit `TRANSKRIPT_API_KEY`, per Whisper-Schnittstelle (einmal direkt gegen Groq gelaufen, noch nicht mit einer echten WhatsApp-Sprachnachricht); sonst bleibt `text` leer.
-- Dieselbe WhatsApp-Nachricht einmal live und einmal per Export ergibt zwei Zeilen (unterschiedliche Identität).
-- Zwei identische Nachrichten derselben Person in derselben Minute fallen zusammen.
-- Keine Auth auf der API: nur lokal oder hinter einem Tunnel betreiben.
-- Demo nutzt Exporte; echte WhatsApp-/Gmail-/Drive-APIs wären weitere Adapter mit demselben Ausgabeformat.
+- Raw data is immutable; `quellen` is insert-only. A transcript added later does not update existing rows → empty the table and re-import (evidence hangs on `content_hash`, not on `id`).
+- WhatsApp: the Android/DE export is mandatory, the iOS format is read as well. Voice messages get their transcript from a sidecar file `<audio>.txt` or, with `TRANSKRIPT_API_KEY`, via the Whisper interface (run once directly against Groq, not yet with a real WhatsApp voice message); otherwise `text` stays empty.
+- The same WhatsApp message once live and once via export produces two rows (different identity).
+- Two identical messages from the same person in the same minute collapse into one.
+- No auth on the API: operate only locally or behind a tunnel.
+- The demo uses exports; real WhatsApp/Gmail/Drive APIs would be further adapters with the same output format.

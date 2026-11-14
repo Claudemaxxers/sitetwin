@@ -1,4 +1,4 @@
-"""Dauerlauf (lauf --dauerhaft): ein Netz-Aussetzer bricht nur den Takt ab, nicht den Lauf. Ohne Claude, ohne Supabase."""
+"""Continuous run (lauf --dauerhaft): a network dropout only aborts the cycle, not the run. Without Claude, without Supabase."""
 
 from argparse import Namespace
 
@@ -11,7 +11,7 @@ from uebersetzer.konfig import laden
 
 
 class WackeligeDB(SpeicherDB):
-    """Wirft beim `fehler_bei`-ten Abruf neuer Quellen einen DNS-Fehler wie am Hotspot."""
+    """Raises a DNS error, like on a hotspot, on the `fehler_bei`-th fetch of new sources."""
 
     def __init__(self, fehler_bei: int):
         super().__init__([], [], [])
@@ -41,17 +41,17 @@ def _starten(monkeypatch, db, dauerhaft, takte=3):
             raise Ende
 
     monkeypatch.setattr(cli.time, "sleep", schlafen)
-    args = Namespace(projekt="BV Simmering", mit_claude=True, dauerhaft=dauerhaft)
+    args = Namespace(projekt="BV Simmering", ohne_claude=False, dauerhaft=dauerhaft)
     return args, pausen
 
 
 def test_dauerlauf_ueberlebt_netzfehler(monkeypatch, capsys):
-    db = WackeligeDB(fehler_bei=2)  # Abruf 1: Kostenschätzung beim Start, Abruf 2: erster Takt
+    db = WackeligeDB(fehler_bei=2)  # fetch 1: cost estimate at start, fetch 2: first cycle
     args, pausen = _starten(monkeypatch, db, dauerhaft=5)
     with pytest.raises(Ende):
         cli.cmd_lauf(args, laden())
     assert pausen == [5, 5, 5]
-    assert db.abrufe == 4  # nach dem Fehler lief die Schleife weiter
+    assert db.abrufe == 4  # after the error the loop kept running
     assert "Netz/Supabase nicht erreichbar (ConnectError" in capsys.readouterr().out
 
 

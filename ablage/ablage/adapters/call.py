@@ -1,4 +1,4 @@
-"""Call-JSON, Vertrag v1 (SPEC §7.4). Identität = call_id."""
+"""Call JSON, contract v1 (SPEC §7.4). Identity = call_id."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class CallV1(BaseModel):
 
 
 def aus_payload(payload: dict, ctx: ImportKontext) -> RawItem:
-    """Wirft pydantic.ValidationError bei Verstoß gegen Vertrag v1."""
+    """Raises pydantic.ValidationError on a violation of contract v1."""
     call = CallV1.model_validate(payload)
     start = call.gestartet_um
     if start.tzinfo is None:

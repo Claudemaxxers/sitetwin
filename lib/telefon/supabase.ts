@@ -1,8 +1,8 @@
 import type { Person, Signal, SignalDB, VerlaufZeile } from "./types";
 
 /**
- * Schreibender Zugriff auf `signale`, lesender auf `personen` und `signal_verlauf`
- * (uebersetzer/schema.sql). Nur auf dem Server benutzen: der Service-Key darf nie in den Browser.
+ * Write access to `signale`, read access to `personen` and `signal_verlauf`
+ * (uebersetzer/schema.sql). Use on the server only: the service key must never reach the browser.
  */
 export function supabaseSignalDB(url: string, key: string, fetchFn: typeof fetch = fetch): SignalDB {
   const base = url.replace(/\/+$/, "");

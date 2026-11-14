@@ -110,9 +110,9 @@ test('Auswahl: wieder geoeffnet zaehlt, Aenderung an einem gewarnten offenen Sig
   const gestern = '2026-11-13T10:00:00Z';
   const neu = '2026-11-14T11:00:00Z';
   const liste = [
-    sig({ id: 'zu', aktualisiert_am: neu }), // Erledigt-Meldung kam schon, jetzt wieder offen
-    sig({ id: 'laeuft', aktualisiert_am: neu }), // gewarnt und noch offen: nur ergaenzt
-    sig({ id: 'altwieder', erstellt_am: gestern, aktualisiert_am: neu }), // vor dem Start angelegt, jetzt wieder geoeffnet
+    sig({ id: 'zu', aktualisiert_am: neu }), // resolved message already sent, now open again
+    sig({ id: 'laeuft', aktualisiert_am: neu }), // warned and still open: only amended
+    sig({ id: 'altwieder', erstellt_am: gestern, aktualisiert_am: neu }), // created before the start, now reopened
     sig({ id: 'altstill', erstellt_am: gestern, aktualisiert_am: gestern }),
   ];
   assert.deepEqual(waehleNeue(liste, { ab: AB, zustand: z, projekt: 'P' }).map((s) => s.id), ['zu', 'altwieder']);
@@ -127,19 +127,19 @@ test('Melder: wieder geoeffnetes Signal wird erneut gewarnt, genau einmal', asyn
   let offen = [sig()];
   const geloest = [];
   const t = bau({ signale: () => offen, geloest });
-  await t.m.tick(); // Warnung
+  await t.m.tick(); // warning
   offen = [];
   geloest.push(sig({ status: 'geloest' }));
-  await t.m.tick(); // Erledigt
+  await t.m.tick(); // resolved
   geloest.length = 0;
   offen = [sig({ aktualisiert_am: '2026-11-14T11:00:00Z' })];
-  await t.m.tick(); // wieder offen
-  await t.m.tick(); // nichts Neues
+  await t.m.tick(); // open again
+  await t.m.tick(); // nothing new
   assert.equal(t.gesendet.length, 3);
   assert.match(t.gesendet[1], /^✅ SiteTwin: erledigt/);
   assert.match(t.gesendet[2], /Wieder offen: Plan Index B veraltet/);
   assert.equal(t.zustand.gewarnt['aaaaaaaa-1111'].zyklus, 1);
-  // zweite Runde: wieder geloest, wieder gemeldet
+  // second round: resolved again, reported again
   offen = [];
   geloest.push(sig({ status: 'geloest' }));
   await t.m.tick();
@@ -154,7 +154,7 @@ test('Melder: ohne Erledigt-Meldung warnt ein wieder geoeffnetes Signal trotzdem
   await t.m.tick();
   offen = [];
   geloest.push(sig({ status: 'geloest' }));
-  await t.m.tick(); // keine Nachricht, Zyklus wird geschlossen
+  await t.m.tick(); // no message, cycle gets closed
   assert.equal(t.gesendet.length, 1);
   geloest.length = 0;
   offen = [sig({ aktualisiert_am: '2026-11-14T11:00:00Z' })];
@@ -167,7 +167,7 @@ test('Melder: Fehler wird hoechstens 3 Mal wiederholt', async () => {
   let n = 0;
   const t = bau({ signale: () => [sig()], senden: async () => { n++; throw new Error('weg'); } });
   for (let i = 0; i < 8; i++) await t.m.tick();
-  assert.equal(n, 4); // 1 + 3 Wiederholungen
+  assert.equal(n, 4); // 1 + 3 retries
 });
 
 test('Melder: Abruffehler wirft nicht', async () => {
@@ -200,7 +200,7 @@ test('Melder: mehr als WARN_MAX_PRO_10MIN werden verworfen, nicht nachgeschickt'
   assert.equal(t.log.filter((l) => /verworfen/.test(l)).length, 2);
 });
 
-// ---- Schleifenschutz ----
+// ---- Loop protection ----
 const nachricht = (id, text, fromMe = true) => ({
   key: { id, remoteJid: '1@g.us', fromMe }, messageTimestamp: 1, message: { conversation: text },
 });
@@ -225,7 +225,7 @@ test('Zustand: gesendete IDs sind begrenzt', () => {
   assert.equal(z.gesendeteIds.at(-1), 'i599');
 });
 
-// ---- Konfiguration ----
+// ---- Configuration ----
 test('Melder ist standardmaessig aus', () => {
   const c = konfig({ WHATSAPP_CHATS: 'Gruppe A' });
   assert.equal(c.warnen.an, false);

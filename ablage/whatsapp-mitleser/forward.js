@@ -1,4 +1,4 @@
-// Schickt eine Anfrage an die Ablage. Wiederholt bei Netz- und 5xx-Fehlern, gibt bei 4xx sofort auf.
+// Sends a request to the Ablage. Retries on network and 5xx errors, gives up immediately on 4xx.
 
 const schlafen = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -8,7 +8,7 @@ export function endpunkt(basis) {
 
 /**
  * @returns {Promise<{ok: boolean, antwort?: object, fehler?: string}>}
- * Wirft nie. `fetchImpl` und `wartezeiten` sind austauschbar, damit Tests ohne Netz laufen.
+ * Never throws. `fetchImpl` and `wartezeiten` are replaceable so that tests run without network.
  */
 export async function sende(basis, body, { fetchImpl = fetch, wartezeiten = [1000, 3000, 8000], timeoutMs = 30000 } = {}) {
   const url = endpunkt(basis);
@@ -24,7 +24,7 @@ export async function sende(basis, body, { fetchImpl = fetch, wartezeiten = [100
       if (r.ok) return { ok: true, antwort: await r.json() };
       letzter = `HTTP ${r.status}`;
       if (r.status >= 400 && r.status < 500) {
-        // 4xx: die Anfrage selbst ist falsch, Wiederholen hilft nicht
+        // 4xx: the request itself is wrong, retrying does not help
         return { ok: false, fehler: letzter };
       }
     } catch (e) {

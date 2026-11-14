@@ -1,6 +1,6 @@
-"""Was der Übersetzer aus einer Quelle macht – das Ausgabeformat für Claude (Structured Outputs).
+"""What the Übersetzer turns a source into – the output format for Claude (Structured Outputs).
 
-Die Felder entsprechen 1:1 den Spalten von `eintraege` und `plaene` in uebersetzer/schema.sql.
+The fields correspond 1:1 to the columns of `eintraege` and `plaene` in uebersetzer/schema.sql.
 """
 
 from __future__ import annotations
@@ -21,24 +21,24 @@ EintragArt = Literal[
     "problem_behoben",
     "frage",
     "sonstiges",
-    "soll_aenderung",  # das Soll ändert sich während der Bauphase ("Keller nur 3x3", "haben wir geändert")
-    "freigabe",        # Bauleitung bestätigt oder lehnt eine vorgeschlagene Soll-Änderung ab
-    "nachweis",        # Foto/PDF eines Dokuments, das eine Soll-Änderung schriftlich belegt
+    "soll_aenderung",  # the Soll changes during construction ("Keller nur 3x3", "haben wir geändert")
+    "freigabe",        # site management confirms or rejects a proposed Soll change
+    "nachweis",        # photo/PDF of a document that proves a Soll change in writing
 ]
 
 
 Schritt = Literal[
-    "staenderwerk",        # Trockenbau: Ständer gestellt
-    "verrohrung",          # Leerrohre verlegt
-    "leitung_eingezogen",  # Kabel eingezogen / Leitungen verlegt
-    "gesetzt",             # Dose, Verteiler, Auslass gesetzt
-    "angeschlossen",       # Geräte angeschlossen, fertig montiert
-    "abnahme",             # Prüfung/Abnahme bestanden
-    "beplankung",          # Wand geschlossen / beplankt / zugemacht
+    "staenderwerk",        # drywall: studs erected
+    "verrohrung",          # empty conduits laid
+    "leitung_eingezogen",  # cables pulled in / lines laid
+    "gesetzt",             # socket, distribution board, outlet set
+    "angeschlossen",       # devices connected, fully mounted
+    "abnahme",             # inspection/acceptance passed
+    "beplankung",          # wall closed / boarded / closed up
     "spachteln",
     "malen",
-    "montage",             # Endmontage (z. B. Rauchmelder)
-    "rueckbau",            # Ausbau / Rausreißen
+    "montage",             # final mounting (e.g. smoke detector)
+    "rueckbau",            # removal / ripping out
     "sonstiges",
 ]
 
@@ -69,7 +69,7 @@ class SollDetails(BaseModel):
     bauteile_entfallen: list[str] = Field(description="Bei soll_aenderung: Schlüssel aus der Bauteil-Liste, die wegfallen oder verlegt werden.")
 
     def als_dict(self) -> dict:
-        """Format, das in eintraege.soll gespeichert und von soll.py gelesen wird."""
+        """Format that is stored in eintraege.soll and read by soll.py."""
         return {
             "bezug": self.bezug or None,
             "freigabe_ja": {"ja": True, "nein": False}.get(self.entscheidung),
@@ -89,8 +89,8 @@ class Eintrag(BaseModel):
     top: Optional[str] = Field(description="Exakt wie in der Liste der Tops, z. B. 'Top 5' oder 'TG'.")
     raum: Optional[str]
     element: Optional[str] = Field(description="Bauteil, z. B. 'Wohnungsverteiler', 'Deckenauslass', 'Steckdose'.")
-    # Für die Mehrkosten im Frontend (lib/twin-model.ts). Pflichtfelder statt optional, sonst wird das
-    # Ausgabeformat für Structured Outputs zu groß: leer = "" bzw. 0.
+    # For the extra costs in the frontend (lib/twin-model.ts). Required fields instead of optional, otherwise the
+    # output format for Structured Outputs gets too large: empty = "" or 0.
     taetigkeit: str = Field(description="Normalisiert, z. B. 'Steckdosen setzen', 'Verteiler versetzen'. Sonst \"\".")
     menge: float = Field(description="Menge, falls genannt (z. B. 3 Stück, 35 m, 6 h). Sonst 0.")
     einheit: str = Field(description="Einheit zur Menge: Stk, lfm, m, h. Sonst \"\".")
@@ -133,7 +133,7 @@ class Ergebnis(BaseModel):
     )
 
 
-# --- Prüf-Agent -------------------------------------------------------------
+# --- Checking agent ---------------------------------------------------------
 
 class SignalVorschlag(BaseModel):
     """Eine Abweichung, die Claude in den neuen Einträgen erkennt."""

@@ -1,4 +1,4 @@
-"""HTTP-Eingang (SPEC §8). Start: uvicorn ablage.api:app --port 8000"""
+"""HTTP intake (SPEC §8). Start: uvicorn ablage.api:app --port 8000"""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def get_jetzt() -> Callable[[], datetime]:
 
 def get_downloader(cfg: config.Einstellungen = Depends(get_einstellungen)) -> whatsapp_twilio.Downloader:
     def lade(url: str) -> bytes:
-        # ohne Zugangsdaten kein leerer Basic-Auth-Header (Twilio-Medien sind standardmäßig offen)
+        # without credentials no empty Basic Auth header (Twilio media are open by default)
         auth = (cfg.twilio_account_sid, cfg.twilio_auth_token) if cfg.twilio_account_sid else None
         r = httpx.get(url, auth=auth, follow_redirects=True, timeout=10.0)
         r.raise_for_status()
@@ -68,7 +68,7 @@ def get_downloader(cfg: config.Einstellungen = Depends(get_einstellungen)) -> wh
 def get_transkribierer(
     cfg: config.Einstellungen = Depends(get_einstellungen),
 ) -> transkript.Transkribierer | None:
-    """Ohne TRANSKRIPT_API_KEY None: Sprachnachrichten bleiben ohne Text."""
+    """Without TRANSKRIPT_API_KEY None: voice messages stay without text."""
     return transkript.transkribierer_aus(
         cfg.transkript_api_key, cfg.transkript_base_url, cfg.transkript_modell
     )
@@ -134,7 +134,7 @@ def token_pruefen(
     x_ablage_token: str | None = Header(default=None),
     cfg: config.Einstellungen = Depends(get_einstellungen),
 ) -> None:
-    """Gemeinsames Token für die n8n-Endpunkte (SPEC §7.7, §7.8, §7.10). Leer = keine Prüfung."""
+    """Shared token for the n8n endpoints (SPEC §7.7, §7.8, §7.10). Empty = no check."""
     if cfg.import_token and not hmac.compare_digest(
         x_ablage_token.encode() if x_ablage_token else b"", cfg.import_token.encode()
     ):
@@ -148,7 +148,7 @@ class GmailMail(BaseModel):
 
 
 def _base64_lesen(roh: str, wo: str) -> bytes:
-    """base64 oder base64url, Padding optional, Leerraum egal. Kaputt → 422 mit `wo`."""
+    """base64 or base64url, padding optional, whitespace ignored. Broken → 422 with `wo`."""
     text = "".join(roh.split())
     try:
         return base64.b64decode(
@@ -187,12 +187,12 @@ def import_email_gmail(
 class GmailAnhang(BaseModel):
     name: str | None = None
     mime: str | None = None
-    base64: str  # Dateiinhalt; "" = leere Datei
+    base64: str  # file content; "" = empty file
 
 
 class GmailFelder(BaseModel):
     projekt: str | None = None
-    mail: dict | str  # $json des Gmail-Nodes mit „Simplify“ aus (Text wird als JSON gelesen)
+    mail: dict | str  # $json of the Gmail node with "Simplify" off (text is read as JSON)
     anhaenge: list[GmailAnhang] | None = None
 
 
@@ -205,7 +205,7 @@ def import_email_gmail_felder(
     ctx: ImportKontext = Depends(get_kontext),
     transkribierer: transkript.Transkribierer | None = Depends(get_transkribierer),
 ) -> ImportErgebnis:
-    """Mail ohne Rohformat, so wie der n8n-Gmail-Node sie zerlegt (SPEC §7.10)."""
+    """Mail without raw format, as the n8n Gmail node splits it up (SPEC §7.10)."""
     teile: list[eml.Teil] = []
     for nr, a in enumerate(eingang.anhaenge or [], start=1):
         daten = _base64_lesen(a.base64, f"anhaenge[{nr - 1}].base64 ({a.name or 'ohne Namen'})")

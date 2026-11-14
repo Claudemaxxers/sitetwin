@@ -1,15 +1,15 @@
-"""Soll-Änderungen während der Bauphase: wer darf das Soll ändern, und ist es schriftlich belegt?
+"""Soll changes during construction: who may change the Soll (target state), and is it documented in writing?
 
-Hintergrund (ÖNORM B 2110): Der Auftraggeber kann Leistungsänderungen anordnen, auch mündlich –
-für den Beweis zählt aber die Schriftform. Deshalb:
+Background (ÖNORM B 2110): the client can order changes to the work, even verbally –
+but for evidence the written form counts. Therefore:
 
-- Nur Personen mit `personen.darf_soll_aendern` (Bauleitung des GU) ordnen an oder geben frei.
-- Meldet die Bauleitung eine Änderung → sofort `freigegeben`, Register wird angepasst.
-- Meldet sie jemand anderes ("das haben wir geändert") → `vorgeschlagen`. Zugehörige Signale
-  bleiben offen, der Arbeiter ist erst nach der Freigabe frei.
-- Freigabe/Ablehnung durch die Bauleitung → `freigegeben` bzw. `abgelehnt`.
-- Schriftlicher Nachweis = Foto oder PDF eines Dokuments von der Bauleitung. Bis dahin steht
-  die Änderung in der Sicht `offene_aufgaben`. Eine Sprachnachricht ist nie ein Nachweis.
+- Only persons with `personen.darf_soll_aendern` (the GC's site management) order or approve.
+- If site management reports a change → immediately `freigegeben`, the register is adjusted.
+- If someone else reports it ("das haben wir geändert") → `vorgeschlagen`. Related signals
+  stay open, the worker is only cleared after the approval.
+- Approval/rejection by site management → `freigegeben` or `abgelehnt`.
+- Written proof = photo or PDF of a document from site management. Until then the
+  change is listed in the view `offene_aufgaben`. A voice message is never proof.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _norm(s: str | None) -> str:
 
 
 def person_finden(name: str | None, personen: list[Zeile]) -> Zeile | None:
-    """Ordnet einen Absender/Personennamen einer Person zu (Name, Alias, oder Name im Absender enthalten)."""
+    """Maps a sender/person name to a person (name, alias, or name contained in the sender)."""
     n = _norm(name)
     if not n:
         return None
@@ -54,7 +54,7 @@ def ist_dokument(quelle: Zeile | None) -> bool:
 
 
 class SollAblauf:
-    """Verarbeitet Einträge der Arten soll_aenderung, freigabe und nachweis eines Projekts."""
+    """Processes a project's entries of the kinds soll_aenderung, freigabe and nachweis."""
 
     def __init__(self, db: DB, projekt: str, signale, quellen: dict[str, Zeile], tops: list[str], bericht,
                  alle_eintraege: list[Zeile] | None = None):
@@ -63,7 +63,7 @@ class SollAblauf:
         self.personen = db.personen(projekt)
         self.nach_schluessel = {a["schluessel"]: a for a in db.soll_aenderungen(projekt)}
 
-    # --- Hilfen -----------------------------------------------------------------
+    # --- Helpers ----------------------------------------------------------------
     def _betroffene_signale(self, sa: Zeile, e: Zeile) -> list[Zeile]:
         el_ids = set(sa.get("element_ids") or [])
         treffer = []
@@ -93,8 +93,8 @@ class SollAblauf:
             log.info("  → offene Aufgabe: schriftlicher Nachweis fehlt")
 
     def _ist_nachtragen(self, element_ids: list[str], sa: Zeile) -> None:
-        """Meldungen, die vor dem Anlegen des Bauteils übersetzt wurden ("3 Stk zusätzlich gesetzt"), nachträglich
-        zuordnen: gleiches Top und gleicher Raum, ab der Soll-Änderung, eindeutig ein neues Bauteil dort."""
+        """Assign reports that were translated before the component was created ("3 Stk zusätzlich gesetzt") after the
+        fact: same Top and same room, from the Soll change onwards, unambiguously one new component there."""
         neue = [x for x in self.db.elemente(self.projekt) if x["id"] in set(element_ids)]
         for el in neue:
             gleicher_ort = [x for x in neue if _norm(x.get("top")) == _norm(el.get("top")) and _norm(x.get("raum")) == _norm(el.get("raum"))]
@@ -112,7 +112,7 @@ class SollAblauf:
                     log.info("  Meldung nachträglich zugeordnet: %s → %s", e["zusammenfassung"][:60], el["bezeichnung"])
 
     def _gleiche_aenderung(self, e: Zeile) -> Zeile | None:
-        """Bereits erfasste Soll-Änderung am selben Ort (z. B. Anordnung GU + "ok machen wir" des Vorarbeiters)."""
+        """Soll change already recorded at the same location (e.g. GC order + the foreman's "ok machen wir")."""
         if not e.get("top"):
             return None
         for a in self.nach_schluessel.values():
@@ -124,7 +124,7 @@ class SollAblauf:
                 return a
         return None
 
-    # --- Arten ------------------------------------------------------------------
+    # --- Kinds ------------------------------------------------------------------
     def verarbeiten(self, e: Zeile) -> None:
         if e["art"] not in SOLL_ARTEN:
             return
@@ -133,7 +133,7 @@ class SollAblauf:
         berechtigt = darf_soll_aendern(e.get("person"), self.personen)
 
         if e["art"] == "anweisung":
-            # "Ja macht das bitte gleich mit" der Bauleitung zu einer vorgeschlagenen Änderung am selben Ort
+            # Site management's "Ja macht das bitte gleich mit" on a proposed change at the same location
             gleich = self._gleiche_aenderung(e) if berechtigt else None
             if gleich and gleich["status"] == "vorgeschlagen":
                 self._freigeben(gleich, e, quelle)
@@ -146,7 +146,7 @@ class SollAblauf:
             gleich = self._gleiche_aenderung(e)
             if gleich:
                 if berechtigt and gleich["status"] == "vorgeschlagen":
-                    self._freigeben(gleich, e, quelle)  # Bauleitung bestätigt eine vorgeschlagene Änderung
+                    self._freigeben(gleich, e, quelle)  # site management confirms a proposed change
                 else:
                     log.info("  Soll-Änderung am selben Ort schon erfasst (%s) – keine zweite", gleich["titel"])
                 return
@@ -197,7 +197,7 @@ class SollAblauf:
 
         elif e["art"] == "nachweis" and ist_dokument(quelle):
             if sa["status"] == "vorgeschlagen":
-                self._freigeben(sa, e, quelle)  # unterschriebenes Dokument der Bauleitung = Freigabe mit Nachweis
+                self._freigeben(sa, e, quelle)  # signed document from site management = approval with proof
             elif sa["status"] == "freigegeben" and sa.get("nachweis_status") != "vorhanden":
                 felder = {"nachweis_status": "vorhanden", "nachweis_quelle_hash": quelle["content_hash"], "nachweis_am": e.get("zeitpunkt")}
                 self.db.soll_aenderung_aendern(sa["id"], felder)

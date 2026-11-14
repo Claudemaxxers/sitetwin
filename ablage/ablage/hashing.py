@@ -1,4 +1,4 @@
-"""Identität und Duplikate (SPEC §6)."""
+"""Identity and duplicates (SPEC §6)."""
 
 from __future__ import annotations
 
@@ -30,18 +30,18 @@ def content_hash(item: RawItem) -> str:
     anhang_sha = item.anhang.sha256 if item.anhang else ""
 
     if typ == "call":
-        # Identität ist call_id: Retries / nachgelieferte Zusammenfassung → keine zweite Zeile.
+        # Identity is call_id: retries / a summary delivered later → no second row.
         return _verbinde(typ, item.projekt, item.meta.get("call_id") or item.original_ref)
 
     if typ == "drive":
-        # Pfad + Dateiinhalt, keine mtime.
+        # Path + file content, no mtime.
         return _verbinde(typ, item.projekt, item.kanal, item.original_ref, anhang_sha)
 
     if typ == "whatsapp" and item.meta.get("wa_id"):
-        # Live-Nachricht: Identität ist die WhatsApp-Message-ID.
+        # Live message: identity is the WhatsApp message ID.
         return _verbinde(typ, item.projekt, item.meta["wa_id"])
 
     zeit = item.zeitpunkt.astimezone(timezone.utc).isoformat() if item.zeitpunkt else ""
-    # Abgeleiteter Text (Transkript, PDF-Text) darf die Identität nicht ändern.
+    # Derived text (transcript, PDF text) must not change the identity.
     text = "" if item.anhang else normalisiere_text(item.text)
     return _verbinde(typ, item.projekt, item.kanal, item.absender, zeit, text, anhang_sha)

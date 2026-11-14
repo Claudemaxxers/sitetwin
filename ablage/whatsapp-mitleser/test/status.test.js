@@ -1,5 +1,5 @@
-// Der Melder warnt auch bei Signalen, die schon "in_bearbeitung" sind (z. B. weil ein
-// Telefon-Agent den Status gesetzt hat, bevor der Melder abgefragt hat). Geloeste nie.
+// The notifier also warns about signals that are already "in_bearbeitung" (e.g. because a
+// phone agent set the status before the notifier polled). Never about resolved ones.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { leererZustand, waehleNeue } from '../melder.js';

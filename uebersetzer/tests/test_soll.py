@@ -1,4 +1,4 @@
-"""Soll-Änderungen während der Bauphase: Rollen, Freigabe, Nachweis – ohne Claude und ohne Supabase."""
+"""Soll changes during construction: roles, approval, proof – without Claude and without Supabase."""
 
 from uebersetzer.db import SpeicherDB
 from uebersetzer.modell import Plan, SollElement
@@ -58,7 +58,7 @@ def test_bauleitung_aendert_soll_direkt_aber_nachweis_fehlt():
     db.eintraege = [e("1", "2026-11-13T09:00:00+01:00", "soll_aenderung", "Thomas Meier (Krenn Bau)", aenderung())]
     b = pruefe(db, None, None)
     [sa] = db.soll_liste
-    assert sa["status"] == "freigegeben" and sa["nachweis_status"] == "fehlt"  # Sprachnachricht ist kein Nachweis
+    assert sa["status"] == "freigegeben" and sa["nachweis_status"] == "fehlt"  # a voice message is not proof
     nach = {x["schluessel"]: x for x in db.elemente_liste}
     assert not nach[DOSE_ALT]["soll_aktiv"]
     assert nach["top 3|bad|steckdose ip44 waschtisch links"]["soll_plan_nr"] == "Änderung"
@@ -77,8 +77,8 @@ def test_arbeiter_meldet_aenderung_signal_bleibt_bis_freigabe():
     pruefe(db, None, None)
     [sa] = db.soll_liste
     assert sa["status"] == "vorgeschlagen" and sa["signal_ids"] == ["s1"]
-    assert db.signale_liste[0]["status"] == "offen"  # Arbeiter ist noch nicht freigegeben
-    assert next(x for x in db.elemente_liste if x["schluessel"] == DOSE_ALT)["soll_aktiv"]  # Register unverändert
+    assert db.signale_liste[0]["status"] == "offen"  # worker is not cleared yet
+    assert next(x for x in db.elemente_liste if x["schluessel"] == DOSE_ALT)["soll_aktiv"]  # register unchanged
 
     db.eintraege.append(e("2", "2026-11-13T09:30:00+01:00", "freigabe", "Thomas Meier (Krenn Bau)",
                           {**aenderung(), "bezug": sa["schluessel"], "freigabe_ja": True}))
@@ -111,11 +111,11 @@ def test_nachweis_nur_als_dokument_der_bauleitung():
     db.eintraege = [e("1", "2026-11-13T09:00:00+01:00", "soll_aenderung", "Thomas Meier", aenderung())]
     pruefe(db, None, None)
     [sa] = db.soll_liste
-    # Foto vom Vorarbeiter zählt nicht
+    # Photo from the foreman does not count
     db.eintraege.append(e("2", "2026-11-13T10:00:00+01:00", "nachweis", "Stefan Huber", {**aenderung(), "bezug": sa["schluessel"]}))
     pruefe(db, None, None)
     assert sa["nachweis_status"] == "fehlt"
-    # Foto des Dokuments von der Bauleitung zählt
+    # Photo of the document from site management counts
     db.eintraege.append(e("3", "2026-11-13T11:00:00+01:00", "nachweis", "Thomas Meier", {**aenderung(), "bezug": sa["schluessel"]}))
     b = pruefe(db, None, None)
     assert sa["nachweis_status"] == "vorhanden" and sa["nachweis_quelle_hash"] == "h-3"
@@ -133,8 +133,8 @@ def test_zweite_pruefung_legt_soll_aenderung_nicht_doppelt_an():
 
 
 def test_falle_f1_zusatzsteckdosen_top4_keine_dublette_und_kein_fehlalarm():
-    """Gesamtlauf 13.11.: GU ordnet 3 Zusatz-Steckdosen Top 4 Küche an (Soll-Änderung), Vorarbeiter sagt 'ok machen wir',
-    Monteur meldet 'gesetzt' (vor dem Anlegen des Bauteils übersetzt), Trockenbau will Montag zumachen → kein Signal."""
+    """Full run 13 Nov: GC orders 3 additional sockets in Top 4 kitchen (Soll change), foreman says 'ok machen wir',
+    installer reports 'gesetzt' (translated before the component was created), drywall wants to close on Monday → no signal."""
     db = SpeicherDB([], [{"projekt": P, "top": "Top 4"}], [])
     db.personen_liste = [dict(p) for p in PERSONEN]
     neu = {"bezeichnung": "Steckdosen Arbeitsplatte zusätzlich", "art": "dose", "top": "Top 4", "raum": "Küche",
@@ -150,12 +150,12 @@ def test_falle_f1_zusatzsteckdosen_top4_keine_dublette_und_kein_fehlalarm():
     pruefe(db, None, None)
     assert len(db.soll_liste) == 1 and db.soll_liste[0]["status"] == "freigegeben"
     dose = next(x for x in db.elemente_liste if x["raum"] == "Küche")
-    assert db.eintraege[2]["element_id"] == dose["id"]  # nachträglich zugeordnet
+    assert db.eintraege[2]["element_id"] == dose["id"]  # assigned after the fact
     assert db.signale_liste == []
 
 
 def test_anweisung_der_bauleitung_gibt_vorgeschlagene_aenderung_frei():
-    """Wallbox TG: Vorarbeiter gibt weiter, was der GU will (Vorschlag); GU: 'Ja macht das bitte gleich mit' (Anweisung)."""
+    """Wallbox TG: foreman passes on what the GC wants (proposal); GC: 'Ja macht das bitte gleich mit' (instruction)."""
     db = neue_db()
     db.quellen = [quelle("h-1"), quelle("h-2")]
     db.eintraege = [

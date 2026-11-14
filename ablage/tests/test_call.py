@@ -17,7 +17,7 @@ def payload() -> dict:
 def test_vertrag_v1(payload):
     item = call.aus_payload(payload, ImportKontext(projekt="Fallback"))
     assert item.typ is QuellTyp.call
-    assert item.projekt == "BV Simmering"  # aus Payload, nicht aus dem Kontext
+    assert item.projekt == "BV Simmering"  # from the payload, not from the context
     assert item.absender == "Stefan Huber"
     assert item.kanal == "+43 660 0000000"
     assert item.original_ref == "call_8f3a2c1e"

@@ -1,12 +1,12 @@
-// Telefon-Agent, Poller: ruft alle N Sekunden POST /api/telefon/anrufen des laufenden SiteTwin auf.
-//   node scripts/telefon.mts [baseUrl] [intervallSekunden]      (Standard: http://localhost:3000, 30)
-//   node scripts/telefon.mts --einmal                            (ein Durchlauf, dann Ende)
-// Liest TELEFON_TOKEN aus .env.local, falls gesetzt.
+// Phone agent, poller: calls POST /api/telefon/anrufen of the running SiteTwin every N seconds.
+//   node scripts/telefon.mts [baseUrl] [intervalSeconds]         (default: http://localhost:3000, 30)
+//   node scripts/telefon.mts --einmal                            (one pass, then exit)
+// Reads TELEFON_TOKEN from .env.local, if set.
 
 try {
   process.loadEnvFile(".env.local");
 } catch {
-  /* keine .env.local: dann ohne Token */
+  /* no .env.local: run without a token */
 }
 
 const args = process.argv.slice(2);

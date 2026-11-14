@@ -1,4 +1,4 @@
-"""Transkription von Sprachnachrichten (SPEC §7.9), ohne Netz: Fake und MockTransport."""
+"""Transcription of voice messages (SPEC §7.9), without network: fake and MockTransport."""
 
 from datetime import datetime, timezone
 from urllib.parse import urlencode
@@ -49,7 +49,7 @@ def backend() -> store.FakeBackend:
 
 @pytest.fixture
 def setup(backend):
-    """(client, setze): setze(transkribierer) ersetzt die Dependency."""
+    """(client, setze): setze(transkribierer) replaces the dependency."""
     api.app.dependency_overrides[api.get_backend] = lambda: backend
     api.app.dependency_overrides[api.get_kontext] = lambda: ImportKontext(projekt="Fallback")
     api.app.dependency_overrides[api.get_einstellungen] = lambda: einstellungen()
@@ -101,7 +101,7 @@ def test_transkribierer_wirft_nachricht_bleibt(setup, backend):
 
 
 def test_ohne_schluessel_wie_bisher(setup, backend):
-    client, _ = setup  # keine Überschreibung: echte Dependency, Einstellungen ohne Schlüssel
+    client, _ = setup  # no override: real dependency, settings without key
     assert api.get_transkribierer(einstellungen()) is None
     assert post(client, FORM).status_code == 200
     (z,) = backend.zeilen.values()
@@ -150,7 +150,7 @@ def test_nachricht_endpunkt_und_bestehendes_bleibt(setup, backend):
     (z,) = backend.zeilen.values()
     assert z["text"] == TEXT and z["anhang_name"] == "PTT-1.opus"
     assert fake.aufrufe[0][1] == "PTT-1.opus"
-    # Grenze: schon gespeicherte Nachricht wird nicht erneut transkribiert
+    # Boundary: an already stored message is not transcribed again
     assert client.post("/import/whatsapp/nachricht", json=body).json()["duplikate"] == 1
     assert len(fake.aufrufe) == 1
 
@@ -243,14 +243,14 @@ def test_live_nachricht_ohne_anhang_unberuehrt():
     assert item.text == "Hallo" and fake.aufrufe == []
 
 
-# --- Stille: Whisper erfindet Text ("Vielen Dank."), die Ablage übernimmt ihn nicht -------------
+# --- Silence: Whisper invents text ("Vielen Dank."), the Ablage does not adopt it ---------------
 
 def _antwort(text, *no_speech):
     return {"text": text, "segments": [{"text": text, "no_speech_prob": w} for w in no_speech]}
 
 
 def test_stille_ergibt_kein_transkript():
-    """Werte wie von Groq whisper-large-v3 bei 4 s Stille gemessen (14.11.2026)."""
+    """Values as measured from Groq whisper-large-v3 on 4 s of silence (14 Nov 2026)."""
     item = audio_item()
     transkript.ergaenze([item], _fabrik(lambda r: httpx.Response(200, json=_antwort(" Vielen Dank.", 0.701))))
     assert item.text == ""
@@ -261,7 +261,7 @@ def test_stille_ergibt_kein_transkript():
 def test_sprache_bleibt_auch_mit_stiller_pause():
     t = _fabrik(lambda r: httpx.Response(200, json=_antwort(" Ja passt.", 0.004)))
     assert t(BYTES, "a.ogg", "audio/ogg") == "Ja passt."
-    # ein stilles Segment neben einem gesprochenen: nicht verwerfen
+    # one silent segment next to a spoken one: do not discard
     t = _fabrik(lambda r: httpx.Response(200, json=_antwort(" Top 5 ist fertig.", 0.9, 0.01)))
     assert t(BYTES, "a.ogg", "audio/ogg") == "Top 5 ist fertig."
 

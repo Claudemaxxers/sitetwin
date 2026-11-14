@@ -1,4 +1,4 @@
-"""Datenmodell (SPEC §4)."""
+"""Data model (SPEC §4)."""
 
 from __future__ import annotations
 
@@ -67,17 +67,17 @@ def mime_typ(dateiname: str) -> str:
 
 
 class Anhang(BaseModel):
-    lokaler_pfad: str | None = None  # nur während des Imports
-    storage_pfad: str | None = None  # gesetzt von store.py
+    lokaler_pfad: str | None = None  # only during the import
+    storage_pfad: str | None = None  # set by store.py
     dateiname: str
     typ: AnhangTyp
     sha256: str
     mimetype: str | None = None
-    # Dateiinhalt, nur während des Imports; wird nie serialisiert.
+    # File content, only during the import; never serialized.
     inhalt: bytes | None = Field(default=None, exclude=True, repr=False)
 
     def lies(self) -> bytes:
-        """Dateiinhalt: im Speicher oder von der Platte (CLI-Import)."""
+        """File content: in memory or from disk (CLI import)."""
         if self.inhalt is not None:
             return self.inhalt
         if self.lokaler_pfad:
@@ -107,7 +107,7 @@ class RawItem(BaseModel):
     projekt: str
     kanal: str | None = None
     absender: str | None = None
-    zeitpunkt: datetime | None  # timezone-aware, Europe/Vienna; None bei Drive
+    zeitpunkt: datetime | None  # timezone-aware, Europe/Vienna; None for Drive
     text: str = ""
     anhang: Anhang | None = None
     original_ref: str
@@ -118,7 +118,7 @@ class RawItem(BaseModel):
 
 
 class ParseFehler(BaseModel):
-    ref: str  # "datei#L12"
+    ref: str  # "file#L12"
     grund: str
 
     def __str__(self) -> str:

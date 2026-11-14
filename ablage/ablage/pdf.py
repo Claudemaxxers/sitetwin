@@ -1,4 +1,4 @@
-"""PDF-Text via pypdf – gemeinsam für E-Mail-Anhänge (§7.2) und Drive (§7.3)."""
+"""PDF text via pypdf – shared by email attachments (§7.2) and Drive (§7.3)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 
 def pdf_text(daten: bytes) -> str:
-    """Extrahierter Text aller Seiten. Wirft bei kaputtem PDF (Aufrufer isoliert den Fehler)."""
+    """Extracted text of all pages. Raises on a broken PDF (the caller isolates the error)."""
     from pypdf import PdfReader
 
     seiten = [(seite.extract_text() or "").strip() for seite in PdfReader(io.BytesIO(daten)).pages]
@@ -17,7 +17,7 @@ def pdf_text(daten: bytes) -> str:
 
 
 def text_und_meta(daten: bytes) -> tuple[str, dict]:
-    """Nie werfend: ("", {"pdf_fehler": …}) bei kaputtem PDF, sonst (text, {"text_quelle": "pypdf"})."""
+    """Never raises: ("", {"pdf_fehler": …}) on a broken PDF, otherwise (text, {"text_quelle": "pypdf"})."""
     try:
         text = pdf_text(daten)
     except Exception as e:

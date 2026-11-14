@@ -1,7 +1,7 @@
-"""Datenqualitäts-Audit für `quellen` + Bucket. Liest nur, schreibt nie.
+"""Data quality audit for `quellen` + bucket. Read-only, never writes.
 
-`pruefe()` ist eine reine Funktion (Zeilen + Bucket-Inhalt rein, Befunde raus) und läuft damit
-auch gegen den FakeBackend. `lade_supabase()` holt die echten Daten.
+`pruefe()` is a pure function (rows + bucket content in, findings out) and therefore also runs
+against the FakeBackend. `lade_supabase()` fetches the real data.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ def _zeit(wert: str | None) -> datetime | None:
 
 
 def item_aus_zeile(z: dict) -> RawItem:
-    """Baut das RawItem aus den Spalten zurück – Grundlage für die Hash-Nachrechnung."""
+    """Rebuilds the RawItem from the columns – basis for recomputing the hash."""
     anhang = None
     if z.get("anhang_pfad"):
         m = _PFAD.match(z["anhang_pfad"])
@@ -70,7 +70,7 @@ def pruefe(
     belege: list[str] | None = None,
     jetzt: datetime | None = None,
 ) -> list[Befund]:
-    """`dateien` = Bucket-Inhalt (Pfad → Bytes). `quelle` = frisch geparste Originale zum Abgleich."""
+    """`dateien` = bucket content (path → bytes). `quelle` = freshly parsed originals to compare against."""
     befunde: list[Befund] = []
 
     def melde(name: str, kaputt: list[str], stufe: str = FEHLER, gut: str = "") -> None:
@@ -79,10 +79,10 @@ def pruefe(
     ref = {z["content_hash"]: z.get("original_ref", "?") for z in zeilen}
     hashes = Counter(z["content_hash"] for z in zeilen)
 
-    # 1 Eindeutigkeit
+    # 1 Uniqueness
     melde("content_hash eindeutig", [h for h, n in hashes.items() if n > 1], gut=f"{len(zeilen)} Zeilen")
 
-    # 2 Hash aus den eigenen Spalten nachrechenbar
+    # 2 Hash can be recomputed from the row's own columns
     nicht_nachrechenbar = []
     for z in zeilen:
         try:
@@ -92,7 +92,7 @@ def pruefe(
             nicht_nachrechenbar.append(f"{z.get('original_ref')}: {e}")
     melde("content_hash aus Spalten nachrechenbar", nicht_nachrechenbar)
 
-    # 3 Wertebereiche und Pflichtfelder
+    # 3 Value ranges and required fields
     typen, status = {t.value for t in QuellTyp}, {s.value for s in Status}
     melde("typ/status im Wertebereich", [z["original_ref"] for z in zeilen if z["typ"] not in typen or z["status"] not in status])
     melde("projekt und original_ref gesetzt", [z["content_hash"][:12] for z in zeilen if not z.get("projekt") or not z.get("original_ref")])
@@ -103,7 +103,7 @@ def pruefe(
     felder = ("anhang_pfad", "anhang_typ", "anhang_name")
     melde("anhang_* vollständig oder leer", [z["original_ref"] for z in zeilen if len({bool(z.get(f)) for f in felder}) > 1])
 
-    # 4 Zeitplausibilität
+    # 4 Time plausibility
     jetzt = jetzt or datetime.now(timezone.utc)
     melde(
         "zeitpunkt plausibel (2020 … morgen)",
@@ -116,7 +116,7 @@ def pruefe(
         stufe=WARNUNG,
     )
 
-    # 5 Text: Inhalt vorhanden, keine Steuerzeichen
+    # 5 Text: content present, no control characters
     ausnahmen = ("anhang_fehlt", "medien_ausgeschlossen")
     melde(
         "Nachricht ohne Anhang hat Text",
@@ -139,7 +139,7 @@ def pruefe(
         stufe=WARNUNG,
     )
 
-    # 6 Storage: Pfadformat, jede Zeile hat ihre Datei, keine Waisen, Inhalt = Hash im Pfad
+    # 6 Storage: path format, every row has its file, no orphans, content = hash in the path
     pfade = {z["anhang_pfad"]: z for z in zeilen if z.get("anhang_pfad")}
     falsch = []
     for pfad, z in pfade.items():
@@ -155,7 +155,7 @@ def pruefe(
     )
     melde("keine leeren Dateien", [p for p, daten in dateien.items() if not daten], stufe=WARNUNG)
 
-    # 7 Verweise innerhalb der Tabelle
+    # 7 References within the table
     melde(
         "meta.gehoert_zu zeigt auf vorhandene Mail",
         [z["original_ref"] for z in zeilen if (g := (z.get("meta") or {}).get("gehoert_zu")) and g not in hashes],
@@ -167,7 +167,7 @@ def pruefe(
         stufe=WARNUNG,
     )
 
-    # 8 Abgleich mit den Originalen: nichts verloren, nichts verfälscht
+    # 8 Comparison with the originals: nothing lost, nothing altered
     if quelle is not None:
         soll = {i.content_hash(): i for i in quelle}
         melde("alles aus den Originalen ist in der Tabelle", [soll[h].original_ref for h in soll if h not in hashes], gut=f"{len(soll)} Items")
@@ -189,7 +189,7 @@ def pruefe(
                 abweichung.append(z["original_ref"])
         melde("Felder byte-gleich zum Original (Umlaute, Emoji, Zeit)", abweichung)
 
-    # 9 Belege aus dem Golden Set auffindbar
+    # 9 Evidence from the golden set can be found
     if belege:
         namen = " ".join((z.get("anhang_name") or "") for z in zeilen)
         melde("Belege aus ERWARTET.md vorhanden", [b for b in belege if b not in namen], gut=f"{len(belege)} Belege")
@@ -212,7 +212,7 @@ def originale(fake_data: Path, ctx: ImportKontext) -> list[RawItem]:
 
 def lade_supabase(backend: store.SupabaseBackend, projekt: str) -> tuple[list[dict], dict[str, bytes]]:
     zeilen: list[dict] = []
-    while True:  # paginiert, PostgREST liefert max. 1000 Zeilen
+    while True:  # paginated, PostgREST returns at most 1000 rows
         teil = (
             backend.client.table(store.TABELLE).select("*").eq("projekt", projekt)
             .order("content_hash").range(len(zeilen), len(zeilen) + 999).execute().data
@@ -225,7 +225,7 @@ def lade_supabase(backend: store.SupabaseBackend, projekt: str) -> tuple[list[di
     praefix = store.slug(projekt)
     for typ in (t.value for t in QuellTyp):
         for obj in bucket.list(f"{praefix}/{typ}", {"limit": 1000}):
-            if obj.get("id"):  # Ordner haben keine id
+            if obj.get("id"):  # folders have no id
                 pfad = str(PurePosixPath(praefix, typ, obj["name"]))
                 dateien[pfad] = bucket.download(pfad)
     return zeilen, dateien

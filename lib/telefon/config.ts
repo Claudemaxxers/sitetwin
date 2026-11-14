@@ -1,4 +1,4 @@
-/** Konfiguration des Telefon-Agenten aus .env.local (nur Server, nie NEXT_PUBLIC_). */
+/** Phone agent configuration from .env.local (server only, never NEXT_PUBLIC_). */
 
 export interface TelefonConfig {
   apiKey: string;
@@ -6,20 +6,20 @@ export interface TelefonConfig {
   phoneNumberId: string;
   baseUrl: string;
   webhookSecret: string;
-  /** Hackathon-Sicherung: wenn gesetzt, gehen ALLE Anrufe an diese Nummer, nie an die aus der DB. */
+  /** Hackathon safeguard: if set, ALL calls go to this number, never to the one from the DB. */
   testnummer: string | null;
-  /** TELEFON_TROCKEN=1: Signale werden ausgewählt und protokolliert, aber nicht angerufen. */
+  /** TELEFON_TROCKEN=1: signals are selected and logged, but no call is placed. */
   trocken: boolean;
-  /** Schützt POST /api/telefon/anrufen (Header X-Telefon-Token). Leer = keine Prüfung. */
+  /** Protects POST /api/telefon/anrufen (header X-Telefon-Token). Empty = no check. */
   token: string;
-  /** Ablage (FastAPI), bekommt das Transkript per POST /import/call. Leer = nicht weiterleiten. */
+  /** Ablage (FastAPI), receives the transcript via POST /import/call. Empty = do not forward. */
   ablageUrl: string;
   ablageToken: string;
   projektName: string;
   laendervorwahl: string;
-  /** Wie oft ein nicht erreichtes Signal höchstens angerufen wird. */
+  /** Maximum number of call attempts for a signal that was not reached. */
   maxVersuche: number;
-  /** Mindestabstand zwischen zwei Versuchen in Minuten. */
+  /** Minimum gap between two attempts, in minutes. */
   wartezeitMin: number;
 }
 

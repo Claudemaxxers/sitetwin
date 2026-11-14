@@ -20,7 +20,7 @@ export interface Bericht {
   uebersprungen: { signal_id: string; titel: string; grund: string }[];
 }
 
-/** "+43 660 000 00 00" → "+436600000000"; "0660…" → Landesvorwahl; sonst null. */
+/** "+43 660 000 00 00" → "+436600000000"; "0660…" → country code; otherwise null. */
 export function e164(roh: string | null | undefined, laendervorwahl = "+43"): string | null {
   let n = (roh ?? "").replace(/[\s\-().\/]/g, "");
   if (!n) return null;
@@ -31,7 +31,7 @@ export function e164(roh: string | null | undefined, laendervorwahl = "+43"): st
 
 const norm = (s: string) => s.toLowerCase().replace(/\(.*?\)/g, "").replace(/\s+/g, " ").trim();
 
-/** Person zu `zustaendig`: Name oder Alias, notfalls Vor- oder Nachname allein. */
+/** Person for `zustaendig`: name or alias, if need be first or last name alone. */
 export function personZu(zustaendig: string | null, personen: Person[]): Person | null {
   if (!zustaendig) return null;
   const z = norm(zustaendig);
@@ -45,7 +45,7 @@ export function personZu(zustaendig: string | null, personen: Person[]): Person 
   );
 }
 
-/** Nummer aus dem Signal, sonst aus `personen`; die Testnummer gewinnt immer. */
+/** Number from the signal, otherwise from `personen`; the test number always wins. */
 export function telefonnummer(
   s: Signal,
   personen: Person[],
@@ -55,7 +55,7 @@ export function telefonnummer(
   return e164(s.telefon, cfg.laendervorwahl) ?? e164(personZu(s.zustaendig, personen)?.telefon, cfg.laendervorwahl);
 }
 
-/** Bisherige Anrufversuche eines Signals = Wechsel nach in_bearbeitung im Verlauf. */
+/** Previous call attempts for a signal = transitions to in_bearbeitung in the history. */
 export function versuche(signalId: string, verlauf: VerlaufZeile[]): { anzahl: number; letzter: Date | null } {
   const treffer = verlauf.filter((v) => v.signal_id === signalId && v.status === "in_bearbeitung");
   const letzter = treffer.length ? new Date(treffer[treffer.length - 1].zeitpunkt) : null;
@@ -63,10 +63,10 @@ export function versuche(signalId: string, verlauf: VerlaufZeile[]): { anzahl: n
 }
 
 /**
- * Ein Durchlauf: jedes offene, noch nicht angerufene Signal wird angerufen.
- * Konvention mit Prüf-Agent und ElevenLabs-Agent: status='offen' + angerufen_am null → anrufen;
- * danach status='in_bearbeitung', anruf_id = conversation_id, angerufen_am, telefon.
- * Der Agent selbst setzt nach dem Gespräch status (geloest/offen) und bewertung_notiz.
+ * One pass: every open signal that has not been called yet gets a call.
+ * Convention with the checking agent and the ElevenLabs agent: status='offen' + angerufen_am null → call;
+ * afterwards status='in_bearbeitung', anruf_id = conversation_id, angerufen_am, telefon.
+ * After the conversation the agent itself sets status (geloest/offen) and bewertung_notiz.
  */
 export async function offeneSignaleAnrufen(
   db: SignalDB,

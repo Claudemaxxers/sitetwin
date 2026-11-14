@@ -1,18 +1,18 @@
-"""Gmail über n8n ohne Rohmail (SPEC §7.10).
+"""Gmail via n8n without the raw mail (SPEC §7.10).
 
-n8n Cloud lässt die eigene Google-Anmeldung nicht in HTTP-Request-Nodes zu, die Rohmail ist dort
-also nicht abrufbar. Der Gmail-Node liefert die Mail aber zerlegt (mailparser, „Simplify“ aus).
-Daraus entstehen hier dieselben Zwischenobjekte wie beim `.eml`-Import (`eml.items`), damit Zeilen
-und content_hash gleich sind:
+n8n Cloud does not allow its own Google sign-in in HTTP Request nodes, so the raw mail cannot be
+fetched there. The Gmail node does deliver the mail split up, though (mailparser, "Simplify" off).
+From that, the same intermediate objects as in the `.eml` import (`eml.items`) are built here, so
+that rows and content_hash are identical:
 
-- Kopfzeilen: bevorzugt die Rohzeilen aus `headers` (n8n: `{"subject": "Subject: …"}`), die laufen
-  durch denselben Python-Parser wie bei `.eml`. Fehlt eine, wird sie aus den Einzelfeldern
-  (`subject`, `from`, `to`, `cc`, `date`, `messageId`, `inReplyTo`) nachgebaut.
-- Body: `text` (Zeilenenden auf `\\n`, außen getrimmt); reine HTML-Mail → `html` durch denselben
-  HTML-zu-Text-Weg wie bei `.eml`.
-- Anhänge: Name, Content-Type und Bytes aus dem Request, Reihenfolge wie geliefert.
+- Headers: preferably the raw lines from `headers` (n8n: `{"subject": "Subject: …"}`), which run
+  through the same Python parser as for `.eml`. If one is missing, it is rebuilt from the single
+  fields (`subject`, `from`, `to`, `cc`, `date`, `messageId`, `inReplyTo`).
+- Body: `text` (line endings to `\\n`, trimmed on the outside); HTML-only mail → `html` through the
+  same HTML-to-text path as for `.eml`.
+- Attachments: name, Content-Type and bytes from the request, order as delivered.
 
-Die genaue Form des n8n-Items ist nicht an einer echten Ausführung geprüft, deshalb tolerant.
+The exact shape of the n8n item has not been checked against a real execution, hence tolerant.
 """
 
 from __future__ import annotations
@@ -32,11 +32,11 @@ from . import eml
 
 
 class FelderFehler(ValueError):
-    """Die Mail ist so nicht verwertbar; der Text nennt, was fehlt (→ HTTP 422)."""
+    """The mail cannot be used like this; the text names what is missing (→ HTTP 422)."""
 
 
-# Kopfzeilen, die eml.items liest, plus Content-Type (nur für die Wahl zwischen text und html).
-# Schlüssel klein, Wert: (Name im Kopf, Feldnamen im n8n-Item ohne Rücksicht auf Groß/Klein).
+# Headers that eml.items reads, plus Content-Type (only for choosing between text and html).
+# Key lowercase, value: (name in the header, field names in the n8n item, case-insensitive).
 _KOEPFE: dict[str, tuple[str, tuple[str, ...]]] = {
     "message-id": ("Message-ID", ("messageId", "message_id", "message-id")),
     "subject": ("Subject", ("subject",)),
@@ -52,7 +52,7 @@ _UMBRUCH_OHNE_EINZUG = re.compile(r"\r?\n(?![ \t])|\r(?![\n \t])")
 
 
 def _feld(mail: dict, *namen: str):
-    """Erstes nicht leeres Feld unter einem der Namen, erst exakt, dann ohne Groß/Klein."""
+    """First non-empty field under one of the names, first exact, then case-insensitive."""
     for n in namen:
         if mail.get(n) not in (None, ""):
             return mail[n]
@@ -64,8 +64,8 @@ def _feld(mail: dict, *namen: str):
 
 
 def _kopfzeilen(headers) -> dict[str, str]:
-    """Rohzeilen aus `headers` → {name: wert}. Erwartet n8n-Form `{"subject": "Subject: …"}`,
-    nimmt auch Werte ohne Präfix und Listen `[{name, value}]` (Gmail-API) bzw. `[{key, line}]`."""
+    """Raw lines from `headers` → {name: value}. Expects the n8n shape `{"subject": "Subject: …"}`,
+    also accepts values without prefix and lists `[{name, value}]` (Gmail API) or `[{key, line}]`."""
     if isinstance(headers, dict):
         paare = list(headers.items())
     elif isinstance(headers, list):
@@ -81,7 +81,7 @@ def _kopfzeilen(headers) -> dict[str, str]:
         if not isinstance(name, str):
             continue
         name = name.strip().lower()
-        if isinstance(wert, list):  # mehrfacher Kopf: wie Python msg[name] den ersten
+        if isinstance(wert, list):  # repeated header: the first one, like Python msg[name]
             wert = wert[0] if wert else None
         if name not in _KOEPFE or not isinstance(wert, str):
             continue
@@ -104,7 +104,7 @@ def _eine_adresse(a: dict) -> str | None:
 
 
 def _adressen(wert) -> str | None:
-    """mailparser-Adressobjekt `{value: [{address, name}], text}`, Liste davon oder Text."""
+    """mailparser address object `{value: [{address, name}], text}`, a list of them, or text."""
     if isinstance(wert, str):
         return wert
     if isinstance(wert, list):
@@ -133,7 +133,7 @@ def _adressen(wert) -> str | None:
 
 
 def _datum(wert) -> str | None:
-    """ISO (mailparser: `2026-11-10T08:12:00.000Z`), Epoch-ms oder schon RFC 2822 → Date-Kopf."""
+    """ISO (mailparser: `2026-11-10T08:12:00.000Z`), epoch ms or already RFC 2822 → Date header."""
     if isinstance(wert, bool) or wert is None:
         return None
     if isinstance(wert, (int, float)) or (isinstance(wert, str) and wert.strip().isdigit()):
@@ -142,7 +142,7 @@ def _datum(wert) -> str | None:
         try:
             d = datetime.fromisoformat(wert.strip().replace("Z", "+00:00"))
         except ValueError:
-            return wert  # vielleicht schon RFC 2822; der Kopf-Parser versucht es
+            return wert  # maybe already RFC 2822; the header parser will try
     else:
         return None
     if d.tzinfo is None:
@@ -167,7 +167,7 @@ def _aus_feld(name: str, wert) -> str | None:
 def _kopf_nachricht(mail: dict) -> tuple[EmailMessage, dict[str, str]]:
     zeilen = _kopfzeilen(_feld(mail, "headers"))
     roh = "".join(_KOEPFE[n][0] + ": " + w.lstrip(" \t") + "\n" for n, w in zeilen.items())
-    # Bytes wie beim .eml-Import (8-Bit-UTF-8 im Kopf wird dann gleich behandelt)
+    # bytes as in the .eml import (8-bit UTF-8 in the header is then handled the same way)
     msg: EmailMessage = email.message_from_bytes(  # type: ignore[assignment]
         roh.encode("utf-8", "surrogateescape") + b"\n", policy=email.policy.default
     )
@@ -178,7 +178,7 @@ def _kopf_nachricht(mail: dict) -> tuple[EmailMessage, dict[str, str]]:
         if text:
             try:
                 msg[kopfname] = text
-            except Exception:  # unbrauchbarer Einzelwert: wie ein fehlender Kopf behandeln
+            except Exception:  # unusable single value: treat like a missing header
                 pass
     return msg, zeilen
 
@@ -202,7 +202,7 @@ def _auspacken(mail) -> dict:
             raise FelderFehler(f"mail ist Text, aber kein JSON: {e}") from e
     if not isinstance(mail, dict) or not mail:
         raise FelderFehler("mail fehlt oder ist kein JSON-Objekt (erwartet: $json des Gmail-Nodes)")
-    # ganzes n8n-Item statt nur $json
+    # whole n8n item instead of only $json
     if isinstance(mail.get("json"), dict) and set(mail) <= {"json", "binary", "pairedItem"}:
         mail = mail["json"]
     return mail
@@ -211,7 +211,7 @@ def _auspacken(mail) -> dict:
 def aus_felder(
     mail, anhaenge: Iterable[eml.Teil], ctx: ImportKontext
 ) -> list[RawItem]:
-    """n8n-Gmail-Item (Simplify aus) + Anhänge → dieselben RawItems wie `eml.aus_bytes`."""
+    """n8n Gmail item (Simplify off) + attachments → the same RawItems as `eml.aus_bytes`."""
     mail = _auspacken(mail)
     text, html = _feld(mail, "text"), _feld(mail, "html")
     if (

@@ -1,4 +1,4 @@
-"""CLI: python -m ablage import <whatsapp|email|ordner|call> <pfad> --projekt "BV Simmering"."""
+"""CLI: python -m ablage import <whatsapp|email|ordner|call> <path> --projekt "BV Simmering"."""
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ def main(argv: list[str] | None = None) -> int:
 
     backend = store.FakeBackend() if args.dry_run else store.supabase_backend()
     ctx = ImportKontext(projekt=args.projekt, tz=cfg.tz)
-    transkribierer = None  # --dry-run ruft keine Schnittstelle auf
+    transkribierer = None  # --dry-run calls no external interface
     if not args.dry_run:
         transkribierer = transkript.transkribierer_aus(
             cfg.transkript_api_key, cfg.transkript_base_url, cfg.transkript_modell

@@ -1,4 +1,4 @@
-"""Storage-Upload + Upsert über content_hash (SPEC §5, §6). Backend per Dependency Injection."""
+"""Storage upload + upsert via content_hash (SPEC §5, §6). Backend via dependency injection."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from . import transkript
 from .models import Anhang, ImportErgebnis, ParseFehler, RawItem, Status
 
 TABELLE = "quellen"
-BATCH = 500  # Zeilen pro Insert-Request
+BATCH = 500  # rows per insert request
 _UMLAUTE = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
 
 
@@ -19,7 +19,7 @@ class Backend(Protocol):
     def vorhandene_hashes(self, hashes: Sequence[str]) -> set[str]: ...
     def upload(self, pfad: str, daten: bytes, mimetype: str) -> None: ...
     def einfuegen(self, zeilen: list[dict]) -> int:
-        """Fügt ein, ignoriert vorhandene content_hash. Gibt die Zahl neuer Zeilen zurück."""
+        """Inserts, ignores existing content_hash. Returns the number of new rows."""
         ...
 
 
@@ -60,7 +60,7 @@ def speichern(
     backend: Backend,
     transkribierer: transkript.Transkribierer | None = None,
 ) -> ImportErgebnis:
-    """Zentrale Stelle aller Wege: neue Sprachnachrichten werden vor dem Speichern transkribiert."""
+    """Central point of all paths: new voice messages are transcribed before saving."""
     ergebnis = ImportErgebnis()
     kandidaten: dict[str, RawItem] = {}
     for e in eintraege:
@@ -68,7 +68,7 @@ def speichern(
             ergebnis.fehler.append(str(e))
             continue
         ergebnis.gelesen += 1
-        kandidaten.setdefault(e.content_hash(), e)  # Doppelte im selben Lauf zählen als Duplikat
+        kandidaten.setdefault(e.content_hash(), e)  # duplicates within the same run count as duplicate
 
     if not kandidaten:
         return ergebnis
@@ -77,7 +77,7 @@ def speichern(
     zeilen: list[dict] = []
     fehlgeschlagen = 0
     neue = {h: i for h, i in kandidaten.items() if h not in schon_da}
-    transkript.ergaenze(neue.values(), transkribierer)  # nur Neues; Bestehendes bleibt unberührt
+    transkript.ergaenze(neue.values(), transkribierer)  # only new items; existing ones stay untouched
     for h, item in neue.items():
         try:
             if item.anhang is not None:
@@ -88,16 +88,16 @@ def speichern(
                     item.anhang.mimetype or "application/octet-stream",
                 )
             zeilen.append(zeile(item, h))
-        except Exception as fehler:  # ein kaputter Anhang bricht den Import nicht ab
+        except Exception as fehler:  # one broken attachment does not abort the import
             fehlgeschlagen += 1
             ergebnis.fehler.append(f"{item.original_ref}: Upload fehlgeschlagen: {fehler}")
 
-    for start in range(0, len(zeilen), BATCH):  # große Exporte nicht in einem Request
+    for start in range(0, len(zeilen), BATCH):  # do not send large exports in one request
         teil = zeilen[start : start + BATCH]
         try:
             ergebnis.neu += backend.einfuegen(teil)
         except Exception:
-            for z in teil:  # Fehler isolieren: einzeln nachversuchen
+            for z in teil:  # isolate errors: retry one by one
                 try:
                     ergebnis.neu += backend.einfuegen([z])
                 except Exception as fehler:
@@ -109,7 +109,7 @@ def speichern(
 
 
 class FakeBackend:
-    """In-Memory-Ersatz für Supabase (Tests, --dry-run)."""
+    """In-memory replacement for Supabase (tests, --dry-run)."""
 
     def __init__(self) -> None:
         self.zeilen: dict[str, dict] = {}

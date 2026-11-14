@@ -1,4 +1,4 @@
-"""Ein Durchlauf: alle Quellen mit status='neu' übersetzen und in eintraege/plaene schreiben."""
+"""One run: translate all sources with status='neu' and write them to eintraege/plaene."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ log = logging.getLogger("uebersetzer")
 
 STAMMDATEN_ENDUNGEN = {".csv", ".xlsx", ".md", ".txt"}
 
-# (system, messages) -> Ergebnis. In echt: Claude; in Tests: ein Fake.
+# (system, messages) -> Ergebnis. For real: Claude; in tests: a fake.
 Extrahierer = Callable[[list[dict[str, Any]], list[dict[str, Any]]], Ergebnis]
 
 
@@ -28,8 +28,8 @@ class Bericht:
     plaene: int = 0
     uebersprungen: int = 0
     fehler: list[str] = field(default_factory=list)
-    spaeter: int = 0  # vorübergehende Fehler (Rate Limit, Netz) – bleiben 'neu'
-    bauteile: int = 0  # neu angelegte Soll-Bauteile
+    spaeter: int = 0  # transient errors (rate limit, network) – stay 'neu'
+    bauteile: int = 0  # newly created Soll components
 
 
 def _sortkey(q: Zeile) -> tuple:
@@ -38,7 +38,7 @@ def _sortkey(q: Zeile) -> tuple:
 
 
 def zeitachse_vor(quelle: Zeile, alle: list[Zeile], anzahl: int) -> list[Zeile]:
-    """Die letzten `anzahl` datierten Quellen vor dieser (Stammdaten ohne Datum ausgenommen)."""
+    """The last `anzahl` dated sources before this one (master data without a date excluded)."""
     eigener = _sortkey(quelle)
     frueher = [q for q in alle if q.get("zeitpunkt") and q["content_hash"] != quelle["content_hash"] and _sortkey(q) < eigener]
     return frueher[-anzahl:]
@@ -79,13 +79,13 @@ def ist_plandokument(quelle: Zeile) -> bool:
 
 
 def _ohne_llm(quelle: Zeile) -> list[Eintrag] | None:
-    """Fälle, die keinen Claude-Aufruf brauchen. None = Claude fragen."""
+    """Cases that need no Claude call. None = ask Claude."""
     meta = quelle.get("meta") or {}
     text = (quelle.get("text") or "").strip()
     if meta.get("geloescht"):
         return []
     if quelle["typ"] == "drive" and anhang.endung(quelle) in STAMMDATEN_ENDUNGEN and not ist_plandokument(quelle):
-        return []  # LV, Tops, Projektinfo: liegen als Stammdaten in eigenen Tabellen
+        return []  # LV, Tops, project info: stored as master data in their own tables
     if quelle.get("anhang_typ") == "audio" and not text:
         return [Eintrag(
             art="sonstiges",
@@ -136,7 +136,7 @@ def verarbeite(db: DB, extrahierer: Extrahierer, projekt_filter: str | None, kon
                 eintraege, plaene = ergebnis.eintraege, ergebnis.plaene
                 soll_details = {d.eintrag_nr: d.als_dict() for d in ergebnis.soll}
                 if ergebnis.elemente and not ist_plandokument(quelle):
-                    # Bauteile aus einer Soll-Änderung: erst nach Freigabe ins Register (soll.py), hier nur merken
+                    # Components from a Soll change: into the register only after approval (soll.py), just remember them here
                     nr = next((i for i, x in enumerate(eintraege, start=1) if x.art == "soll_aenderung"), None)
                     if nr:
                         soll_details.setdefault(nr, {"bezug": None, "freigabe_ja": None, "titel": None,
@@ -149,7 +149,7 @@ def verarbeite(db: DB, extrahierer: Extrahierer, projekt_filter: str | None, kon
                     bericht.bauteile += rb.neu
                     log.info("  Bauteile: %d neu, %d aktualisiert, %d entfallen", rb.neu, rb.aktualisiert, rb.deaktiviert)
                 if quelle["typ"] == "drive":
-                    eintraege = []  # Drive-Dateien sind Stammdaten: nur Pläne und Bauteile übernehmen, keine Ereignisse
+                    eintraege = []  # Drive files are master data: only take over plans and components, no events
             else:
                 bericht.uebersprungen += 1
 

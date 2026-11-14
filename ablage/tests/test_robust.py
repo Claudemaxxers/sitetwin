@@ -1,4 +1,4 @@
-"""Härtetests: Zeilenenden, Re-Export, Zufallsmüll, Zeitumstellung, Menge, Unicode."""
+"""Stress tests: line endings, re-export, random garbage, clock change, volume, Unicode."""
 
 import random
 import shutil
@@ -36,11 +36,11 @@ def test_spaeterer_laengerer_export_nur_das_neue_ist_neu(tmp_path, ctx):
         f.write("16.11.26, 07:01 - Ali Demir: Bin in 10 min da\n")
     ergebnis = store.speichern(whatsapp.parse(spaeter, ctx), backend)
     assert (ergebnis.gelesen, ergebnis.neu, ergebnis.duplikate) == (41, 2, 39)
-    assert backend.uploads == 5  # Anhänge nicht erneut hochgeladen
+    assert backend.uploads == 5  # attachments not uploaded again
 
 
 def test_teilweise_ueberlappender_export_ohne_anfang(tmp_path, ctx):
-    """Chat wird später nur ab dem 12.11. exportiert: Zeilennummern verschieben sich, Hashes nicht."""
+    """Chat is later exported only from 12 Nov on: line numbers shift, hashes do not."""
     backend = store.FakeBackend()
     store.speichern(whatsapp.parse(WA, ctx), backend)
     teil = tmp_path / "wa"
@@ -76,7 +76,7 @@ def test_kaputte_bytes_im_export(tmp_path, ctx):
         b"10.11.26, 07:02 - A: gut\n10.11.26, 07:03 - A: kaputt \xff\xfe hier\n10.11.26, 07:04 - B: danach\n"
     )
     items = list(whatsapp.parse(tmp_path, ctx))
-    assert [i.absender for i in items] == ["A", "A", "B"]  # eine kaputte Zeile kostet nicht den Rest
+    assert [i.absender for i in items] == ["A", "A", "B"]  # one broken line does not cost the rest
 
 
 def test_zeitumstellung(tmp_path, ctx):
@@ -91,7 +91,7 @@ def test_zeitumstellung(tmp_path, ctx):
     assert len(items) == 4 and all(isinstance(i, RawItem) for i in items)
     assert items[2].zeitpunkt.utcoffset().total_seconds() == 7200
     assert items[3].zeitpunkt.utcoffset().total_seconds() == 3600
-    assert [i.content_hash() for i in items] == _hashes(tmp_path, ctx)  # deterministisch
+    assert [i.content_hash() for i in items] == _hashes(tmp_path, ctx)  # deterministic
 
 
 def test_unicode_bleibt_exakt(ctx):
@@ -102,7 +102,7 @@ def test_unicode_bleibt_exakt(ctx):
     for i in items:
         if not i.anhang:
             nr = int(i.original_ref.rsplit("#L", 1)[1])
-            assert roh[nr - 1].endswith(i.text)  # Text steht unverändert an der referenzierten Zeile
+            assert roh[nr - 1].endswith(i.text)  # text sits unchanged at the referenced line
 
 
 def test_20000_nachrichten_schnell_und_in_batches(tmp_path, ctx):

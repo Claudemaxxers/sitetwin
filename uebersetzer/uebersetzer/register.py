@@ -1,10 +1,10 @@
-"""Bauteil-Register: Soll-Bauteile aus Plänen übernehmen und für die Zuordnung bereitstellen.
+"""Component register: take over Soll components from plans and provide them for assignment.
 
-Regeln beim Übernehmen eines Plans (plan_nr X, Index I):
-- Bauteile aus dem Plan werden angelegt oder auf Index I aktualisiert (soll_aktiv = true).
-- Bauteile, die ein älterer Index von X vorsah und Index I nicht mehr enthält, werden soll_aktiv = false.
-  Beispiel: Verteiler im Vorraum (Index B) → nach Index C inaktiv, Verteiler im Abstellraum neu.
-- Ein älterer Index überschreibt nie Bauteile eines neueren.
+Rules when taking over a plan (plan_nr X, index I):
+- Components from the plan are created or updated to index I (soll_aktiv = true).
+- Components that an older index of X contained and index I no longer does become soll_aktiv = false.
+  Example: distribution board in the Vorraum (index B) → inactive after index C, board in the Abstellraum new.
+- An older index never overwrites components of a newer one.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class RegisterBericht:
     neu: int = 0
     aktualisiert: int = 0
     deaktiviert: int = 0
-    element_ids: list = None  # neu angelegte oder aktualisierte Bauteile (nur bei Soll-Änderungen gefüllt)
+    element_ids: list = None  # newly created or updated components (only filled for Soll changes)
 
 
 def _top(top: str | None, bekannte: list[str]) -> str | None:
@@ -72,7 +72,7 @@ def soll_uebernehmen(
             vorhanden[schluessel] = zeile
             bericht.neu += 1
         elif index and alt.get("soll_plan_index") and alt["soll_plan_nr"] == plan_nr and alt["soll_plan_index"] > index:
-            zeile = alt  # neuerer Index hat Vorrang
+            zeile = alt  # newer index takes precedence
         else:
             db.element_aendern(alt["id"], felder)
             alt.update(felder)
@@ -80,7 +80,7 @@ def soll_uebernehmen(
             bericht.aktualisiert += 1
         in_diesem_plan[schluessel] = zeile
 
-    # gehoert_zu auflösen: Bezeichnung des Eltern-Bauteils im selben Top (bevorzugt selber Raum)
+    # Resolve gehoert_zu: designation of the parent component in the same Top (preferably the same room)
     for s in soll:
         if not s.gehoert_zu:
             continue
@@ -94,7 +94,7 @@ def soll_uebernehmen(
             db.element_aendern(kind["id"], {"gehoert_zu": kandidaten[0]["id"]})
             kind["gehoert_zu"] = kandidaten[0]["id"]
 
-    # Was ein älterer Index desselben Plans vorsah und dieser nicht mehr: inaktiv
+    # What an older index of the same plan contained and this one no longer does: inactive
     if plan_nr and index:
         for schluessel, e in vorhanden.items():
             if (
@@ -109,7 +109,7 @@ def soll_uebernehmen(
 
 
 def soll_aenderungen_liste(aenderungen: list[Zeile]) -> str:
-    """Für den Prompt: offene bzw. noch nicht nachgewiesene Soll-Änderungen."""
+    """For the prompt: Soll changes that are open or not yet backed by proof."""
     relevant = [
         a for a in aenderungen
         if a["status"] == "vorgeschlagen" or (a["status"] == "freigegeben" and a.get("nachweis_status") == "fehlt")
@@ -125,8 +125,8 @@ def soll_aenderungen_liste(aenderungen: list[Zeile]) -> str:
 
 
 def soll_aenderung_anwenden(db: DB, projekt: str, sa: Zeile, tops: list[str]) -> RegisterBericht:
-    """Eine freigegebene Soll-Änderung ins Bauteil-Register übernehmen.
-    Neue Bauteile bekommen soll_plan_nr = 'Änderung', entfallene werden soll_aktiv = false."""
+    """Apply an approved Soll change to the component register.
+    New components get soll_plan_nr = 'Änderung', dropped ones become soll_aktiv = false."""
     bericht = RegisterBericht(element_ids=[])
     vorhanden = {e["schluessel"]: e for e in db.elemente(projekt)}
     for s in sa.get("bauteile_neu") or []:
@@ -154,7 +154,7 @@ def soll_aenderung_anwenden(db: DB, projekt: str, sa: Zeile, tops: list[str]) ->
 
 
 def bauteil_liste(elemente: list[Zeile]) -> str:
-    """Für den Prompt: Schlüssel, Art, Bezeichnung, Lage, Status im Soll."""
+    """For the prompt: key, kind, designation, location, status in the Soll."""
     if not elemente:
         return "(noch keine Bauteile aus Plänen bekannt)"
     nach_id = {e["id"]: e for e in elemente}

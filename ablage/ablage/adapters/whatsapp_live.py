@@ -1,4 +1,4 @@
-"""Eine einzelne Live-WhatsApp-Nachricht als JSON (SPEC §7.5). Identität = wa_id."""
+"""A single live WhatsApp message as JSON (SPEC §7.5). Identity = wa_id."""
 
 from __future__ import annotations
 
@@ -30,10 +30,10 @@ class LiveAnhang(BaseModel):
 
 class LiveNachricht(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    projekt: str | None = None  # fehlt → DEFAULT_PROJEKT
+    projekt: str | None = None  # missing → DEFAULT_PROJEKT
     kanal: str | None = None
     absender: str = Field(min_length=1)
-    zeitpunkt: datetime  # ISO; ohne Offset = Europe/Vienna
+    zeitpunkt: datetime  # ISO; without offset = Europe/Vienna
     text: str = ""
     wa_id: str = Field(min_length=1)
     anhang: LiveAnhang | None = None

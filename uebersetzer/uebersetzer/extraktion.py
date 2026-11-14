@@ -1,4 +1,4 @@
-"""Der eigentliche Claude-Aufruf: eine Quelle + Kontext → Ergebnis (Einträge, Pläne)."""
+"""The actual Claude call: one source + context → Ergebnis (entries, plans)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class ExtraktionsFehler(Exception):
     pass
 
 
-# Token-Verbrauch über alle Aufrufe dieses Prozesses (für die Kostenanzeige).
+# Token usage across all calls of this process (for the cost display).
 VERBRAUCH = {"aufrufe": 0, "input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
 
 
@@ -28,10 +28,10 @@ def baue_anfrage(
     bauteile: str = "(noch keine Bauteile aus Plänen bekannt)",
     soll_aenderungen: str = "(keine)",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Gibt (system, messages) zurück. Getrennt vom Aufruf, damit Tests den Prompt prüfen können."""
+    """Returns (system, messages). Separate from the call so tests can check the prompt."""
     system = [
         {"type": "text", "text": prompt.SYSTEM},
-        # Stammdaten ändern sich pro Projekt kaum → zusammen mit dem System-Prompt cachen.
+        # Master data hardly changes per project → cache it together with the system prompt.
         {"type": "text", "text": stammdaten, "cache_control": {"type": "ephemeral"}},
     ]
     kontext = "\n".join(prompt.quelle_kurz(q) for q in zeitachse) or "(noch nichts)"

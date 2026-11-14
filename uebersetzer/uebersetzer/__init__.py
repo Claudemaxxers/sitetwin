@@ -1,5 +1,5 @@
-"""SiteTwin Übersetzer: quellen (Rohdaten) → eintraege + plaene (strukturierte Datenbank).
+"""SiteTwin Übersetzer (translator): quellen (raw data) → eintraege + plaene (structured database).
 
-Schritt 2 aus KONZEPT.md. Liest die Tabelle `quellen` der Ablage (ablage/SPEC.md §5),
-schreibt nur `eintraege`, `plaene` und in `quellen` ausschließlich `status` + `meta.fehler`.
+Step 2 in KONZEPT.md. Reads the Ablage's table `quellen` (ablage/SPEC.md §5),
+writes only `eintraege`, `plaene` and, in `quellen`, exclusively `status` + `meta.fehler`.
 """

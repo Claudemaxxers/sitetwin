@@ -1,8 +1,8 @@
-"""POST /import/email/gmail-felder (SPEC §7.10): Mail so, wie der n8n-Gmail-Node sie zerlegt.
+"""POST /import/email/gmail-felder (SPEC §7.10): mail as the n8n Gmail node splits it up.
 
-Das n8n-Item wird hier aus der .eml nachgebaut (Form laut n8n-Quellcode `parseRawEmail` +
-mailparser, nicht an einer echten Ausführung geprüft). Maßstab: dieselben Zeilen und
-content_hash-Werte wie der .eml-Import.
+The n8n item is rebuilt here from the .eml (shape per n8n source code `parseRawEmail` +
+mailparser, not checked against a real execution). Benchmark: the same rows and
+content_hash values as the .eml import.
 """
 
 import base64
@@ -21,7 +21,7 @@ from .test_n8n_eingang import CTX, client, einstellungen, setup  # noqa: F401  (
 EMLS = sorted((FAKE_DATA / "email").glob("*.eml"))
 PLANER = FAKE_DATA / "email" / "2026-11-10_0912_Planer_Index_C_Top5.eml"
 URL = "/import/email/gmail-felder"
-# meta-Schlüssel, die je Weg anders sind (gehen nicht in den Hash)
+# meta keys that differ per path (do not go into the hash)
 WEG_META = {"datei", "quelle", "gmail_id", "gmail_weg"}
 
 
@@ -41,7 +41,7 @@ def _adresse(h) -> dict | None:
 
 
 def n8n_item(pfad, kopfzeilen: bool = True) -> tuple[dict, list[dict]]:
-    """Nachbau von $json und den Anhängen des Gmail Triggers mit Simplify aus."""
+    """Rebuild of $json and the attachments of the Gmail Trigger with Simplify off."""
     msg = email.message_from_bytes(pfad.read_bytes(), policy=email.policy.default)
     plain = msg.get_body(preferencelist=("plain",))
     mail = {
@@ -63,7 +63,7 @@ def n8n_item(pfad, kopfzeilen: bool = True) -> tuple[dict, list[dict]]:
     }
     if kopfzeilen:  # n8n: headers[zeile.key] = zeile.line
         mail["headers"] = {k.lower(): f"{k}: {v}" for k, v in msg.raw_items()}
-    mail = {k: v for k, v in mail.items() if v is not None}  # JSON lässt undefined weg
+    mail = {k: v for k, v in mail.items() if v is not None}  # JSON omits undefined
     anhaenge = [
         {
             "name": t.get_filename(),
@@ -89,7 +89,7 @@ def post(client, mail, anhaenge=None, headers=None, **kw):
     return client.post(URL, json={"mail": mail, "anhaenge": anhaenge or [], **kw}, headers=headers or {})
 
 
-# ---- gleiche Zeilen und Hashes wie .eml ----
+# ---- same rows and hashes as .eml ----
 
 
 def test_alle_fake_mails_vorhanden():
@@ -117,7 +117,7 @@ def test_anhaenge_zeilen_und_dateien(client, backend):
     post(client, mail, anhaenge)
     anhang = next(z for z in backend.zeilen.values() if z["anhang_name"])
     assert anhang["anhang_name"] == "Plan_E-05_Top5_IndexC.pdf" and anhang["anhang_typ"] == "pdf"
-    assert anhang["text"].strip()  # PDF-Text wie beim .eml-Import
+    assert anhang["text"].strip()  # PDF text as in the .eml import
     assert backend.dateien[anhang["anhang_pfad"]] == base64.b64decode(anhaenge[0]["base64"])
 
 
@@ -152,7 +152,7 @@ def test_projekt_leer_fallback(client, backend, projekt):
     assert {z["projekt"] for z in backend.zeilen.values()} == {"Fallback"}
 
 
-# ---- tolerantes Lesen ----
+# ---- tolerant reading ----
 
 
 def _hashes(client, backend, mail, anhaenge=None) -> set[str]:
@@ -196,17 +196,17 @@ def test_crlf_text_wird_als_lf_gespeichert(client, backend):
 def test_headers_varianten_gleicher_hash(client, backend):
     mail, anhaenge = n8n_item(PLANER)
     erwartet = set(eml_zeilen(PLANER))
-    # Schlüssel in beliebiger Schreibung, Werte ohne "Name:"-Präfix
+    # keys in any casing, values without "Name:" prefix
     ohne_praefix = {k.upper(): v.split(":", 1)[1] for k, v in mail["headers"].items()}
     assert _hashes(client, backend, {**mail, "headers": ohne_praefix}, anhaenge) == erwartet
-    # Liste wie Gmail-API payload.headers; Einzelfelder kaputt, Kopfzeilen gewinnen
+    # list like Gmail API payload.headers; single fields broken, headers win
     liste = [{"name": k, "value": v.split(":", 1)[1].strip()} for k, v in mail["headers"].items()]
     kaputt = {**mail, "headers": liste, "from": 42, "subject": "falsch", "date": "kein Datum"}
     assert _hashes(client, backend, kaputt, anhaenge) == erwartet
 
 
 def test_gefaltete_kopfzeile(client, backend):
-    """Sonderwunsch-Mail hat einen gefalteten, RFC-2047-kodierten Betreff."""
+    """The Sonderwunsch mail has a folded, RFC 2047 encoded subject."""
     pfad = next(p for p in EMLS if "Sonderwunsch" in p.name)
     mail, anhaenge = n8n_item(pfad)
     assert "\n" in mail["headers"]["subject"]
@@ -237,7 +237,7 @@ def test_reine_html_mail(client, backend):
         "id": "h1",
         "headers": {k.lower(): f"{k}: {v}" for k, v in msg.raw_items()},
         "html": msg.get_body().get_content(),
-        "text": "HALLO\n\nWAND TOP 5 VERSCHOBEN",  # mailparser macht aus HTML eigenen Text
+        "text": "HALLO\n\nWAND TOP 5 VERSCHOBEN",  # mailparser turns HTML into its own text
     }
     assert _hashes(client, backend, mail) == erwartet
 

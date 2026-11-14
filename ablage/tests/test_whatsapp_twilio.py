@@ -48,7 +48,7 @@ def aufrufe() -> list[str]:
 
 @pytest.fixture
 def setup(backend, aufrufe):
-    """Liefert (client, setze_cfg); Downloader ist ein Fake ohne Netz."""
+    """Returns (client, setze_cfg); the downloader is a fake without network."""
     state = {"cfg": einstellungen(), "fehler": False}
 
     def lade(url: str) -> bytes:
@@ -134,7 +134,7 @@ def test_gleiche_sid_zweimal_ein_duplikat(setup, backend):
     post(client, FORM)
     post(client, {**FORM, "Body": "Retry"})
     assert len(backend.zeilen) == 1
-    assert post(client, FORM).status_code == 200  # Retry bleibt 200
+    assert post(client, FORM).status_code == 200  # retry stays 200
     r = client.post("/import/whatsapp/nachricht", json={
         "absender": "x", "zeitpunkt": "2026-11-14T08:00:00+01:00", "wa_id": FORM["MessageSid"],
         "projekt": "Fallback",

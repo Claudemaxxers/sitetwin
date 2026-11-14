@@ -6,9 +6,9 @@ import { ereignisVerarbeiten, type ElevenEvent } from "@/lib/telefon/webhook";
 export const dynamic = "force-dynamic";
 
 /**
- * Post-Call-Webhook von ElevenLabs. In ElevenLabs eintragen: https://<host>/api/telefon/webhook,
- * Ereignisse post_call_transcription und call_initiation_failure, Secret in ELEVENLABS_WEBHOOK_SECRET.
- * Antwortet 200 bei Erfolg, 401 bei falscher Signatur, 500 bei Fehlern (dann wiederholt ElevenLabs).
+ * Post-call webhook from ElevenLabs. Register in ElevenLabs: https://<host>/api/telefon/webhook,
+ * events post_call_transcription and call_initiation_failure, secret in ELEVENLABS_WEBHOOK_SECRET.
+ * Responds 200 on success, 401 on a wrong signature, 500 on errors (ElevenLabs then retries).
  */
 export async function POST(req: Request) {
   const cfg = telefonConfig();

@@ -1,4 +1,4 @@
-"""Konfiguration aus ablage/.env (SPEC §9)."""
+"""Configuration from ablage/.env (SPEC §9)."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ class Einstellungen:
     twilio_auth_token: str = ""
     twilio_webhook_url: str = ""
     import_token: str = ""
-    transkript_api_key: str = ""  # leer = Transkription aus; nie loggen
+    transkript_api_key: str = ""  # empty = transcription off; never log
     transkript_base_url: str = "https://api.openai.com/v1"
     transkript_modell: str = "whisper-1"
 

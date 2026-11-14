@@ -1,5 +1,5 @@
-// Reine Funktionen: Baileys-Nachricht -> Anfrage an POST /import/whatsapp/nachricht der Ablage.
-// Kein Socket, kein Netz, kein Dateizugriff. Dadurch ohne WhatsApp testbar.
+// Pure functions: Baileys message -> request to POST /import/whatsapp/nachricht of the Ablage.
+// No socket, no network, no file access. Therefore testable without WhatsApp.
 
 const WRAPPER = [
   'ephemeralMessage',
@@ -31,7 +31,7 @@ const ENDUNG_NACH_MIME = {
   'text/csv': 'csv',
 };
 
-/** Packt Wrapper (fluechtige Nachrichten, einmal ansehen, Dokument mit Beschriftung) aus. */
+/** Unpacks wrappers (ephemeral messages, view once, document with caption). */
 export function entpacken(message) {
   let m = message;
   for (let i = 0; i < 5 && m; i++) {
@@ -42,7 +42,7 @@ export function entpacken(message) {
   return m ?? null;
 }
 
-/** Unix-Sekunden aus number, string oder Long-artigem Objekt. */
+/** Unix seconds from a number, string or Long-like object. */
 export function sekunden(ts) {
   if (ts == null) return null;
   if (typeof ts === 'number') return ts;
@@ -57,7 +57,7 @@ export function istStatusOderBroadcast(jid) {
 }
 
 /**
- * Was steckt in der Nachricht? Gibt {art, text, medium} zurueck oder {art: 'ignoriert', grund}.
+ * What is inside the message? Returns {art, text, medium} or {art: 'ignoriert', grund}.
  * art: text | bild | video | audio | dokument
  */
 export function inhalt(msg) {
@@ -104,7 +104,7 @@ function nurZiffern(jid) {
   return /^\d{5,}$/.test(nutzer) ? nutzer : null;
 }
 
-/** Handynummer des Absenders, wenn bekannt (LID-Adressen sind keine Nummern). */
+/** Sender's mobile number, if known (LID addresses are not numbers). */
 export function absenderNummer(msg, eigeneJid) {
   if (msg.key.fromMe) return nurZiffern(eigeneJid);
   const kandidaten = [msg.key.participant, msg.key.participantAlt, msg.key.remoteJid, msg.key.remoteJidAlt];
@@ -124,8 +124,8 @@ export function absenderText(msg, { eigeneJid, eigenerName } = {}) {
 }
 
 /**
- * Anfrage-Body fuer die Ablage. `anhang` ist {mimetype, dateiname, base64} oder null
- * (Download passiert ausserhalb, damit diese Funktion rein bleibt).
+ * Request body for the Ablage. `anhang` is {mimetype, dateiname, base64} or null
+ * (the download happens outside so that this function stays pure).
  */
 export function baueAnfrage(msg, { kanal, projekt, anhang = null, eigeneJid, eigenerName } = {}) {
   const i = inhalt(msg);
@@ -148,7 +148,7 @@ export function baueAnfrage(msg, { kanal, projekt, anhang = null, eigeneJid, eig
 
 // ---- Allowlist ------------------------------------------------------------
 
-/** "Name A, Name B, 123-456@g.us" -> {namen: Set(klein), jids: Set(klein), leer} */
+/** "Name A, Name B, 123-456@g.us" -> {namen: Set(lowercase), jids: Set(lowercase), leer} */
 export function parseAllowlist(wert) {
   const namen = new Set();
   const jids = new Set();
@@ -162,7 +162,7 @@ export function parseAllowlist(wert) {
   return { namen, jids, leer: namen.size === 0 && jids.size === 0 };
 }
 
-/** Darf dieser Chat weitergereicht werden? `gruppenname` ist der Betreff, falls Gruppe und bekannt. */
+/** May this chat be forwarded? `gruppenname` is the subject, if it is a group and known. */
 export function istErlaubt(allowlist, { jid, jidAlt, gruppenname }) {
   if (allowlist.leer) return false;
   for (const j of [jid, jidAlt]) {
@@ -171,7 +171,7 @@ export function istErlaubt(allowlist, { jid, jidAlt, gruppenname }) {
   return Boolean(gruppenname) && allowlist.namen.has(gruppenname.trim().toLowerCase());
 }
 
-/** Kanalname: Gruppenname, sonst Name/Nummer des Gegenuebers im 1:1-Chat. */
+/** Channel name: group name, otherwise name/number of the other party in a 1:1 chat. */
 export function kanalName(msg, gruppenname) {
   if (gruppenname) return gruppenname;
   const jid = msg.key.remoteJid ?? '';

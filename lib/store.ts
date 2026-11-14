@@ -14,9 +14,9 @@ import type { Flag, SiteEvent } from "./types";
 const g = globalThis as unknown as { __sitetwin?: { db: DatabaseSync; bus: EventEmitter } };
 
 /**
- * Lokal liegt die Datenbank unter ./data. Auf Vercel ist das Projektverzeichnis
- * schreibgeschützt, dort geht sie nach /tmp: flüchtig, pro Funktionsinstanz,
- * und wird bei jedem Kaltstart neu mit den Startdaten gefüllt.
+ * Locally the database lives under ./data. On Vercel the project directory is
+ * read-only, so there it goes to /tmp: ephemeral, per function instance,
+ * and refilled with the seed data on every cold start.
  */
 function dataDir() {
   return process.env.VERCEL ? path.join(os.tmpdir(), "sitetwin") : path.join(process.cwd(), "data");

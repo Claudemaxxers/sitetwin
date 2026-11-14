@@ -1,12 +1,13 @@
-"""Kommandozeile (aus sitetwin/uebersetzer/ starten):
+"""Command line (run from sitetwin/uebersetzer/):
 
-    uv run python -m uebersetzer lauf --mit-claude          # echte DB: alle quellen mit status='neu'
-    uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30
-    uv run python -m uebersetzer trockenlauf                # fake_data, ohne Claude (kostenlos)
-    uv run python -m uebersetzer trockenlauf --mit-claude --limit 5
+    uv run python -m uebersetzer lauf                       # real DB: all quellen with status='neu'
+    uv run python -m uebersetzer lauf --dauerhaft 30        # loop, look again every 30 s
+    uv run python -m uebersetzer pruefen                    # checking agent only
+    uv run python -m uebersetzer trockenlauf --ohne-claude  # fake_data, no API call (free)
+    uv run python -m uebersetzer trockenlauf --limit 5
 
-HACKATHON-KOSTENSPERRE (bleibt absichtlich drin): Claude-Aufrufe kosten Geld (im Team über
-Hendriks privaten Key). Ohne --mit-claude ruft kein Befehl die API auf.
+Claude is called by default. --ohne-claude skips every API call (fixed rules only).
+--mit-claude is still accepted so older commands keep working; it has no effect.
 """
 
 from __future__ import annotations
@@ -32,12 +33,12 @@ from .modell import Ergebnis
 REPO = Path(__file__).resolve().parents[2]
 
 
-# Netz- und Supabase-Fehler, die im Dauerlauf nur den Takt abbrechen, nicht den Lauf (z. B. DNS-Aussetzer am Hotspot).
+# Network and Supabase errors that only abort one cycle of the loop, not the run (e.g. DNS dropouts on a hotspot).
 NETZFEHLER = (httpx.HTTPError, APIError)
 
 
 def _takt(args, schritt) -> None:
-    """Ein Durchgang. Im Dauerlauf überlebt die Schleife Netzfehler; der nächste Takt versucht es wieder."""
+    """One pass. In loop mode the loop survives network errors; the next cycle tries again."""
     try:
         schritt()
     except NETZFEHLER as err:
@@ -46,20 +47,12 @@ def _takt(args, schritt) -> None:
         print(f"⚠ Netz/Supabase nicht erreichbar ({type(err).__name__}: {err}). Nächster Versuch in {args.dauerhaft} s.", flush=True)
 
 
-CENT_PRO_AUFRUF = 0.08  # gemessen 13.11.: 49 Aufrufe Haiku 5.5 ≈ 4 Cent
+CENT_PRO_AUFRUF = 0.08  # measured 13.11.: 49 calls to Haiku 5.5 ≈ 4 cents
 
 
-def _kostensperre(args, anzahl_aufrufe: int) -> None:
-    """HACKATHON-KOSTENSPERRE: bricht ab, wenn Claude aufgerufen würde, ohne dass --mit-claude gesetzt ist.
-    Bleibt absichtlich drin (siehe README, Abschnitt Kosten)."""
-    schaetzung = anzahl_aufrufe * CENT_PRO_AUFRUF
-    if not args.mit_claude:
-        sys.exit(
-            f"Kostensperre: {anzahl_aufrufe} Quellen würden an Claude gehen (ca. {schaetzung:.1f} Cent, "
-            "privater Key von Hendrik).\nNur wenn nötig: mit --mit-claude erneut starten. "
-            "Kostenlos testen: uv run pytest oder trockenlauf ohne --mit-claude."
-        )
-    print(f"Claude wird für {anzahl_aufrufe} Quellen aufgerufen (ca. {schaetzung:.1f} Cent).")
+def _kostenhinweis(anzahl_aufrufe: int) -> None:
+    """Prints how many sources go to Claude and the estimated cost."""
+    print(f"Claude wird für {anzahl_aufrufe} Quellen aufgerufen (ca. {anzahl_aufrufe * CENT_PRO_AUFRUF:.1f} Cent).")
 
 
 def _claude_aufrufe(db, projekt: str | None) -> int:
@@ -128,19 +121,18 @@ def _pruef_ausgabe(b) -> None:
 
 
 def cmd_lauf(args, k: konfig_mod.Konfig) -> None:
-    """Übersetzen und danach prüfen – die ganze Kette für die Demo."""
+    """Translate, then check: the whole chain for the demo."""
     from .pruefung import pruefe
 
     db = _supabase(k)
     aufrufe = _claude_aufrufe(db, args.projekt)
-    if aufrufe:
-        _kostensperre(args, aufrufe)
+    mit_claude = not args.ohne_claude
+    if aufrufe and mit_claude:
+        _kostenhinweis(aufrufe)
     elif not args.dauerhaft:
-        print("Keine neuen Quellen, die Claude brauchen.")
-    if not args.mit_claude and args.dauerhaft:
-        sys.exit("Kostensperre: --dauerhaft nur zusammen mit --mit-claude.")
-    extrahierer = _claude_extrahierer(k) if args.mit_claude else None
-    pruefer = _claude_pruefer(k) if args.mit_claude else None
+        print("Keine neuen Quellen, die Claude brauchen." if not aufrufe else "Ohne Claude: nur feste Regeln.")
+    extrahierer = _claude_extrahierer(k) if mit_claude else None
+    pruefer = _claude_pruefer(k) if mit_claude else None
 
     def durchgang() -> None:
         if extrahierer:
@@ -155,7 +147,7 @@ def cmd_lauf(args, k: konfig_mod.Konfig) -> None:
 
 
 class _NurLesen:
-    """Liest aus Supabase, schreibt nichts: Schreibzugriffe werden nur protokolliert."""
+    """Reads from Supabase, writes nothing: write calls are only recorded."""
 
     def __init__(self, db: SupabaseDB):
         self._db = db
@@ -187,17 +179,17 @@ def cmd_pruefen(args, k: konfig_mod.Konfig) -> None:
         db = _NurLesen(db)
         print("Trocken: es wird nichts in die Datenbank geschrieben.")
     pruefer = None
-    if args.mit_claude:
+    if not args.ohne_claude:
         from itertools import groupby
 
         gruppen = sum(
             1 for _, g in groupby(db.ungepruefte_eintraege(args.projekt), key=lambda e: e["quelle_hash"])
             if any(e["art"] in PRUEF_ARTEN for e in g)
         )
-        _kostensperre(args, gruppen)
+        _kostenhinweis(gruppen)
         pruefer = _claude_pruefer(k)
     else:
-        print("Nur feste Regeln (kostenlos). Claude-Prüfung mit --mit-claude.")
+        print("Nur feste Regeln (kostenlos, --ohne-claude).")
     while True:
         _takt(args, lambda: _pruef_ausgabe(pruefe(db, args.projekt, pruefer)))
         if not args.dauerhaft:
@@ -216,9 +208,10 @@ def cmd_trockenlauf(args, k: konfig_mod.Konfig) -> None:
         tops, lv = testquellen.stammdaten_aus_csv(fake / "drive" / "Projekt_Simmering", k.projekt)
         db = SpeicherDB(quellen, tops, lv)
 
-        if args.mit_claude:
-            _kostensperre(args, _claude_aufrufe(db, None))
-        if not args.mit_claude:
+        mit_claude = not args.ohne_claude
+        if mit_claude:
+            _kostenhinweis(_claude_aufrufe(db, None))
+        if not mit_claude:
             def extrahierer(system, messages):
                 teile = messages[0]["content"]
                 art = ", ".join(t["type"] for t in teile)
@@ -230,7 +223,7 @@ def cmd_trockenlauf(args, k: konfig_mod.Konfig) -> None:
         bericht = verarbeite(db, extrahierer, None, k.kontext_quellen)
 
     _ausgabe(bericht)
-    if args.mit_claude:
+    if mit_claude:
         print("\nPläne:")
         for p in db.aktuelle_plaene(k.projekt):
             print(f"  {p['plan_nr']} Index {p['plan_index']} (gültig) – {p.get('aenderung') or ''}")
@@ -272,8 +265,9 @@ def main() -> None:
     pr.add_argument("--projekt")
     pr.add_argument("--trocken", action="store_true", help="aus Supabase lesen, nichts schreiben")
     pr.add_argument("--dauerhaft", type=int, metavar="SEK")
-    for befehl in (l, t, pr):  # HACKATHON-KOSTENSPERRE
-        befehl.add_argument("--mit-claude", action="store_true", help="Claude wirklich aufrufen (kostet Geld)")
+    for befehl in (l, t, pr):
+        befehl.add_argument("--ohne-claude", action="store_true", help="keine Claude-Aufrufe, nur feste Regeln (kostenlos)")
+        befehl.add_argument("--mit-claude", action="store_true", help="ohne Wirkung (Claude ist Standard), nur für alte Befehle")
     t.add_argument("--limit", type=int, help="nur die ersten N datierten Quellen")
     t.add_argument("--json", help="Ergebnis zusätzlich als JSON speichern")
     args = p.parse_args()
