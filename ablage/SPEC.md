@@ -228,7 +228,7 @@ Twilio-Webhook "When a message comes in", `POST /import/whatsapp/twilio`, `appli
 - Sprachnachrichten kommen mit leerem `text` an und werden, wenn `TRANSKRIPT_API_KEY` gesetzt ist, vor dem Speichern transkribiert (7.9). Die Anfrage läuft im Threadpool; ihr Timeout (12 s) liegt unter Twilios 15 s.
 
 ### 7.7 Gmail über n8n (`POST /import/email/gmail`, JSON)
-n8n (Cloud) holt die Mails per Gmail-OAuth und liefert sie fertig an. OAuth liegt komplett in n8n, die Ablage kennt keine Google-Zugangsdaten. Gebaut nach dem dokumentierten Gmail-Format, noch nicht gegen eine echte n8n-Instanz gelaufen.
+n8n (Cloud) holt die Mails per Gmail-OAuth und liefert sie fertig an. OAuth liegt komplett in n8n, die Ablage kennt keine Google-Zugangsdaten. Gebaut nach dem dokumentierten Gmail-Format, noch nicht gegen eine echte n8n-Instanz gelaufen. Auf n8n Cloud nicht nutzbar (Rohabruf mit der verwalteten Google-Anmeldung gesperrt, Stand 14.11.2026); der Ablauf in `n8n/` nutzt deshalb 7.10. Bleibt für eine eigene Google-OAuth-App.
 - Body: `{"raw": "<RFC-822-Mail, base64url wie Gmail-API format=raw>", "gmail_id": "18c0…", "projekt": "optional"}`. `raw` und `gmail_id` Pflicht (nicht leer), `projekt` fehlt → `DEFAULT_PROJEKT`.
 - `raw` wird dekodiert (fehlendes Padding wird toleriert, Standard-Alphabet ebenfalls), dann läuft `eml.aus_bytes(daten, "gmail-<gmail_id>.eml", ctx)` wie bei 7.2. Dieselbe Mail als `.eml` und über Gmail ergibt dieselben `content_hash`-Werte, also keine zweite Zeile.
 - `meta` jedes Items bekommt zusätzlich `quelle: "gmail"` und `gmail_id` (`meta` geht nicht in den Hash).
@@ -252,6 +252,16 @@ Ein Item mit Audio-Anhang (`anhang.typ = audio`) und leerem `text` wird **vor de
 - **Grenze:** Wegen Upsert mit `ignore_duplicates` (6) bekommt eine bereits gespeicherte Sprachnachricht nachträglich kein Transkript, auch nicht nach einem fehlgeschlagenen ersten Versuch. Einen Nachtrags-Befehl gibt es nicht; Abhilfe: Zeile löschen und neu importieren.
 - **Stand:** in Tests mit nachgebauter Schnittstelle (`httpx.MockTransport`) geprüft, noch nicht gegen einen echten Anbieter und eine echte WhatsApp-Sprachnachricht gelaufen. Die Audiodateien in `fake_data/` sind Platzhalter, keine Aufnahmen.
 
+### 7.10 Gmail-Felder über n8n (`POST /import/email/gmail-felder`, JSON)
+Grund: n8n Cloud sperrt seine verwaltete Google-Anmeldung in HTTP-Request-Nodes, die Rohmail für 7.7 ist dort nicht abrufbar. Der Gmail Trigger liefert die Mail aber zerlegt. Gebaut nach dem n8n-Quellcode (`parseRawEmail`, mailparser), am 14.11.2026 einmal gegen n8n Cloud gelaufen (Testmail ohne Anhang, Form des Items wie angenommen); Anhänge sind dort ungeprüft.
+- Body: `{"projekt": "optional", "mail": {…}, "anhaenge": [{"name": "Plan.pdf", "mime": "application/pdf", "base64": "…"}]}`. `mail` = `$json` des Gmail Triggers mit „Simplify“ aus (Objekt; als JSON-Text oder als ganzes n8n-Item `{json, binary}` wird es ebenfalls angenommen). `anhaenge` optional, je Eintrag `base64` Pflicht (`""` = leere Datei, base64 und base64url, Padding optional), `name` und `mime` optional. `projekt` fehlt oder leer → `DEFAULT_PROJEKT`.
+- Erwartete Form von `mail`: `headers` als `{"subject": "Subject: …", …}` (Rohzeilen, Schlüssel klein), dazu `subject`, `text`, `html` (oder `false`), `date` (ISO), `messageId`, `inReplyTo`, `from`/`to`/`cc` als `{value: [{address, name}], text}`, `id` (Gmail-ID). Tolerant: Schlüssel ohne Rücksicht auf Groß/Klein, Kopfzeilen mit oder ohne `Name:`-Präfix oder als Liste `[{name, value}]`, Adressen als Objekt, Liste oder Text, `messageId` mit oder ohne spitze Klammern.
+- Verarbeitung: Die Kopfzeilen `Message-ID`, `Subject`, `From`, `To`, `Cc`, `Date`, `In-Reply-To` (und `Content-Type`) werden aus `headers` mit demselben Python-Parser wie 7.2 gelesen; fehlt eine, wird sie aus dem Einzelfeld gebaut. Body = `text` (Zeilenenden → `\n`, außen getrimmt); ist die Mail ein einzelner `text/html`-Teil oder fehlt `text`, dann `html` über dieselbe HTML-zu-Text-Funktion wie 7.2. Danach `eml.items(…)`, dieselbe Funktion wie bei 7.2 und 7.7: gleiche Felder, gleiche Anhang-Zeilen (PDF-Text per pypdf), gleicher `content_hash`. Dateiname für `meta.datei` und als Ersatz-`original_ref`: `gmail-<id>.eml`.
+- `meta` jedes Items zusätzlich: `quelle: "gmail"`, `gmail_weg: "felder"`, `gmail_id` (wenn `id` da ist). `meta` geht nicht in den Hash.
+- Gleicher Hash wie 7.2 und 7.7, solange mailparsers `text` nach Angleichen der Zeilenenden und Trimmen gleich Pythons Text-Teil ist. Bekannte Abweichungen (dann zweite Mail-Zeile, Anhang-Zeilen bleiben gleich): HTML-Mail ohne Text-Teil in einem `multipart`-Container, `format=flowed`, mehrere Text-Teile. Eingebettete `cid:`-Bilder können auf diesem Weg zusätzliche Anhang-Zeilen ergeben. Gespeicherter `text` hat immer `\n` als Zeilenende.
+- 422 mit Klartext: `mail` fehlt, ist leer oder kein Objekt; nur `snippet` ohne `text`/`html`/`headers` („Simplify“ an); weder Message-ID noch `id`; weder From noch Date; ein Anhang mit ungültigem base64 (Name steht in der Meldung). Antwort: `ImportErgebnis`.
+- Token: wie 7.7 (`ABLAGE_IMPORT_TOKEN`, §9).
+
 ## 8. API (`api.py`, FastAPI)
 
 | Methode | Pfad | Body | Antwort |
@@ -264,6 +274,7 @@ Ein Item mit Audio-Anhang (`anhang.typ = audio`) und leerem `text` wird **vor de
 | POST | `/import/whatsapp/nachricht` | Live-Nachricht als JSON (7.5) | `ImportErgebnis` |
 | POST | `/import/whatsapp/twilio` | Twilio-Webhook, Form-encoded (7.6) | leeres TwiML, `text/xml` |
 | POST | `/import/email/gmail` | JSON `{"raw", "gmail_id", "projekt"?}` von n8n (7.7), Token | `ImportErgebnis` |
+| POST | `/import/email/gmail-felder` | JSON `{"projekt"?, "mail", "anhaenge"?}` von n8n (7.10), Token | `ImportErgebnis` |
 | POST | `/import/drive/datei` | Rohdaten, Query `pfad` u. a. von n8n (7.8), Token | `ImportErgebnis` |
 | GET | `/quellen` *(optional)* | Query: `status`, `typ`, `projekt`, `limit` (≤200), `seit` | `list[QuelleOut]` sortiert nach `zeitpunkt` |
 | PATCH | `/quellen/{id}/status` *(optional)* | `{"status": "verarbeitet" \| "fehler", "fehler": "..."}` | `QuelleOut` |
@@ -304,7 +315,7 @@ Die drei `TRANSKRIPT_*`-Werte sind optional und nur für 7.9. Leerer `TRANSKRIPT
 
 Die vier Twilio-Werte sind optional und nur für 7.6. `TWILIO_WEBHOOK_URL` ist die öffentliche URL des Endpunkts, genau wie im Twilio-Dashboard eingetragen.
 
-`ABLAGE_IMPORT_TOKEN` ist optional. Ist er gesetzt, verlangen nur `/import/email/gmail` und `/import/drive/datei` den Header `X-Ablage-Token` mit genau diesem Wert (Vergleich mit `hmac.compare_digest`), sonst 401. Leer = keine Prüfung. Alle anderen Endpunkte bleiben unverändert (der Telefon-Agent postet weiter ohne Token an `/import/call`).
+`ABLAGE_IMPORT_TOKEN` ist optional. Ist er gesetzt, verlangen nur `/import/email/gmail`, `/import/email/gmail-felder` und `/import/drive/datei` den Header `X-Ablage-Token` mit genau diesem Wert (Vergleich mit `hmac.compare_digest`), sonst 401. Leer = keine Prüfung. Alle anderen Endpunkte bleiben unverändert (der Telefon-Agent postet weiter ohne Token an `/import/call`).
 
 ## 10. Qualität
 

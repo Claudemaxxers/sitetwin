@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from . import config, store, transkript
-from .adapters import call, eml, ordner, whatsapp_live, whatsapp_twilio
+from .adapters import call, eml, gmail_felder, ordner, whatsapp_live, whatsapp_twilio
 from .models import ImportErgebnis, ImportKontext, ParseFehler, RawItem
 
 app = FastAPI(title="SiteTwin Ablage", version="0.1.0")
@@ -134,7 +134,7 @@ def token_pruefen(
     x_ablage_token: str | None = Header(default=None),
     cfg: config.Einstellungen = Depends(get_einstellungen),
 ) -> None:
-    """Gemeinsames Token für die n8n-Endpunkte (SPEC §7.7, §7.8). Leer = keine Prüfung."""
+    """Gemeinsames Token für die n8n-Endpunkte (SPEC §7.7, §7.8, §7.10). Leer = keine Prüfung."""
     if cfg.import_token and not hmac.compare_digest(
         x_ablage_token.encode() if x_ablage_token else b"", cfg.import_token.encode()
     ):
@@ -147,14 +147,19 @@ class GmailMail(BaseModel):
     projekt: str | None = None
 
 
-def _base64url(roh: str) -> bytes:
+def _base64_lesen(roh: str, wo: str) -> bytes:
+    """base64 oder base64url, Padding optional, Leerraum egal. Kaputt → 422 mit `wo`."""
     text = "".join(roh.split())
     try:
-        daten = base64.b64decode(
+        return base64.b64decode(
             text.replace("-", "+").replace("_", "/") + "=" * (-len(text) % 4), validate=True
         )
     except (binascii.Error, ValueError) as e:
-        raise HTTPException(status_code=422, detail=f"raw ist kein gültiges base64url: {e}") from e
+        raise HTTPException(status_code=422, detail=f"{wo} ist kein gültiges base64url: {e}") from e
+
+
+def _base64url(roh: str) -> bytes:
+    daten = _base64_lesen(roh, "raw")
     if not daten:
         raise HTTPException(status_code=422, detail="raw ist leer")
     return daten
@@ -176,6 +181,44 @@ def import_email_gmail(
         raise HTTPException(status_code=422, detail=f"Mail nicht lesbar: {e}") from e
     for item in items:
         item.meta.update({"quelle": "gmail", "gmail_id": mail.gmail_id})
+    return _speichern(items, backend, transkribierer)
+
+
+class GmailAnhang(BaseModel):
+    name: str | None = None
+    mime: str | None = None
+    base64: str  # Dateiinhalt; "" = leere Datei
+
+
+class GmailFelder(BaseModel):
+    projekt: str | None = None
+    mail: dict | str  # $json des Gmail-Nodes mit „Simplify“ aus (Text wird als JSON gelesen)
+    anhaenge: list[GmailAnhang] | None = None
+
+
+@app.post(
+    "/import/email/gmail-felder", response_model=ImportErgebnis, dependencies=[Depends(token_pruefen)]
+)
+def import_email_gmail_felder(
+    eingang: GmailFelder,
+    backend: store.Backend = Depends(get_backend),
+    ctx: ImportKontext = Depends(get_kontext),
+    transkribierer: transkript.Transkribierer | None = Depends(get_transkribierer),
+) -> ImportErgebnis:
+    """Mail ohne Rohformat, so wie der n8n-Gmail-Node sie zerlegt (SPEC §7.10)."""
+    teile: list[eml.Teil] = []
+    for nr, a in enumerate(eingang.anhaenge or [], start=1):
+        daten = _base64_lesen(a.base64, f"anhaenge[{nr - 1}].base64 ({a.name or 'ohne Namen'})")
+        mime = a.mime.split(";")[0].strip().lower() if a.mime and a.mime.strip() else None
+        teile.append((a.name, daten, mime))
+    if eingang.projekt and eingang.projekt.strip():
+        ctx = ImportKontext(projekt=eingang.projekt.strip(), tz=ctx.tz)
+    try:
+        items = gmail_felder.aus_felder(eingang.mail, teile, ctx)
+    except gmail_felder.FelderFehler as e:
+        raise HTTPException(status_code=422, detail=f"Mail nicht verwertbar: {e}") from e
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Mail nicht lesbar: {e}") from e
     return _speichern(items, backend, transkribierer)
 
 

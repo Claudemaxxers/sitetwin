@@ -8,9 +8,9 @@
       "typeVersion": 1,
       "position": [-60, -260],
       "parameters": {
-        "content": "## Hier anpassen\n1. **Gmail: Mail mit Label** – Suchfilter `label:sitetwin` an den Namen deines Gmail-Labels anpassen.\n2. **Konfiguration** – `ablage_url` (öffentliche Tunnel-Adresse der Ablage) und `projekt` eintragen. Für Tests `Test Santino` lassen.\n3. Credentials wählen: Gmail (Trigger und „Mail im Rohformat holen“), Header Auth „Ablage Token“ (in „An Ablage senden“).",
+        "content": "## Hier anpassen\n1. **Gmail: Mail mit Label** – Suchfilter `label:sitetwin` an den Namen deines Gmail-Labels anpassen. „Simplify“ bleibt **aus**, „Download Attachments“ **an**.\n2. **Konfiguration** – `ablage_url` (öffentliche Tunnel-Adresse der Ablage) und `projekt` eintragen. Für Tests `Test Santino` lassen.\n3. Credentials wählen: Gmail (nur im Trigger), Header Auth „Ablage Token“ (in „An Ablage senden“). Kein Google-Zugang im HTTP-Request-Node.",
         "height": 220,
-        "width": 720,
+        "width": 940,
         "color": 4
       }
     },
@@ -28,13 +28,16 @@
             }
           ]
         },
-        "simple": true,
+        "simple": false,
         "maxResults": 10,
         "filters": {
           "q": "label:sitetwin",
           "readStatus": "both"
         },
-        "options": {}
+        "options": {
+          "downloadAttachments": true,
+          "dataPropertyAttachmentsPrefixName": "attachment_"
+        }
       },
       "credentials": {
         "gmailOAuth2": {
@@ -44,11 +47,23 @@
       }
     },
     {
+      "id": "2aa2f2b6-e01f-4b41-aed0-c4fc26e37203",
+      "name": "Mail für Ablage aufbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Baut je Mail den Body für POST /import/email/gmail-felder: { mail, anhaenge }.\n// projekt kommt danach aus dem Node „Konfiguration“.\n// Anhänge: n8n Cloud hält Binärdaten außerhalb des Items, deshalb über\n// getBinaryDataBuffer lesen und nicht über binary[key].data.\nconst nummer = (k) => {\n  const m = k.match(/(\\d+)$/);\n  return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;\n};\nconst ergebnis = [];\nconst items = $input.all();\nfor (let i = 0; i < items.length; i++) {\n  const binaer = items[i].binary || {};\n  const schluessel = Object.keys(binaer).sort((a, b) => nummer(a) - nummer(b) || a.localeCompare(b));\n  const anhaenge = [];\n  for (const key of schluessel) {\n    const puffer = await this.helpers.getBinaryDataBuffer(i, key);\n    anhaenge.push({\n      name: binaer[key].fileName || null,\n      mime: binaer[key].mimeType || null,\n      base64: puffer.toString('base64'),\n    });\n  }\n  ergebnis.push({ json: { mail: items[i].json, anhaenge }, pairedItem: { item: i } });\n}\nreturn ergebnis;\n"
+      }
+    },
+    {
       "id": "06b71fb0-4c8d-42ea-9e6e-89fec7a15df2",
       "name": "Konfiguration",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [240, 0],
+      "position": [480, 0],
       "parameters": {
         "mode": "manual",
         "assignments": {
@@ -72,37 +87,7 @@
       }
     },
     {
-      "id": "bd1f8172-1bcd-4a64-95ad-7883f44fce6d",
-      "name": "Mail im Rohformat holen",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [480, 0],
-      "parameters": {
-        "method": "GET",
-        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.id }}",
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "gmailOAuth2",
-        "sendQuery": true,
-        "specifyQuery": "keypair",
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "format",
-              "value": "raw"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "",
-          "name": "Gmail SiteTwin"
-        }
-      }
-    },
-    {
-      "id": "ff2c86f5-327f-41b7-a015-dade4ab6c2ad",
+      "id": "7cfdaeba-f172-4787-8c46-cb267c3be314",
       "name": "An Ablage senden",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -112,28 +97,13 @@
       "waitBetweenTries": 5000,
       "parameters": {
         "method": "POST",
-        "url": "={{ $('Konfiguration').item.json.ablage_url.replace(/\\/+$/, '') }}/import/email/gmail",
+        "url": "={{ $('Konfiguration').item.json.ablage_url.replace(/\\/+$/, '') }}/import/email/gmail-felder",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "contentType": "json",
-        "specifyBody": "keypair",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "raw",
-              "value": "={{ $json.raw }}"
-            },
-            {
-              "name": "gmail_id",
-              "value": "={{ $json.id }}"
-            },
-            {
-              "name": "projekt",
-              "value": "={{ $('Konfiguration').item.json.projekt }}"
-            }
-          ]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ projekt: $json.projekt, mail: $json.mail, anhaenge: $json.anhaenge }) }}",
         "options": {}
       },
       "credentials": {
@@ -149,6 +119,17 @@
       "main": [
         [
           {
+            "node": "Mail für Ablage aufbereiten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mail für Ablage aufbereiten": {
+      "main": [
+        [
+          {
             "node": "Konfiguration",
             "type": "main",
             "index": 0
@@ -157,17 +138,6 @@
       ]
     },
     "Konfiguration": {
-      "main": [
-        [
-          {
-            "node": "Mail im Rohformat holen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Mail im Rohformat holen": {
       "main": [
         [
           {

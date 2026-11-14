@@ -46,7 +46,8 @@ curl.exe -X POST localhost:8000/import/call -H "Content-Type: application/json" 
 | `POST /import/call` | Call-JSON v1 (SPEC §7.4) | `call_id` |
 | `POST /import/whatsapp/nachricht` | eine Live-Nachricht (SPEC §7.5) | `wa_id` |
 | `POST /import/whatsapp/twilio` | Twilio-Webhook, Form-encoded (SPEC §7.6) | `MessageSid` |
-| `POST /import/email/gmail` | Gmail-Mail als JSON von n8n (SPEC §7.7) | `Message-ID` |
+| `POST /import/email/gmail` | Gmail-Rohmail als JSON von n8n (SPEC §7.7) | `Message-ID` |
+| `POST /import/email/gmail-felder` | Gmail-Mail zerlegt (Felder + Anhänge) als JSON von n8n (SPEC §7.10) | wie `.eml` |
 | `POST /import/drive/datei` | Drive-Datei als Rohdaten von n8n (SPEC §7.8) | Pfad + Inhalt |
 
 Antwort jeweils `{"gelesen", "neu", "duplikate", "fehler"}`, nur der Twilio-Endpunkt antwortet mit leerem TwiML. Interaktive Doku: `http://localhost:8000/docs`.
@@ -79,14 +80,15 @@ Ehrlicher Stand: in Tests mit nachgebauter Schnittstelle geprüft, noch nicht ge
 
 ## Gmail und Drive live über n8n
 
-Zwei Endpunkte nehmen echte Eingänge aus Gmail und Google Drive an. Die OAuth-Anmeldung bei Google liegt komplett in n8n (Cloud), die Ablage bekommt nur fertige Daten.
+Drei Endpunkte nehmen echte Eingänge aus Gmail und Google Drive an. Die OAuth-Anmeldung bei Google liegt komplett in n8n (Cloud), die Ablage bekommt nur fertige Daten.
 
-- `POST /import/email/gmail`: JSON `{"raw": "<base64url, Gmail format=raw>", "gmail_id": "...", "projekt": "optional"}`. Läuft durch denselben Parser wie `.eml`-Dateien, dieselbe Mail ergibt keine zweite Zeile.
+- `POST /import/email/gmail-felder` (diesen nutzt der Gmail-Ablauf in `n8n/`): JSON `{"projekt": "optional", "mail": <$json des Gmail Triggers, Simplify aus>, "anhaenge": [{"name", "mime", "base64"}]}`. Braucht keine Rohmail, weil n8n Cloud den Rohabruf mit seiner Google-Anmeldung sperrt. Die Ablage baut daraus dieselben Zeilen und Hashes wie beim `.eml`-Import; Ausnahmen beim Body stehen in `n8n/README.md` unter „Grenzen“.
+- `POST /import/email/gmail`: JSON `{"raw": "<base64url, Gmail format=raw>", "gmail_id": "...", "projekt": "optional"}`. Läuft durch denselben Parser wie `.eml`-Dateien, dieselbe Mail ergibt keine zweite Zeile. Bleibt für den Fall, dass eine eigene Google-OAuth-App die Rohmail liefert.
 - `POST /import/drive/datei`: Dateibytes als Body, Query `pfad` (Pflicht), `kanal`, `projekt`, `datei_id`, `geaendert_am`. Das Item sieht aus wie eines aus dem Drive-Ordner-Import.
-- Token: `ABLAGE_IMPORT_TOKEN` in `.env` setzen, n8n sendet ihn als Header `X-Ablage-Token`. Ohne Wert keine Prüfung. Gilt nur für diese beiden Endpunkte.
+- Token: `ABLAGE_IMPORT_TOKEN` in `.env` setzen, n8n sendet ihn als Header `X-Ablage-Token`. Ohne Wert keine Prüfung. Gilt nur für diese drei Endpunkte.
 - Einrichtung in n8n: siehe `n8n/README.md`.
 
-In Tests geprüft. Der Drive-Weg ist am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst), der Gmail-Weg **noch nicht**.
+In Tests geprüft (für `gmail-felder` mit n8n-Items, die aus den sechs `.eml` in `fake_data/email/` nachgebaut sind). Der Drive-Weg ist am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst), der Gmail-Weg über `gmail-felder` ebenfalls einmal (von Hand ausgelöst, Testmail ohne Anhang, `neu: 1`). Anhänge, Duplikat-Lauf und Dauerbetrieb sind dort ungeprüft. Der Rohweg `gmail` scheitert auf n8n Cloud an der Sperre der Google-Anmeldung.
 
 ## Eigenen WhatsApp-Chat testen
 
