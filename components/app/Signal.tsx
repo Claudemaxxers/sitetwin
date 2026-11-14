@@ -1,9 +1,9 @@
 "use client";
 
-import { SIGNAL_ART_LABEL, type Signal } from "@/lib/twin-model";
+import type { Signal } from "@/lib/twin-model";
 import { signalStand } from "@/lib/vm";
 import type { Modell, Nav } from "./modell";
-import { Avatar, Card, I, Pill, tagZeit } from "./ui";
+import { Avatar, I, Pill, tagZeit } from "./ui";
 
 /**
  * One way to show a signal everywhere (KONZEPT.md, Lebenszyklus eines Signals):
@@ -45,46 +45,10 @@ export function SignalSchritte({ s, m }: { s: Signal; m: Modell }) {
   );
 }
 
-/** Talona-style block on top of the changes page: the deviations the checking agent found. */
-export function Abweichungen({ m, nav }: { m: Modell; nav: Nav }) {
-  const alle = [...m.d.signale].sort((a, b) => Number(b.status !== "geloest") - Number(a.status !== "geloest") || (b.erstellt_am ?? "").localeCompare(a.erstellt_am ?? ""));
-  if (!alle.length) return null;
-  const aktiv = alle.filter((s) => s.status !== "geloest");
-  const zeigen = aktiv.length ? aktiv : alle.slice(0, 3);
-  const oeffnen = (s: Signal) => {
-    const change = m.ch.find((c) => c.signale.some((x) => x.id === s.id));
-    if (change) return nav.aenderung(change.key);
-    const hash = s.quelle_hashes[0] ?? m.d.eintraege.find((e) => s.eintrag_ids.includes(e.id))?.quelle_hash;
-    if (hash) return nav.nachricht(hash);
-    nav.zu("benachrichtigungen");
-  };
-  return (
-    <Card className="mt-6 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-[var(--line)] px-6 py-4">
-        <div className="flex items-center gap-3 text-[15px]">
-          Abweichungen vom gültigen Stand
-          {aktiv.length ? <Pill ton="blau">{aktiv.length} in Bearbeitung</Pill> : <Pill ton="gruen">alles geklärt</Pill>}
-        </div>
-        <button onClick={() => nav.zu("benachrichtigungen")} className="text-[13px] text-[rgba(12,10,8,.6)] underline underline-offset-4">
-          Regeln und Anrufe
-        </button>
-      </div>
-      {zeigen.map((s) => {
-        const p = m.pers(s.zustaendig);
-        return (
-          <button key={s.id} onClick={() => oeffnen(s)} className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-6 border-b border-[var(--line)] px-6 py-4 text-left last:border-0 hover:bg-[var(--wash)]">
-            <span className="min-w-0">
-              <span className="block truncate text-[15px]">{s.titel}</span>
-              <span className="mt-1 flex items-center gap-2 text-[13px] text-[rgba(12,10,8,.55)]">
-                {SIGNAL_ART_LABEL[s.art]} · {[s.top, s.raum].filter(Boolean).join(" · ") || "Baustelle"} ·
-                <Avatar p={p} size={18} /> {p.vorname} {anrufZeile(s)}
-              </span>
-            </span>
-            <SignalPill s={s} />
-          </button>
-        );
-      })}
-      {!aktiv.length && <div className="px-6 py-3 text-[13px] text-[rgba(12,10,8,.55)]">Keine offene Abweichung. Zuletzt gelöst ist oben gelistet.</div>}
-    </Card>
-  );
+/** Where a signal leads: the change it belongs to, else the message that triggered it. */
+export function oeffneSignal(s: Signal, m: Modell, nav: Nav) {
+  const a = m.abw.find((x) => x.s.id === s.id);
+  if (a?.change) return nav.aenderung(a.change);
+  if (a?.quelle) return nav.nachricht(a.quelle);
+  nav.zu("benachrichtigungen");
 }

@@ -47,6 +47,7 @@ class PruefBericht:
     claude_aufrufe: int = 0
     fehler: list[str] = field(default_factory=list)
     soll: list[str] = field(default_factory=list)  # Soll-Änderungen: vorgeschlagen/freigegeben/Nachweis
+    abgestuft: list[str] = field(default_factory=list)  # Lernschleife: früher als Fehlalarm bewertete Lagen
 
 
 def _ts(z: Any) -> datetime | None:
@@ -319,7 +320,7 @@ def loest_plan_veraltet(signal: Zeile, e: Zeile, plaene: list[Zeile]) -> bool:
     """Arbeit nach dem gültigen Index am selben Ort löst ein plan_veraltet-Signal (ohne Bauteil-Bezug)."""
     if signal["art"] != "plan_veraltet" or e["art"] not in ("arbeit_erledigt", "problem_behoben"):
         return False
-    teile = signal["schluessel"].split("|")
+    teile = grundschluessel(signal["schluessel"]).split("|")
     if len(teile) != 4:
         return False  # Bauteil-Signal → loest_bauteil_signal
     _, top, plan_nr, element = teile
@@ -329,6 +330,63 @@ def loest_plan_veraltet(signal: Zeile, e: Zeile, plaene: list[Zeile]) -> bool:
         return False
     aktuell = neuester_plan(plaene, plan_nr, _ts(e.get("zeitpunkt")))
     return bool(aktuell and e.get("plan_index") == aktuell["plan_index"])
+
+
+# --- Lernschleife: Rückmeldungen der Baustelle ------------------------------------
+# Der WhatsApp-Mitleser (ablage/whatsapp-mitleser/bewertung.js) schreibt signale.bewertung
+# ('berechtigt' | 'fehlalarm') und bewertung_notiz („per WhatsApp, <Name>, <Zeit>: <Text>“).
+#
+# Fehlalarm: Das bewertete Signal wird weder ergänzt noch wieder geöffnet. Es bleibt mit seiner Bewertung
+# stehen (Beleg, worauf sich das Urteil bezog). Taucht dieselbe Lage wieder auf, entsteht ein Folgesignal
+# „<schluessel>#nach-fehlalarm-<n>“: neue Zeile, also neue Warnung im WhatsApp-Melder (der warnt je Signal-ID
+# nur einmal) und neuer Anruf, aber abgestuft auf `mittel` und mit sichtbarem Hinweis. Ganz unterdrückt wird
+# nichts: ein Fehlalarm-Urteil kann selbst falsch sein, und ein verpasster echter Fehler kostet Nacharbeit.
+# Berechtigt: alles wie bisher; die Bewertung bleibt auch beim Wiederöffnen stehen (ein späteres Urteil
+# überschreibt sie ohnehin, siehe bewertung.js).
+
+FOLGE = "#nach-fehlalarm-"
+RUECKMELDUNGEN_IM_PROMPT = 10
+
+
+def grundschluessel(schluessel: str) -> str:
+    return schluessel.split(FOLGE)[0]
+
+
+def nach_fehlalarm(vorschlag: Zeile, fehlalarm: Zeile, schluessel: str) -> Zeile:
+    """Vorschlag für eine Lage, die die Baustelle schon einmal als Fehlalarm bewertet hat: abgestuft, mit Hinweis."""
+    notiz = " ".join((fehlalarm.get("bewertung_notiz") or "").split())
+    vorher = vorschlag.get("schwere") or "mittel"
+    begruendung = (vorschlag.get("begruendung") or "").strip()
+    anruf = (vorschlag.get("anruf_text") or "").strip()
+    return {
+        **vorschlag,
+        "schluessel": schluessel,
+        "schwere": "mittel",
+        "titel": f"Früher als Fehlalarm bewertet: {vorschlag['titel']}",
+        "begruendung": (
+            f"{begruendung} Früher als Fehlalarm bewertet ({notiz or 'ohne Notiz'}). "
+            f"Deshalb abgestuft auf mittel (sonst {vorher})."
+        ).strip(),
+        "anruf_text": (
+            f"{anruf} Zur Info: Eine gleiche Warnung wurde schon einmal als Fehlalarm zurückgemeldet. "
+            "Bitte kurz sagen, ob es diesmal stimmt."
+        ).strip(),
+    }
+
+
+def rueckmeldungen(signale: list[Zeile], n: int = RUECKMELDUNGEN_IM_PROMPT) -> list[Zeile]:
+    """Die zuletzt bewerteten Signale (jüngste zuerst)."""
+    bewertet = [s for s in signale if s.get("bewertung") in ("berechtigt", "fehlalarm")]
+    bewertet.sort(key=lambda s: str(s.get("aktualisiert_am") or s.get("erstellt_am") or ""), reverse=True)
+    return bewertet[:n]
+
+
+def rueckmeldungen_block(bewertet: list[Zeile]) -> str:
+    zeilen = []
+    for s in bewertet:
+        notiz = " ".join((s.get("bewertung_notiz") or "").split())
+        zeilen.append(f"- {s['bewertung']} · {s['art']} · {s['titel']}" + (f" · {notiz}" if notiz else ""))
+    return "\n".join(zeilen) or "(keine)"
 
 
 # --- Stufe 2: Claude ------------------------------------------------------------
@@ -352,6 +410,7 @@ Nicht melden (wird anderweitig erledigt oder ist keine Abweichung):
 - Kosten, Aufträge, Angebote, Freigaben, Abrechnung, Regieberichte – das ist kaufmännisch, keine Abweichung auf der Baustelle.
 - Zusatz- oder Mehrleistungen, die GU, Bauleitung, Planer oder Käufer (über den GU) angeordnet haben – auch wenn Auftrag oder Angebot noch fehlen.
 - Dinge, die in den offenen Signalen schon gemeldet sind.
+- Lagen, die die Baustelle unter <rueckmeldungen_der_baustelle> als fehlalarm bewertet hat, und ähnliche Fälle aus demselben Grund – außer ein neuer Eintrag zeigt klar etwas anderes. Als berechtigt bewertete Signale zeigen, was die Baustelle hören will.
 
 zustaendig: die Person, die die betroffene Arbeit ausführt oder ihr Team anweist (Vorarbeiter/Obermonteur des ausführenden Gewerks) – nie der GU, der etwas angeordnet hat.
 
@@ -372,7 +431,8 @@ def eintrag_kurz(e: Zeile, nr: int | None = None) -> str:
 
 
 def baue_pruefanfrage(
-    neue: list[Zeile], stand: list[Zeile], offene: list[Zeile], plaene: list[Zeile], stammdaten: str
+    neue: list[Zeile], stand: list[Zeile], offene: list[Zeile], plaene: list[Zeile], stammdaten: str,
+    bewertet: list[Zeile] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     system = [
         {"type": "text", "text": PRUEF_SYSTEM},
@@ -388,6 +448,8 @@ def baue_pruefanfrage(
         f"<stand_der_baustelle>\n" + ("\n".join(eintrag_kurz(e) for e in stand) or "(noch nichts)") + "\n</stand_der_baustelle>\n\n"
         f"<offene_signale loesbar=\"ja\">\n{loesbar_txt}\n</offene_signale>\n\n"
         f"<offene_signale loesbar=\"nein\" hinweis=\"nur Kontext, nicht erneut melden\">\n{andere_txt}\n</offene_signale>\n\n"
+        f"<rueckmeldungen_der_baustelle hinweis=\"Bewertungen früherer Warnungen, jüngste zuerst\">\n"
+        f"{rueckmeldungen_block(bewertet or [])}\n</rueckmeldungen_der_baustelle>\n\n"
         "<neue_eintraege hinweis=\"nur diese prüfen\">\n"
         + "\n".join(eintrag_kurz(e, i) for i, e in enumerate(neue, start=1))
         + "\n</neue_eintraege>"
@@ -429,6 +491,18 @@ class _Signale:
         ids = [e["id"] for e in eintraege]
         hashes = sorted({e["quelle_hash"] for e in eintraege})
         alt = self.nach_schluessel.get(vorschlag["schluessel"])
+        # Lernschleife: eine als Fehlalarm bewertete Lage nie stumm übernehmen (siehe nach_fehlalarm)
+        fehlalarm, n, schluessel = None, 0, vorschlag["schluessel"]
+        while alt is not None and alt.get("bewertung") == "fehlalarm":
+            if set(ids) <= set(alt.get("eintrag_ids") or []):
+                return  # Beleg gehört schon zum bewerteten Signal (erneute Prüfung)
+            fehlalarm, n = alt, n + 1
+            schluessel = f"{grundschluessel(vorschlag['schluessel'])}{FOLGE}{n}"
+            alt = self.nach_schluessel.get(schluessel)
+        if fehlalarm is not None:
+            vorschlag = nach_fehlalarm(vorschlag, fehlalarm, schluessel)
+            log.info("↓ abgestuft (früher Fehlalarm): %s", vorschlag["titel"])
+            self.bericht.abgestuft.append(vorschlag["titel"])
         if alt is None:
             zeile = {**vorschlag, "projekt": self.projekt, "eintrag_ids": ids, "quelle_hashes": hashes}
             self.nach_schluessel[vorschlag["schluessel"]] = self.db.signal_einfuegen(zeile)
@@ -446,7 +520,8 @@ class _Signale:
         if felder["eintrag_ids"] == list(alt.get("eintrag_ids") or []) and alt["status"] != "geloest" and "schwere" not in felder:
             return  # nichts Neues (z. B. erneute Prüfung)
         if alt["status"] == "geloest":
-            felder.update(status="offen", geloest_am=None, geloest_durch=None)
+            # Anruf-Felder leeren: der Telefon-Agent ruft nur bei status='offen' und angerufen_am null an
+            felder.update(status="offen", geloest_am=None, geloest_durch=None, angerufen_am=None, anruf_id=None)
             self.bericht.wieder_offen += 1
             log.info("⚑ wieder offen: %s", alt["titel"])
         else:
@@ -509,7 +584,8 @@ def pruefe(db: DB, projekt_filter: str | None, pruefer: Pruefer | None, stand_ei
                     zeit_gruppe = str(gruppe[0].get("zeitpunkt") or "")
                     stand = [x for x in alle if x["quelle_hash"] != quelle_hash and str(x.get("zeitpunkt") or "") <= zeit_gruppe]
                     offene = signale.offene()
-                    system, messages = baue_pruefanfrage(gruppe, stand[-stand_eintraege:], offene, plaene, stammdaten)
+                    bewertet = rueckmeldungen(list(signale.nach_schluessel.values()))
+                    system, messages = baue_pruefanfrage(gruppe, stand[-stand_eintraege:], offene, plaene, stammdaten, bewertet)
                     ergebnis = pruefer(system, messages)
                     bericht.claude_aufrufe += 1
                     for v in ergebnis.signale:

@@ -2,6 +2,7 @@ import "server-only";
 import { DatabaseSync } from "node:sqlite";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { seedEvents } from "./scenario";
 import type { Flag, SiteEvent } from "./types";
@@ -12,8 +13,17 @@ import type { Flag, SiteEvent } from "./types";
  */
 const g = globalThis as unknown as { __sitetwin?: { db: DatabaseSync; bus: EventEmitter } };
 
+/**
+ * Lokal liegt die Datenbank unter ./data. Auf Vercel ist das Projektverzeichnis
+ * schreibgeschützt, dort geht sie nach /tmp: flüchtig, pro Funktionsinstanz,
+ * und wird bei jedem Kaltstart neu mit den Startdaten gefüllt.
+ */
+function dataDir() {
+  return process.env.VERCEL ? path.join(os.tmpdir(), "sitetwin") : path.join(process.cwd(), "data");
+}
+
 function init() {
-  const dir = path.join(process.cwd(), "data");
+  const dir = dataDir();
   fs.mkdirSync(dir, { recursive: true });
   const db = new DatabaseSync(path.join(dir, "sitetwin.db"));
   db.exec(`

@@ -100,6 +100,8 @@ def _pruef_ausgabe(b) -> None:
     )
     for s in b.neu:
         print("  ⚑", s)
+    for s in b.abgestuft:
+        print("  ↓ abgestuft:", s)
     for s in b.geloest:
         print("  ✓", s)
     for s in b.soll:
