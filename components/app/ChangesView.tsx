@@ -403,11 +403,9 @@ function ChangeDetail({ c, m, nav }: { c: Aenderung; m: Modell; nav: Nav }) {
           </div>
           <div className="mt-1 flex items-start justify-between gap-6">
             <h1 className="text-[40px] leading-[46px] tracking-[-0.02em]">{c.titel}</h1>
-            {c.top && (
-              <Btn onClick={() => nav.top(c.top!)}>
-                <I.Cube className="size-4" /> Im Zwilling zeigen
-              </Btn>
-            )}
+            <Btn onClick={() => setTab("verlauf")}>
+              <I.Search className="size-4" /> So wurde es erkannt
+            </Btn>
           </div>
           <div className="mt-6">
             <Tabs value={tab} onChange={setTab} tabs={[{ key: "uebersicht", label: "Übersicht" }, { key: "verlauf", label: "Verlauf" }]} />

@@ -16,7 +16,7 @@ import {
   type Tagesbericht,
 } from "@/lib/vm";
 
-export type Ansicht = "aenderungen" | "inbox" | "bautagebuch" | "protokoll" | "zwilling" | "benachrichtigungen";
+export type Ansicht = "aenderungen" | "inbox" | "bautagebuch" | "protokoll" | "benachrichtigungen";
 
 export interface Modell {
   d: ProjektDaten;
@@ -60,7 +60,6 @@ export interface Nav {
   aenderung: (key: string | null) => void;
   exposure: () => void;
   nachricht: (hash: string) => void;
-  top: (top: string) => void;
   thread: (hash: string) => void;
   entwurf: (c: Aenderung) => void;
   fragen: (frage?: string) => void;
