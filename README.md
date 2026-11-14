@@ -2,6 +2,8 @@
 
 > Talona Track 01 · *Context for the Physical World*
 
+**Live demo:** [sitetwin-hendriks-projects-491d3237.vercel.app](https://sitetwin-hendriks-projects-491d3237.vercel.app) (fictional test data)
+
 Construction runs on group chats, email threads and spreadsheets. One crew closes a wall before the inspection, another builds from last week's drawings. **SiteTwin** listens to the channels the site already uses, keeps **one live record of what changed and who decided it**, shows it on a 3D model of the building, and flags problems early enough for the superintendent to act.
 
 ## What it does
@@ -77,7 +79,7 @@ npm test
 
 ### Vercel
 
-Deploys as a standard Next.js project (Node 24.x, env vars from `.env.example`). Limitation: Vercel's project directory is read-only, so the SQLite event log lives in `/tmp` there. It is per function instance and ephemeral: every cold start begins again from the seed scenario, and the live stream (`/api/stream`) only sees changes made on the same instance. The digital twin reads from Supabase and is not affected.
+Live at https://sitetwin-hendriks-projects-491d3237.vercel.app, deployed automatically from `feature/sitetwin`. Deploys as a standard Next.js project (Node 24.x, env vars from `.env.example`). Limitation: Vercel's project directory is read-only, so the SQLite event log lives in `/tmp` there. It is per function instance and ephemeral: every cold start begins again from the seed scenario, and the live stream (`/api/stream`) only sees changes made on the same instance. The digital twin reads from Supabase and is not affected.
 
 ### Telegram (optional)
 
