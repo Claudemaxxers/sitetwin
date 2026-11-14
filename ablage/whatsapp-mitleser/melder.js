@@ -196,7 +196,7 @@ async function rest({ url, key, fetchImpl = fetch }, pfad) {
 
 /** Offene Signale eines Projekts, aelteste zuerst. */
 export const offeneSignale = (sb, projekt) =>
-  rest(sb, `signale?select=*&projekt=${eq(projekt)}&status=eq.offen&order=erstellt_am.asc`);
+  rest(sb, `signale?select=*&projekt=${eq(projekt)}&status=in.(offen,in_bearbeitung)&order=erstellt_am.asc`);
 
 /** Neueste offene Signale (fuer den Trockenlauf). */
 export const neuesteOffene = (sb, projekt, n = 5) =>
@@ -218,7 +218,8 @@ export async function geloesteAus(sb, ids) {
 export function waehleNeue(signale, { ab, zustand, verworfen = new Set(), projekt }) {
   const abMs = ab instanceof Date ? ab.getTime() : new Date(ab).getTime();
   return signale.filter((s) => {
-    if (!s?.id || s.status !== 'offen') return false;
+    // auch 'in_bearbeitung': setzt ein Telefon-Agent den Status, bevor der Melder abfragt, soll die Warnung nicht ausfallen
+    if (!s?.id || !['offen', 'in_bearbeitung'].includes(s.status)) return false;
     if (projekt && s.projekt !== projekt) return false;
     const t = new Date(s.erstellt_am).getTime();
     if (!Number.isFinite(t) || t < abMs) return false;
