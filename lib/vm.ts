@@ -188,7 +188,7 @@ export function signalStand(s: Signal) {
     aktiv: !geloest,
     label: geloest ? "Gelöst" : "In Bearbeitung",
     ton: (geloest ? "gruen" : "blau") as Ton,
-    schritt: geloest ? 2 : 1, // 0 erkannt, 1 Vorarbeiter angerufen, 2 gelöst
+    schritt: geloest ? 2 : 1, // 0 detected, 1 foreman called, 2 resolved
     angerufen: s.angerufen_am,
   };
 }

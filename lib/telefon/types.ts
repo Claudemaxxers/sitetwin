@@ -2,7 +2,7 @@ import type { Signal } from "@/lib/twin-model";
 
 export type { Signal };
 
-/** Zeile aus `personen` (uebersetzer/schema.sql). */
+/** Row from `personen` (uebersetzer/schema.sql). */
 export interface Person {
   id?: string;
   projekt: string;
@@ -13,27 +13,27 @@ export interface Person {
   telefon: string | null;
 }
 
-/** Zeile aus `signal_verlauf`: jeder Statuswechsel, per Trigger geschrieben. */
+/** Row from `signal_verlauf`: every status change, written by a trigger. */
 export interface VerlaufZeile {
   signal_id: string;
   status: string;
   zeitpunkt: string;
 }
 
-/** Was der Telefon-Agent an der Datenbank braucht. Echte Implementierung: supabase.ts, Tests: Fake. */
+/** What the phone agent needs from the database. Real implementation: supabase.ts, tests: fake. */
 export interface SignalDB {
-  /** status = 'offen' und angerufen_am is null, älteste zuerst. */
+  /** status = 'offen' and angerufen_am is null, oldest first. */
   offeneSignale(): Promise<Signal[]>;
   personen(projekt: string): Promise<Person[]>;
-  /** Statuswechsel der genannten Signale (für die Zählung der Anrufversuche). */
+  /** Status changes of the given signals (for counting call attempts). */
   verlauf(signalIds: string[]): Promise<VerlaufZeile[]>;
-  /** Setzt angerufen_am atomar, nur wenn es noch null ist. false = ein anderer Lauf war schneller. */
+  /** Sets angerufen_am atomically, only if it is still null. false = another run was faster. */
   signalBeanspruchen(id: string, angerufenAm: string): Promise<boolean>;
   signalAendern(id: string, felder: Partial<Signal>): Promise<void>;
   signalZuAnruf(conversationId: string): Promise<Signal | null>;
 }
 
-/** Vertrag v1 der Ablage für Anrufe (ablage/ablage/adapters/call.py). */
+/** Ablage contract v1 for calls (ablage/ablage/adapters/call.py). */
 export interface AblageCall {
   call_id: string;
   gestartet_um: string;

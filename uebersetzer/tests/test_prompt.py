@@ -1,4 +1,4 @@
-"""Der Prompt enthält, was Claude braucht – und den Lösungsschlüssel nie."""
+"""The prompt contains what Claude needs – and never the answer key."""
 
 from pathlib import Path
 
@@ -60,7 +60,7 @@ def _bild(block) -> "Image.Image":
 
 
 def test_heic_wird_zu_jpeg():
-    """iPhone-Fotos (HEIC) nimmt Claude nicht an: der Übersetzer wandelt sie in JPEG um."""
+    """Claude does not accept iPhone photos (HEIC): the Übersetzer converts them to JPEG."""
     q = {"anhang_pfad": "x/IMG_0042.HEIC", "anhang_name": "IMG_0042.HEIC", "anhang_typ": "image", "text": ""}
     bloecke, hinweis = anhang.inhaltsbloecke(q, _heic())
     assert bloecke[0]["type"] == "image" and bloecke[0]["source"]["media_type"] == "image/jpeg"
@@ -76,11 +76,11 @@ def test_heic_wird_verkleinert():
 
 
 def test_heic_mit_falscher_endung_und_heif_ohne_bildtyp():
-    # HEIC-Inhalt unter .jpg: am Dateikopf erkannt, sonst ginge kaputtes "JPEG" an Claude.
+    # HEIC content under .jpg: detected by the file header, otherwise a broken "JPEG" would go to Claude.
     q = {"anhang_pfad": "x/foto.jpg", "anhang_name": "foto.jpg", "anhang_typ": "image", "text": ""}
     bloecke, _ = anhang.inhaltsbloecke(q, _heic())
     assert _bild(bloecke[0]).format == "JPEG"
-    # .heif stuft die Ablage nicht als Bild ein; die Endung reicht.
+    # The Ablage does not classify .heif as an image; the extension is enough.
     q = {"anhang_pfad": "x/foto.heif", "anhang_name": "foto.heif", "anhang_typ": "sonstiges", "text": ""}
     bloecke, _ = anhang.inhaltsbloecke(q, _heic())
     assert bloecke[0]["source"]["media_type"] == "image/jpeg"

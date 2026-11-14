@@ -1,26 +1,26 @@
--- SiteTwin – Schema der strukturierten Datenbank (Hendrik)
--- Schritte 2 + 3 aus KONZEPT.md, ausgerichtet am Talona-Brief:
+-- SiteTwin – schema of the structured database (Hendrik)
+-- Steps 2 + 3 in KONZEPT.md, aligned with the Talona brief:
 --   "Keep one live record of the site: what changed, who decided it, what's waiting on whom."
 --   "Flag issues as they happen: a change that never reached the crew, work done out of
 --    sequence, a drawing that's out of date."
 --
--- Läuft im selben Supabase-Projekt wie `quellen` (ablage/SPEC.md §5, gehört Santino).
--- Wiederholbar: kann jederzeit erneut ausgeführt werden. ACHTUNG: Ein erneuter Lauf
--- ändert bestehende Tabellen NICHT (create ... if not exists). Spaltenänderungen
--- brauchen ein eigenes alter table.
+-- Runs in the same Supabase project as `quellen` (ablage/SPEC.md §5, owned by Santino).
+-- Repeatable: can be run again at any time. CAUTION: a repeated run does
+-- NOT change existing tables (create ... if not exists). Column changes
+-- need their own alter table.
 --
--- Datenfluss:
---   quellen (Rohdaten, Santino)
---     └─► Übersetzer (Hendrik) liest neue Quellen + Projekt-Zeitachse
---           ├─► eintraege   was / wo / wer / wann / nach welchem Plan (1..n pro Quelle)
---           └─► plaene      neue Plan-Indizes aus Mails und Drive
---   Prüf-Agent liest eintraege + plaene_aktuell
---     └─► signale           Abweichung erkannt: offen → in_bearbeitung → geloest
---           └─► signal_verlauf (automatisch bei jedem Statuswechsel)
---   Zwilling (Melih) liest alles, Telefon-Agent liest signale
+-- Data flow:
+--   quellen (raw data, Santino)
+--     └─► Übersetzer (Hendrik) reads new sources + project timeline
+--           ├─► eintraege   what / where / who / when / to which plan (1..n per source)
+--           └─► plaene      new plan indices from mails and Drive
+--   Checking agent reads eintraege + plaene_aktuell
+--     └─► signale           deviation detected: offen → in_bearbeitung → geloest
+--           └─► signal_verlauf (automatically on every status change)
+--   Twin (Melih) reads everything, phone agent reads signale
 
 -- ---------------------------------------------------------------------------
--- Aufräumen: erster Entwurf (Nachtrags-Modell) – ersetzt durch eintraege/signale
+-- Cleanup: first draft (change-order model) – replaced by eintraege/signale
 -- ---------------------------------------------------------------------------
 drop view  if exists aenderungen_mit_belegen;
 drop table if exists aenderung_belege;
@@ -28,10 +28,10 @@ drop table if exists meldungen;
 drop table if exists aenderungen;
 
 -- ---------------------------------------------------------------------------
--- Stammdaten
+-- Master data
 -- ---------------------------------------------------------------------------
 
--- Projekte (der Zwilling zeigt mehrere). `projekt` ist derselbe String wie in quellen.projekt.
+-- Projects (the twin shows several). `projekt` is the same string as in quellen.projekt.
 create table if not exists projekte (
   projekt     text primary key,              -- "BV Simmering"
   name        text,
@@ -39,18 +39,18 @@ create table if not exists projekte (
   angelegt_am timestamptz not null default now()
 );
 
--- Wohnungen / Bereiche, Spalten wie in Tops.csv.
+-- Apartments / areas, columns as in Tops.csv.
 create table if not exists tops (
   projekt        text not null default 'BV Simmering',
   top            text not null,              -- "Top 5", "TG"
   geschoss       text,
-  raeume         text,                       -- kommagetrennt
+  raeume         text,                       -- comma-separated
   kaeufer_status text,
   primary key (projekt, top)
 );
 
--- Leistungsverzeichnis: was vertraglich gebaut wird (z. B. 6 Steckdosen je Küche).
--- Grundlage für "gebaut ≠ vereinbart". Spalten wie LV_Elektro.csv.
+-- Bill of quantities (LV): what is contractually built (e.g. 6 sockets per kitchen).
+-- Basis for "built ≠ agreed". Columns as in LV_Elektro.csv.
 create table if not exists lv_positionen (
   projekt           text not null default 'BV Simmering',
   pos_nr            text not null,
@@ -62,8 +62,8 @@ create table if not exists lv_positionen (
   primary key (projekt, pos_nr)
 );
 
--- Pläne mit Index. "Welcher Plan gilt?" = jüngster Index je plan_nr (Sicht plaene_aktuell).
--- Befüllt vom Übersetzer, sobald eine Mail oder Drive-Datei einen neuen Index bringt.
+-- Plans with index. "Which plan is valid?" = most recent index per plan_nr (view plaene_aktuell).
+-- Filled by the Übersetzer as soon as a mail or Drive file brings a new index.
 create table if not exists plaene (
   id            uuid primary key default gen_random_uuid(),
   projekt       text not null,
@@ -71,37 +71,37 @@ create table if not exists plaene (
   plan_index    text not null,               -- "B", "C"
   bezeichnung   text,                        -- "Elektro Top 5"
   top           text,
-  aenderung     text,                        -- was sich gegenüber dem Vorindex ändert
-  gueltig_ab    timestamptz,                 -- wann der Index ausgegeben wurde (Mail-Datum)
-  quelle_hash   text,                        -- = quellen.content_hash (Mail oder Drive-Datei)
+  aenderung     text,                        -- what changes compared to the previous index
+  gueltig_ab    timestamptz,                 -- when the index was issued (mail date)
+  quelle_hash   text,                        -- = quellen.content_hash (mail or Drive file)
   erstellt_am   timestamptz not null default now(),
   unique (projekt, plan_nr, plan_index)
 );
 
 -- ---------------------------------------------------------------------------
--- Bauteil-Register: Soll-Zustand, automatisch aus Plänen gelesen
+-- Component register: target state (Soll), read automatically from plans
 -- ---------------------------------------------------------------------------
--- Ein Bauteil = etwas, das gebaut wird und dessen Zustand zählt: Wand, Leitung, Dose,
--- Verteiler, Auslass, Schalter, Melder. Der Übersetzer legt Bauteile an, sobald er einen
--- Plan liest, und ordnet jede Nachricht einem Bauteil zu (eintraege.element_id).
--- Gibt ein neuer Plan-Index ein Bauteil nicht mehr her, wird es soll_aktiv = false
--- (z. B. Verteiler im Vorraum nach Index C) – Arbeit daran ist dann eine Abweichung.
+-- A component = something that gets built and whose state matters: wall, line, socket,
+-- distribution board, outlet, switch, detector. The Übersetzer creates components as soon as it
+-- reads a plan, and assigns every message to a component (eintraege.element_id).
+-- If a new plan index no longer contains a component, it becomes soll_aktiv = false
+-- (e.g. distribution board in the Vorraum after index C) – work on it is then a deviation.
 
 create table if not exists elemente (
   id               uuid primary key default gen_random_uuid(),
   projekt          text not null,
-  schluessel       text not null,               -- normalisiert: "top 3|bad|wand b1"
+  schluessel       text not null,               -- normalised: "top 3|bad|wand b1"
   top              text,
   raum             text,
   art              text not null check (art in ('wand','leitung','dose','verteiler','auslass','schalter','melder','sonstiges')),
   bezeichnung      text not null,               -- "Wand B1 (Bad/Schlafzimmer)", "Steckdose Waschtisch"
-  lage             text,                         -- wie im Plan beschrieben
+  lage             text,                         -- as described in the plan
   anzahl           int  not null default 1,
-  gehoert_zu       uuid references elemente (id) on delete set null,  -- z. B. Leitung → Wand
+  gehoert_zu       uuid references elemente (id) on delete set null,  -- e.g. line → wall
   soll_plan_nr     text,
-  soll_plan_index  text,                         -- Index, der dieses Bauteil zuletzt bestätigt hat
+  soll_plan_index  text,                         -- index that last confirmed this component
   soll_aktiv       boolean not null default true,
-  quelle_hash      text,                         -- Plan-Dokument (quellen.content_hash)
+  quelle_hash      text,                         -- plan document (quellen.content_hash)
   erstellt_am      timestamptz not null default now(),
   aktualisiert_am  timestamptz not null default now(),
   unique (projekt, schluessel)
@@ -109,64 +109,64 @@ create table if not exists elemente (
 create index if not exists elemente_ort_idx on elemente (projekt, top, raum);
 
 -- ---------------------------------------------------------------------------
--- Strukturierte Einträge (Schritt 3: "die eine Wahrheit über die Baustelle")
+-- Structured entries (step 3: "the one truth about the site")
 -- ---------------------------------------------------------------------------
--- Eine Quelle (Nachricht, Mail, Anruf) ergibt 0..n Einträge.
--- Idempotenz: Verarbeitet der Übersetzer eine Quelle neu, löscht er deren Einträge
--- (where quelle_hash = …) und schreibt sie neu. Kein Fremdschlüssel auf quellen,
--- weil Santino für die Demo leert und neu importiert (SPEC §6); der Hash bleibt gleich.
+-- One source (message, mail, call) yields 0..n entries.
+-- Idempotency: when the Übersetzer reprocesses a source, it deletes that source's entries
+-- (where quelle_hash = …) and writes them again. No foreign key on quellen,
+-- because Santino empties and re-imports for the demo (SPEC §6); the hash stays the same.
 
 create table if not exists eintraege (
   id             uuid primary key default gen_random_uuid(),
   projekt        text not null,
   quelle_hash    text not null,              -- = quellen.content_hash
-  nr             int  not null default 1,    -- laufende Nummer innerhalb der Quelle
+  nr             int  not null default 1,    -- running number within the source
 
-  zeitpunkt      timestamptz,                -- wann es passiert ist / gesagt wurde
+  zeitpunkt      timestamptz,                -- when it happened / was said
   art            text not null check (art in (
                    'arbeit_erledigt',        -- "Top 4 Vorraum fertig verrohrt"
-                   'arbeit_geplant',         -- "mache morgen zu"  → früh genug zum Eingreifen
-                   'anweisung',              -- jemand ordnet etwas an / entscheidet
-                   'planaenderung',          -- neuer Plan-Index / geänderte Ausführung
-                   'abnahme',                -- Prüfung bestanden oder nicht
-                   'behinderung',            -- kann nicht arbeiten, wartet auf Vorgewerk
+                   'arbeit_geplant',         -- "mache morgen zu"  → early enough to intervene
+                   'anweisung',              -- someone orders / decides something
+                   'planaenderung',          -- new plan index / changed execution
+                   'abnahme',                -- inspection passed or not
+                   'behinderung',            -- cannot work, waiting for the preceding trade
                    'lieferung',
                    'bestaetigung',           -- "Rev C gesehen", "ok, machen wir"
-                   'problem_behoben',        -- Rückmeldung zur Lösung eines Signals
+                   'problem_behoben',        -- feedback on the resolution of a signal
                    'frage',
                    'sonstiges',
-                   'soll_aenderung',         -- "das haben wir geändert, Keller nur 3x3" → Soll ändert sich
-                   'freigabe',               -- Bauleitung bestätigt/lehnt eine vorgeschlagene Soll-Änderung ab
-                   'nachweis')),             -- Foto/PDF eines Dokuments, das eine Soll-Änderung schriftlich belegt
+                   'soll_aenderung',         -- "das haben wir geändert, Keller nur 3x3" → the Soll changes
+                   'freigabe',               -- site management confirms/rejects a proposed Soll change
+                   'nachweis')),             -- photo/PDF of a document that proves a Soll change in writing
 
-  -- Wer
-  person         text,                       -- wie im Original: "Thomas Meier (Krenn Bau)"
+  -- Who
+  person         text,                       -- as in the original: "Thomas Meier (Krenn Bau)"
   firma          text,
   gewerk         text,                       -- "elektro", "gu", "planung", "trockenbau", …
 
-  -- Wo
+  -- Where
   top            text,                       -- "Top 5", "TG"
   raum           text,                       -- "Abstellraum", "Stellplatz 12"
   element        text,                       -- "Wohnungsverteiler", "Wand 12", "Deckenauslass"
 
-  -- Was
-  zusammenfassung text not null,             -- ein Satz, deutsch
-  taetigkeit     text,                       -- normalisiert: "Verteiler montieren"
+  -- What
+  zusammenfassung text not null,             -- one sentence, German
+  taetigkeit     text,                       -- normalised: "Verteiler montieren"
   menge          numeric,
   einheit        text,
-  lv_pos_nr      text,                       -- passende LV-Position, falls erkennbar
+  lv_pos_nr      text,                       -- matching LV position, if recognisable
 
-  -- Nach welchem Plan / wer hat entschieden / wer wartet
+  -- To which plan / who decided / who is waiting
   plan_nr        text,
-  plan_index     text,                       -- Index, nach dem gearbeitet wird oder der genannt ist
-  entschieden_von text,                      -- bei anweisung/planaenderung: wer hat es entschieden
+  plan_index     text,                       -- index that is being worked to or that is mentioned
+  entschieden_von text,                      -- for anweisung/planaenderung: who decided it
   wartet_auf     text,                       -- "Trockenbau", "Freigabe GU", …
 
-  -- Nachvollziehbarkeit
-  zitat          text,                       -- die relevante Stelle aus der Quelle
+  -- Traceability
+  zitat          text,                       -- the relevant passage from the source
   konfidenz      numeric(3,2) check (konfidenz between 0 and 1),
   unklar         boolean not null default false,
-  rueckfrage     text,                       -- was man nachfragen müsste, statt zu raten
+  rueckfrage     text,                       -- what one would have to ask instead of guessing
 
   erstellt_am    timestamptz not null default now(),
   unique (quelle_hash, nr)
@@ -174,37 +174,37 @@ create table if not exists eintraege (
 create index if not exists eintraege_projekt_zeit_idx on eintraege (projekt, zeitpunkt);
 create index if not exists eintraege_ort_idx on eintraege (projekt, top, raum);
 
--- Prüf-Agent: wann dieser Eintrag geprüft wurde (null = noch nicht). Der Übersetzer
--- schreibt Einträge bei Neuverarbeitung neu → sie werden automatisch erneut geprüft.
+-- Checking agent: when this entry was checked (null = not yet). The Übersetzer
+-- rewrites entries on reprocessing → they are automatically checked again.
 alter table eintraege add column if not exists geprueft_am timestamptz;
 create index if not exists eintraege_ungeprueft_idx on eintraege (projekt) where geprueft_am is null;
 
--- Bauteil-Zuordnung: welches Bauteil, welcher Arbeitsschritt.
+-- Component assignment: which component, which work step.
 alter table eintraege add column if not exists element_id uuid references elemente (id) on delete set null;
 alter table eintraege add column if not exists schritt text check (schritt in (
   'staenderwerk','verrohrung','leitung_eingezogen','gesetzt','angeschlossen','abnahme',
   'beplankung','spachteln','malen','montage','rueckbau','sonstiges'));
 create index if not exists eintraege_element_idx on eintraege (element_id);
 
--- Soll-Änderungen: Details aus der Nachricht (Bezug, ja/nein, neues Soll, betroffene Bauteile).
+-- Soll changes: details from the message (reference, yes/no, new Soll, affected components).
 alter table eintraege add column if not exists soll jsonb;
 
--- Für bestehende Datenbanken: neue Arten im Check zulassen.
+-- For existing databases: allow new kinds in the check.
 alter table eintraege drop constraint if exists eintraege_art_check;
 alter table eintraege add constraint eintraege_art_check check (art in (
   'arbeit_erledigt','arbeit_geplant','anweisung','planaenderung','abnahme','behinderung','lieferung',
   'bestaetigung','problem_behoben','frage','sonstiges','soll_aenderung','freigabe','nachweis'));
 
 -- ---------------------------------------------------------------------------
--- Personen und Rollen: wer darf das Soll ändern?
+-- Persons and roles: who may change the Soll?
 -- ---------------------------------------------------------------------------
--- Nur Personen mit darf_soll_aendern (Bauleitung des GU, "Superintendent") können eine
--- Soll-Änderung anordnen oder freigeben. Alle anderen können sie nur vorschlagen.
+-- Only persons with darf_soll_aendern (the GC's site management, "Superintendent") can order
+-- or approve a Soll change. Everyone else can only propose one.
 create table if not exists personen (
   id                uuid primary key default gen_random_uuid(),
   projekt           text not null,
   name              text not null,               -- "Thomas Meier"
-  aliase            text[] not null default '{}', -- Schreibweisen in den Quellen, z. B. "Thomas Meier (Krenn Bau)"
+  aliase            text[] not null default '{}', -- spellings in the sources, e.g. "Thomas Meier (Krenn Bau)"
   firma             text,
   rolle             text not null check (rolle in ('bauleitung','projektleitung','vorarbeiter','monteur','planer','kaeufer','sonstige')),
   darf_soll_aendern boolean not null default false,
@@ -213,24 +213,24 @@ create table if not exists personen (
 );
 
 -- ---------------------------------------------------------------------------
--- Soll-Änderungen während der Bauphase
+-- Soll changes during construction
 -- ---------------------------------------------------------------------------
--- Ablauf (ÖNORM B 2110: Anordnung des AG, aus Beweisgründen schriftlich):
---   Bauleitung meldet Änderung          → status freigegeben, nachweis fehlt
---   Arbeiter meldet "wurde geändert"   → status vorgeschlagen → Bauleitung gibt frei / lehnt ab
---   Freigegeben                         → Bauteil-Register wird angepasst, zugehörige Signale gelöst
---   Foto/PDF eines Dokuments der Bauleitung → nachweis vorhanden
+-- Flow (ÖNORM B 2110: order by the client, in writing for evidence):
+--   Site management reports change      → status freigegeben, nachweis fehlt
+--   Worker reports "wurde geändert"    → status vorgeschlagen → site management approves / rejects
+--   Approved                            → component register is adjusted, related signals resolved
+--   Photo/PDF of a site management document → nachweis vorhanden
 create table if not exists soll_aenderungen (
   id                    uuid primary key default gen_random_uuid(),
   projekt               text not null,
   schluessel            text not null,          -- "sa|<quelle_hash>|<nr>"
   titel                 text not null,
-  neues_soll            text,                   -- was jetzt gilt
+  neues_soll            text,                   -- what applies now
   top                   text,
   raum                  text,
-  element_ids           uuid[] not null default '{}',   -- betroffene Bauteile
-  bauteile_neu          jsonb not null default '[]',    -- neue Soll-Bauteile (wie SollElement)
-  bauteile_entfallen    text[] not null default '{}',   -- Schlüssel der Bauteile, die wegfallen
+  element_ids           uuid[] not null default '{}',   -- affected components
+  bauteile_neu          jsonb not null default '[]',    -- new Soll components (like SollElement)
+  bauteile_entfallen    text[] not null default '{}',   -- keys of the components that are dropped
   status                text not null default 'vorgeschlagen' check (status in ('vorgeschlagen','freigegeben','abgelehnt')),
   vorgeschlagen_von     text,
   vorgeschlagen_am      timestamptz,
@@ -241,7 +241,7 @@ create table if not exists soll_aenderungen (
   nachweis_status       text not null default 'fehlt' check (nachweis_status in ('fehlt','vorhanden')),
   nachweis_quelle_hash  text,                   -- Foto/PDF (quellen.content_hash)
   nachweis_am           timestamptz,
-  signal_ids            uuid[] not null default '{}',   -- Signale, die diese Änderung betrifft
+  signal_ids            uuid[] not null default '{}',   -- signals affected by this change
   erstellt_am           timestamptz not null default now(),
   aktualisiert_am       timestamptz not null default now(),
   unique (projekt, schluessel)
@@ -249,41 +249,41 @@ create table if not exists soll_aenderungen (
 create index if not exists soll_aenderungen_status_idx on soll_aenderungen (projekt, status, nachweis_status);
 
 -- ---------------------------------------------------------------------------
--- Signale (Schritt 4 + Lebenszyklus aus KONZEPT.md)
+-- Signals (step 4 + lifecycle from KONZEPT.md)
 -- ---------------------------------------------------------------------------
 
 create table if not exists signale (
   id              uuid primary key default gen_random_uuid(),
   projekt         text not null,
-  schluessel      text not null,             -- gegen Duplikate, z. B. "top5-verteiler-index-c"
+  schluessel      text not null,             -- against duplicates, e.g. "top5-verteiler-index-c"
   art             text not null check (art in (
-                    'nicht_weitergegeben',   -- Änderung hat die Crew nicht erreicht (Brief)
-                    'plan_veraltet',         -- Arbeit nach altem Plan-Index (Brief)
-                    'reihenfolge',           -- Arbeit außer Reihenfolge, z. B. Wand zu vor Abnahme (Brief)
-                    'abweichung_plan',       -- gebaut ≠ Plan/LV, z. B. Steckdose wo keine hingehört
-                    'unklar',                -- Nachricht nicht sicher zuordenbar → Rückfrage
+                    'nicht_weitergegeben',   -- change did not reach the crew (brief)
+                    'plan_veraltet',         -- work to an old plan index (brief)
+                    'reihenfolge',           -- work out of sequence, e.g. wall closed before inspection (brief)
+                    'abweichung_plan',       -- built ≠ plan/LV, e.g. socket where none belongs
+                    'unklar',                -- message cannot be assigned reliably → ask back
                     'sonstiges')),
   schwere         text not null default 'mittel' check (schwere in ('kritisch','hoch','mittel')),
   titel           text not null,
-  begruendung     text,                      -- warum der Prüf-Agent das meldet
-  anruf_text      text,                      -- was der Telefon-Agent sagen soll
+  begruendung     text,                      -- why the checking agent reports this
+  anruf_text      text,                      -- what the phone agent should say
 
   top             text,
   raum            text,
   element         text,
-  eintrag_ids     uuid[] not null default '{}',   -- auslösende Einträge
-  quelle_hashes   text[] not null default '{}',   -- Belege (quellen.content_hash)
+  eintrag_ids     uuid[] not null default '{}',   -- triggering entries
+  quelle_hashes   text[] not null default '{}',   -- evidence (quellen.content_hash)
 
-  -- Lebenszyklus
+  -- Lifecycle
   status          text not null default 'offen' check (status in ('offen','in_bearbeitung','geloest')),
-  zustaendig      text,                      -- wer angerufen wird (Vorarbeiter / Bauleitung)
+  zustaendig      text,                      -- who gets called (foreman / site management)
   telefon         text,
-  anruf_id        text,                      -- call_id des Telefon-Agenten
+  anruf_id        text,                      -- call_id of the phone agent
   angerufen_am    timestamptz,
   geloest_am      timestamptz,
   geloest_durch   uuid references eintraege (id) on delete set null,
 
-  -- Lernschleife: war das Signal berechtigt? (Feedback von Vorarbeiter / Büro)
+  -- Learning loop: was the signal justified? (feedback from foreman / office)
   bewertung       text check (bewertung in ('berechtigt','fehlalarm')),
   bewertung_notiz text,
 
@@ -294,7 +294,7 @@ create table if not exists signale (
 create index if not exists signale_projekt_status_idx on signale (projekt, status);
 alter table signale add column if not exists element_id uuid references elemente (id) on delete set null;
 
--- Verlauf: jeder Statuswechsel als Zeile (für Zeitregler und Demo). Wird per Trigger gefüllt.
+-- History: every status change as a row (for time slider and demo). Filled by trigger.
 create table if not exists signal_verlauf (
   id          bigint generated always as identity primary key,
   signal_id   uuid not null references signale (id) on delete cascade,
@@ -338,16 +338,16 @@ create trigger signale_verlauf after insert or update on signale
   for each row execute function signale_verlauf_schreiben();
 
 -- ---------------------------------------------------------------------------
--- Sichten für Prüf-Agent und Zwilling
+-- Views for checking agent and twin
 -- ---------------------------------------------------------------------------
 
--- Gültiger Plan je plan_nr: der jüngste ausgegebene Index.
+-- Valid plan per plan_nr: the most recently issued index.
 create or replace view plaene_aktuell with (security_invoker = true) as
 select distinct on (projekt, plan_nr) *
 from plaene
 order by projekt, plan_nr, gueltig_ab desc nulls last, plan_index desc;
 
--- Stand je Bauteil: welche Schritte erledigt bzw. geplant sind (für Zwilling und Prüf-Agent).
+-- State per component: which steps are done or planned (for twin and checking agent).
 create or replace view element_stand with (security_invoker = true) as
 select
   el.*,
@@ -359,7 +359,7 @@ from elemente el
 left join eintraege e on e.element_id = el.id
 group by el.id;
 
--- Offene Aufgaben fürs Frontend: was die Bauleitung noch tun muss.
+-- Open tasks for the frontend: what site management still has to do.
 create or replace view offene_aufgaben with (security_invoker = true) as
 select
   sa.projekt,
@@ -375,9 +375,9 @@ select
 from soll_aenderungen sa
 where sa.status = 'vorgeschlagen' or (sa.status = 'freigegeben' and sa.nachweis_status = 'fehlt');
 
--- Einträge mit ihrer Rohquelle (Kanal, Absender, Anhang) für Zwilling und Timeline.
--- talona_tag = Tag im Project record von Talona (siehe TALONA.md §3).
--- drop + create, weil sich e.* mit neuen Spalten in eintraege ändert.
+-- Entries with their raw source (channel, sender, attachment) for twin and timeline.
+-- talona_tag = tag in Talona's project record (see TALONA.md §3).
+-- drop + create, because e.* changes with new columns in eintraege.
 drop view if exists eintraege_mit_quelle;
 create view eintraege_mit_quelle with (security_invoker = true) as
 select
@@ -405,16 +405,16 @@ select
 from eintraege e
 left join quellen q on q.content_hash = e.quelle_hash;
 
--- "Check first" (Talona): was als Nächstes verdeckt wird (Wand zumachen/beplanken) und ob das sicher ist.
---   At risk   = offenes Reihenfolge-Signal (Installation fehlt laut Plan)
---   Resolved  = es gab ein Signal, inzwischen gelöst (Installation nachgeholt)
---   Clear     = kein Signal
+-- "Check first" (Talona): what gets covered next (closing/boarding a wall) and whether that is safe.
+--   At risk   = open sequence signal (installation missing per the plan)
+--   Resolved  = there was a signal, resolved by now (installation caught up)
+--   Clear     = no signal
 create or replace view check_first with (security_invoker = true) as
 select
   e.projekt,
   e.id            as eintrag_id,
   e.zeitpunkt,
-  e.art,                                   -- arbeit_geplant = angekündigt, arbeit_erledigt = schon zu
+  e.art,                                   -- arbeit_geplant = announced, arbeit_erledigt = already closed
   e.top, e.raum, e.element,
   e.person, e.gewerk,
   e.zusammenfassung,
@@ -435,8 +435,8 @@ left join lateral (
 where e.schritt = 'beplankung' and e.art in ('arbeit_geplant', 'arbeit_erledigt');
 
 -- ---------------------------------------------------------------------------
--- Realtime: Zwilling bekommt Änderungen live (nur serverseitig mit Secret-Key,
--- weil RLS ohne Policies den Browser-Key sperrt).
+-- Realtime: twin gets changes live (server-side with secret key only,
+-- because RLS without policies blocks the browser key).
 -- ---------------------------------------------------------------------------
 do $$
 begin

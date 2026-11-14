@@ -1,10 +1,10 @@
-"""Erzeugt den fiktiven Elektro-Ausführungsplan E-03 für Top 3 (Index A) mit Wänden und Bauteilen.
+"""Generates the fictional electrical construction plan E-03 for Top 3 (index A) with walls and components.
 
-Testdaten für das Bauteil-Register: Die bestehenden Pläne (E-05) nennen nur den Verteiler.
-Dieser Plan listet je Trockenbauwand die Leitungen und Dosen darin, damit SiteTwin erkennen kann,
-ob eine Wand geschlossen wird, bevor ihre Installation fertig ist.
+Test data for the component register: the existing plans (E-05) only name the distribution board.
+This plan lists, per drywall, the lines and sockets in it, so SiteTwin can detect
+whether a wall is closed before its installation is finished.
 
-    uv run python werkzeuge/plan_top3.py   # schreibt fake_data/drive/Projekt_Simmering/Plaene/Plan_E-03_Top3_IndexA.pdf
+    uv run python werkzeuge/plan_top3.py   # writes fake_data/drive/Projekt_Simmering/Plaene/Plan_E-03_Top3_IndexA.pdf
 """
 
 from pathlib import Path

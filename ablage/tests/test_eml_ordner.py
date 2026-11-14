@@ -27,7 +27,7 @@ def dateien() -> list[RawItem]:
     return list(ordner.parse(DRIVE, ImportKontext(projekt="BV Simmering")))
 
 
-# --- E-Mail ---------------------------------------------------------------
+# --- Email ----------------------------------------------------------------
 
 
 def test_6_mails_2_pdf_anhaenge(mails):
@@ -94,7 +94,7 @@ def test_kaputte_mail_und_html_fallback(tmp_path, ctx):
     assert item.zeitpunkt.isoformat() == "2026-11-13T11:00:00+01:00"
 
 
-# --- Ordner / Drive -------------------------------------------------------
+# --- Folder / Drive -------------------------------------------------------
 
 
 def test_6_dateien_2_csv_1_md_3_pdf(dateien):
@@ -176,5 +176,5 @@ def test_alles_zusammen_zweiter_import_0_neu(ctx):
     assert [(e.gelesen, e.neu) for e in lauf()] == [(39, 39), (8, 8), (6, 6), (1, 1)]
     assert [(e.neu, e.duplikate) for e in lauf()] == [(0, 39), (0, 8), (0, 6), (0, 1)]
     assert len(backend.zeilen) == 54
-    # Plan Index C liegt in Mail und Drive: gleiche Datei, aber getrennte Pfade je typ
+    # Plan Index C is in mail and Drive: same file, but separate paths per typ
     assert len(backend.dateien) == 5 + 2 + 6

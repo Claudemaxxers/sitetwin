@@ -1,7 +1,7 @@
 import type { TelefonConfig } from "./config";
 import type { AblageCall, Signal, SignalDB } from "./types";
 
-/** Post-Call-Webhooks von ElevenLabs (Typ post_call_transcription, call_initiation_failure). */
+/** Post-call webhooks from ElevenLabs (types post_call_transcription, call_initiation_failure). */
 export interface ElevenEvent {
   type: string;
   event_timestamp?: number;
@@ -26,7 +26,7 @@ export interface WebhookErgebnis {
 const iso = (unixS: number) => new Date(unixS * 1000).toISOString();
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
 
-/** Transkript im Vertrag v1 der Ablage (ablage/adapters/call.py). */
+/** Transcript in the Ablage contract v1 (ablage/adapters/call.py). */
 export function ablagePayload(ev: ElevenEvent, signal: Signal | null, fallbackJetztMs = Date.now()): AblageCall {
   const d = ev.data;
   const vars = d.conversation_initiation_client_data?.dynamic_variables ?? {};
@@ -48,11 +48,11 @@ export function ablagePayload(ev: ElevenEvent, signal: Signal | null, fallbackJe
 }
 
 /**
- * post_call_transcription: Transkript an die Ablage (/import/call), damit es wie jede andere Quelle
- * durch Übersetzer und Prüf-Agent läuft. status und bewertung_notiz setzt der ElevenLabs-Agent
- * selbst (Tool signal_abschliessen), hier wird daran nichts geändert.
- * call_initiation_failure: nicht erreicht → zurück auf offen, angerufen_am leer, damit der nächste
- * Lauf es erneut versucht (begrenzt über TELEFON_MAX_VERSUCHE und TELEFON_WARTEZEIT_MIN).
+ * post_call_transcription: transcript goes to the Ablage (/import/call), so that it runs through
+ * the translator (Übersetzer) and checking agent like any other source. status and bewertung_notiz are set by
+ * the ElevenLabs agent itself (tool signal_abschliessen); nothing about them is changed here.
+ * call_initiation_failure: not reached → back to offen, angerufen_am empty, so that the next
+ * run tries again (limited by TELEFON_MAX_VERSUCHE and TELEFON_WARTEZEIT_MIN).
  */
 export async function ereignisVerarbeiten(ev: ElevenEvent, db: SignalDB, cfg: TelefonConfig, fetchFn: typeof fetch = fetch): Promise<WebhookErgebnis> {
   const convId = ev.data?.conversation_id;

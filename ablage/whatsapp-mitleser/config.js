@@ -8,10 +8,10 @@ import { warnKonfig } from './melder.js';
 export const ORDNER = import.meta.dirname;
 export const AUTH_ORDNER = join(ORDNER, 'auth');
 export const QR_DATEI = join(AUTH_ORDNER, 'qr.png');
-export const ZUSTAND_DATEI = join(ORDNER, 'zustand', 'melder.json'); // nicht in auth/, git-ignoriert
+export const ZUSTAND_DATEI = join(ORDNER, 'zustand', 'melder.json'); // not in auth/, git-ignored
 const ABLAGE_ENV = join(ORDNER, '..', '.env');
 
-/** Liest optional ./.env (Node >= 20.12), echte Umgebungsvariablen haben Vorrang. */
+/** Optionally reads ./.env (Node >= 20.12), real environment variables take precedence. */
 export function ladeEnv(env = process.env) {
   const datei = join(ORDNER, '.env');
   if (existsSync(datei) && typeof process.loadEnvFile === 'function') {
@@ -27,8 +27,8 @@ export function ladeEnv(env = process.env) {
 }
 
 /**
- * SUPABASE_URL und SUPABASE_SERVICE_KEY: aus der Umgebung (inkl. eigener .env), sonst aus ../.env.
- * Aus der Ablage-.env werden nur diese zwei Werte uebernommen, nichts sonst.
+ * SUPABASE_URL and SUPABASE_SERVICE_KEY: from the environment (incl. own .env), otherwise from ../.env.
+ * Only these two values are taken from the Ablage .env, nothing else.
  */
 export function supabaseZugang(env = process.env, ablageEnv = ABLAGE_ENV) {
   let url = (env.SUPABASE_URL || '').trim();
@@ -39,7 +39,7 @@ export function supabaseZugang(env = process.env, ablageEnv = ABLAGE_ENV) {
       url = url || (w.SUPABASE_URL || '').trim();
       key = key || (w.SUPABASE_SERVICE_KEY || '').trim();
     } catch {
-      /* unlesbar: gilt als nicht gesetzt */
+      /* unreadable: counts as not set */
     }
   }
   return url && key ? { url, key } : null;

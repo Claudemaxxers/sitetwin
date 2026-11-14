@@ -1,4 +1,4 @@
-"""Sprachnachrichten transkribieren (SPEC §7.9). OpenAI-kompatible Schnittstelle (Whisper)."""
+"""Transcribe voice messages (SPEC §7.9). OpenAI-compatible interface (Whisper)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ import httpx
 
 from .models import AnhangTyp, ParseFehler, RawItem
 
-# Bytes, Dateiname, Mimetype -> Text
+# bytes, file name, mimetype -> text
 Transkribierer = Callable[[bytes, str, str | None], str]
 
-TIMEOUT = 12.0  # Twilio wartet höchstens 15 s auf die Webhook-Antwort
-# Whisper erfindet bei Stille Text ("Vielen Dank."). Ab diesem no_speech_prob in ALLEN Segmenten
-# gilt die Aufnahme als stumm. Gemessen bei Groq whisper-large-v3: Stille 0,70, Sprache unter 0,01.
+TIMEOUT = 12.0  # Twilio waits at most 15 s for the webhook response
+# Whisper invents text on silence ("Vielen Dank."). From this no_speech_prob in ALL segments on,
+# the recording counts as silent. Measured with Groq whisper-large-v3: silence 0.70, speech below 0.01.
 STILLE_AB = 0.5
 
 
@@ -23,11 +23,11 @@ class TranskriptFehler(RuntimeError):
 
 
 class KeineSprache(TranskriptFehler):
-    """Aufnahme ohne Sprache: kein Transkript statt erfundenem Text."""
+    """Recording without speech: no transcript instead of invented text."""
 
 
 def ist_stille(segmente: object) -> bool:
-    """True nur, wenn die Antwort Segmente hat und jedes davon als "keine Sprache" gilt."""
+    """True only if the response has segments and each of them counts as "no speech"."""
     if not isinstance(segmente, list) or not segmente:
         return False
     werte = [s.get("no_speech_prob") if isinstance(s, dict) else None for s in segmente]
@@ -35,7 +35,7 @@ def ist_stille(segmente: object) -> bool:
 
 
 class HttpTranskribierer:
-    """POST {base_url}/audio/transcriptions (multipart). Der Schlüssel steht nur im Header."""
+    """POST {base_url}/audio/transcriptions (multipart). The key appears only in the header."""
 
     def __init__(
         self,
@@ -56,7 +56,7 @@ class HttpTranskribierer:
 
     def __call__(self, daten: bytes, dateiname: str, mimetype: str | None) -> str:
         name = PurePath(dateiname).name or "audio.ogg"
-        if name.lower().endswith(".opus"):  # Ogg/Opus; die Schnittstelle lehnt ".opus" ab
+        if name.lower().endswith(".opus"):  # Ogg/Opus; the interface rejects ".opus"
             name = name[: -len(".opus")] + ".ogg"
             mimetype = "audio/ogg"
         felder = {"model": self.modell, "language": "de"}
@@ -70,9 +70,9 @@ class HttpTranskribierer:
                     files={"file": (name, daten, mimetype or "application/octet-stream")},
                 )
 
-            # verbose_json liefert Segmente mit no_speech_prob (für die Stille-Erkennung).
+            # verbose_json returns segments with no_speech_prob (for silence detection).
             r = sende({**felder, "response_format": "verbose_json"})
-            if r.status_code == 400:  # Modell kennt verbose_json nicht: ohne Stille-Erkennung
+            if r.status_code == 400:  # model does not know verbose_json: without silence detection
                 r = sende(felder)
         if r.status_code >= 400:
             raise TranskriptFehler(f"HTTP {r.status_code}")
@@ -91,7 +91,7 @@ class HttpTranskribierer:
 def transkribierer_aus(
     api_key: str, base_url: str, modell: str, transport: httpx.BaseTransport | None = None
 ) -> Transkribierer | None:
-    """Leerer Schlüssel = Transkription aus."""
+    """Empty key = transcription off."""
     if not api_key:
         return None
     return HttpTranskribierer(api_key, base_url, modell, transport=transport)
@@ -100,7 +100,7 @@ def transkribierer_aus(
 def ergaenze(
     eintraege: Iterable[RawItem | ParseFehler], transkribierer: Transkribierer | None
 ) -> list[RawItem | ParseFehler]:
-    """Audio ohne Text bekommt sein Transkript. Fehler gehen nach meta, nie nach oben."""
+    """Audio without text gets its transcript. Errors go into meta, never upwards."""
     liste = list(eintraege)
     if transkribierer is None:
         return liste
@@ -117,7 +117,7 @@ def ergaenze(
             text = transkribierer(daten, a.dateiname, a.mimetype)
             if not text or not text.strip():
                 raise TranskriptFehler("leere Antwort")
-        except Exception as e:  # Nachricht darf nicht verloren gehen
+        except Exception as e:  # message must not be lost
             item.meta["transkript_fehler"] = f"{type(e).__name__}: {e}"
             continue
         item.text = text.strip()

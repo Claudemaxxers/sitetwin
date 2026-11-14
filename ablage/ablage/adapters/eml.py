@@ -1,4 +1,4 @@
-"""E-Mail (.eml, SPEC §7.2). 1 RawItem pro Mail + 1 pro Anhang. Datei heißt eml.py, nicht email.py."""
+"""Email (.eml, SPEC §7.2). 1 RawItem per mail + 1 per attachment. The file is named eml.py, not email.py."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ def _body(msg: EmailMessage) -> str:
     return _html_zu_text(teil.get_content()) if teil is not None else ""
 
 
-# Ein Anhang, wie er im Mailteil steht: (Dateiname oder None, Inhalt, Content-Type)
+# An attachment as it appears in the mail part: (file name or None, content, Content-Type)
 Teil = tuple[str | None, bytes, str | None]
 
 
@@ -88,8 +88,8 @@ def aus_bytes(daten: bytes, dateiname: str, ctx: ImportKontext) -> Iterator[RawI
 def items(
     msg: EmailMessage, body: str, anhaenge: Iterable[Teil], dateiname: str, ctx: ImportKontext
 ) -> Iterator[RawItem]:
-    """Gemeinsamer Teil aller Mail-Wege (.eml, Gmail roh, Gmail-Felder): Kopfzeilen aus `msg`,
-    Body und Anhänge schon herausgelöst. Hier entstehen Zeilen und content_hash."""
+    """Shared part of all mail paths (.eml, Gmail raw, Gmail fields): headers from `msg`,
+    body and attachments already extracted. This is where rows and content_hash are created."""
     message_id = _kopf(msg, "Message-ID") or dateiname
     betreff = _kopf(msg, "Subject") or ""
     absender = _kopf(msg, "From")
@@ -146,5 +146,5 @@ def parse(path: Path, ctx: ImportKontext) -> Iterator[RawItem | ParseFehler]:
     for datei in dateien:
         try:
             yield from list(aus_bytes(datei.read_bytes(), datei.name, ctx))
-        except Exception as e:  # eine kaputte Mail bricht den Import nicht ab
+        except Exception as e:  # one broken mail does not abort the import
             yield ParseFehler(ref=datei.name, grund=str(e))

@@ -1,4 +1,4 @@
-"""Szenario wand_top5 (Kernbeispiel aus KONZEPT.md): Zahlen aus fake_data/ERWARTET.md §5."""
+"""Scenario wand_top5 (core example from KONZEPT.md): numbers from fake_data/ERWARTET.md §5."""
 
 import pytest
 
@@ -25,7 +25,7 @@ def items(alles) -> list[RawItem]:
 def test_10_nachrichten_1_systemzeile(alles, items):
     assert len(items) == 10 and len(alles) == 11
     assert sum(isinstance(e, whatsapp.Systemzeile) for e in alles) == 1
-    assert {i.kanal for i in items} == {"BV Simmering Elektro"}  # gleicher Kanal wie die Basisdaten
+    assert {i.kanal for i in items} == {"BV Simmering Elektro"}  # same channel as the base data
     assert "Marko Novak (Novak Trockenbau)" in {i.absender for i in items}
 
 
@@ -51,7 +51,7 @@ def test_signal_anruf_nach_vertrag_v1():
     assert anruf.original_ref == "call_3b91d7f2" and anruf.absender == "Stefan Huber"
     assert anruf.zeitpunkt.isoformat() == "2026-11-13T17:31:12+01:00"
     assert anruf.meta["dauer_s"] == 106
-    assert anruf.meta["roh"]["anlass"] == "signal"  # Zusatzfeld bleibt in meta.roh erhalten
+    assert anruf.meta["roh"]["anlass"] == "signal"  # extra field is preserved in meta.roh
     assert "Die Wand darf nicht zugehen" in anruf.text
 
 

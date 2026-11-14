@@ -1,4 +1,4 @@
-"""Drive-Ordner (SPEC §7.3). 1 RawItem pro Datei, zeitpunkt = None, Identität = Pfad + Inhalt."""
+"""Drive folder (SPEC §7.3). 1 RawItem per file, zeitpunkt = None, identity = path + content."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def item_aus_bytes(
     mtime: str | None = None,
     lokaler_pfad: str | None = None,
 ) -> RawItem:
-    """Ein Drive-Item aus Dateibytes. `ref` = relativer Pfad inkl. Dateiname (original_ref)."""
+    """A Drive item from file bytes. `ref` = relative path incl. file name (original_ref)."""
     name = PurePosixPath(ref).name
     anhang = Anhang.aus_bytes(name, daten, lokaler_pfad=lokaler_pfad)
     meta: dict = {"groesse": len(daten)}
@@ -79,5 +79,5 @@ def parse(path: Path, ctx: ImportKontext) -> Iterator[RawItem | ParseFehler]:
             yield item_aus_bytes(
                 daten, ref, ctx.projekt, wurzel.resolve().name, mtime, lokaler_pfad=str(datei)
             )
-        except Exception as e:  # eine kaputte Datei bricht den Import nicht ab
+        except Exception as e:  # one broken file does not abort the import
             yield ParseFehler(ref=ref, grund=str(e))

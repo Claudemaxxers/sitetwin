@@ -1,1 +1,1 @@
-"""SiteTwin Ablage – Eingangsschicht. Siehe ablage/SPEC.md."""
+"""SiteTwin Ablage – intake layer. See ablage/SPEC.md."""

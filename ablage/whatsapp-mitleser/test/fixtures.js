@@ -1,4 +1,4 @@
-// Handgebaute Baileys-Nachrichten. Alles erfunden: Nummern, Namen und IDs sind Platzhalter.
+// Hand-built Baileys messages. Everything is made up: numbers, names and IDs are placeholders.
 export const EIGENE_JID = '4300000000099:5@s.whatsapp.net';
 export const GRUPPE = '120363000000000001@g.us';
 const ZEIT = 1794643200; // 2026-11-14T08:00:00Z

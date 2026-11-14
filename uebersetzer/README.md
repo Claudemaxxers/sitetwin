@@ -1,12 +1,12 @@
 # Übersetzer (Hendrik)
 
-> **💸 Kosten – bitte zuerst lesen (auch Claude Code)**
-> Jeder Claude-Aufruf kostet Geld und läuft über den API-Key in `uebersetzer/.env` (im Team über Hendriks **privaten** Key). Bitte nur ausführen, wenn es wirklich nötig ist, nicht „mal schnell testen“.
-> - Kostenlos: `uv run pytest` und `uv run python -m uebersetzer trockenlauf` (ohne Claude).
-> - Kostet Geld: alles mit `--mit-claude`. Ein voller Lauf über die Testdaten kostet ca. 4 Cent (49 Aufrufe mit `claude-haiku-5-5`, gemessen am 13.11. über die fiktiven Daten). Im Team vorher kurz bei Hendrik fragen.
-> - **Kostensperre (bleibt absichtlich drin):** Ohne `--mit-claude` ruft kein Befehl die API auf. Das ist ein Schutz vor versehentlichen Kosten und kein fehlendes Feature. Ohne das Flag bricht `lauf` mit einer Meldung ab, sobald eine neue Quelle Claude bräuchte; es läuft dann **nicht** die Regelstufe allein weiter. Nur die festen Regeln: `pruefen`. Die Stellen im Code sind mit `HACKATHON-KOSTENSPERRE` markiert (`grep -rn HACKATHON-KOSTENSPERRE`).
+> **💸 Costs – please read first (Claude Code too)**
+> Every Claude call costs money and runs on the API key in `uebersetzer/.env` (within the team that is Hendrik's **private** key). Please only run it when it is really needed, not "just for a quick test".
+> - Free: `uv run pytest` and `uv run python -m uebersetzer trockenlauf --ohne-claude` (without Claude).
+> - Costs money: everything without `--ohne-claude`. A full run over the test data costs about 4 cents (49 calls with `claude-haiku-5-5`, measured on 13 Nov over the fictional data). Within the team, briefly ask Hendrik first.
+> - **Claude is on by default:** Every command calls Claude unless `--ohne-claude` is given; that flag skips every API call (fixed rules only, free). `--mit-claude` is still accepted but has no effect.
 
-Schritt 2 + 3 aus [`KONZEPT.md`](../KONZEPT.md): macht aus den Rohdaten der Ablage (`quellen`, Santino) strukturierte Einträge – **was, wo, wer, wann, nach welchem Plan, wer hat entschieden, worauf wird gewartet** – und erkennt neue Plan-Indizes. Darauf arbeiten der Prüf-Agent (Signale) und der digitale Zwilling.
+Steps 2 + 3 from [`KONZEPT.md`](../KONZEPT.md): turns the raw data of the Ablage (`quellen`, Santino) into structured entries – **what, where, who, when, according to which plan, who decided, what is being waited for** – and detects new plan revisions. The Prüf-Agent (signals) and the digital twin work on top of that.
 
 ```
 quellen (status='neu')  ──►  Übersetzer  ──►  eintraege   (0..n pro Quelle)
@@ -16,118 +16,118 @@ quellen (status='neu')  ──►  Übersetzer  ──►  eintraege   (0..n pro
 
 ## Setup
 
-Python 3.11+ und [uv](https://docs.astral.sh/uv/).
+Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cd uebersetzer
-cp .env.example .env        # SUPABASE_SERVICE_KEY und ANTHROPIC_API_KEY eintragen
+cp .env.example .env        # fill in SUPABASE_SERVICE_KEY and ANTHROPIC_API_KEY
 uv sync
 ```
 
-Datenbank: `schema.sql`, dann `stammdaten_bv_simmering.sql` im Supabase-SQL-Editor ausführen (beide wiederholbar). Ist im Projekt `sitetwin` bereits erledigt.
+Database: run `schema.sql`, then `stammdaten_bv_simmering.sql` in the Supabase SQL editor (both repeatable). Already done in the project `sitetwin`.
 
-## Starten
-
-```bash
-uv run pytest                                                  # Tests (ohne Claude, ohne Supabase), kostenlos
-uv run python -m uebersetzer trockenlauf                       # fake_data, ohne Claude, schreibt nichts, kostenlos
-uv run python -m uebersetzer trockenlauf --mit-claude --limit 5 # kostet Geld: 5 Testquellen mit Claude
-uv run python -m uebersetzer lauf --mit-claude                 # kostet Geld: neue Quellen übersetzen und prüfen
-uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30  # für die Demo: alle 30 s nachsehen
-```
-
-## Wie es arbeitet
-
-- **Eine Quelle pro Claude-Aufruf**, chronologisch. Mitgeschickt werden die letzten 40 Quellen als Zeitachse (damit „ok machen wir“ oder „laut unserem Plan“ zuordenbar sind), die gültigen Pläne und die Stammdaten (Tops, LV). Extrahiert wird nur aus der neuen Quelle.
-- **Anhänge:** Fotos gehen als Bild an Claude. iPhone-Fotos im Format HEIC/HEIF wandelt der Übersetzer vorher in JPEG um (`pillow-heif`, aufrecht gedreht, längste Kante 1568 px), erkannt an Endung oder Dateikopf; mit erzeugten Testbildern geprüft, nicht mit einem echten iPhone-Foto. PDFs als Text (`pypdf`), falls die Ablage `text` leer lässt; PDFs ohne Textebene als Dokument. Sprachnachrichten nur über das Transkript in `text` – fehlt es, entsteht ein Eintrag mit `unklar = true` und Rückfrage statt geratenem Inhalt.
-- **Ohne Claude erledigt:** gelöschte Nachrichten, Stammdaten-Dateien aus dem Drive (CSV, MD, TXT), leere Quellen.
-- **Idempotent:** Wird eine Quelle erneut verarbeitet, werden ihre Einträge ersetzt (`unique (quelle_hash, nr)`), nicht verdoppelt. Pläne werden gemergt; gültig ist der jüngste Index (Sicht `plaene_aktuell`).
-- **Fehler:** Rate Limit / Netzwerk → Quelle bleibt `neu`, nächster Lauf versucht es wieder. Sonst `status = fehler` mit Grund in `meta.fehler`.
-- **Dauerlauf (`--dauerhaft`):** Ist Supabase kurz nicht erreichbar (z. B. DNS-Aussetzer am Hotspot), bricht nur der Takt ab; der Lauf meldet `⚠ Netz/Supabase nicht erreichbar` und versucht es im nächsten Takt wieder.
-- **Modell:** `claude-haiku-5-5` mit Structured Outputs (Pydantic, `modell.py`), Effort `medium`. Umstellbar über `UEBERSETZER_MODELL`. Der stabile Teil des Prompts (Regeln + Stammdaten) wird gecacht.
-
-## Bauteil-Register (Soll-Zustand)
-
-Damit der Prüf-Agent weiß, *welches* Kabel oder *welche* Wand gemeint ist, liest der Übersetzer Pläne als Soll ein:
-
-- **Soll aus Plänen:** Plandokumente (Drive `Plaene/…`, Mail-Anhänge `Plan_…`) liefern alle Bauteile – Wände, Leitungen, Dosen, Verteiler, Schalter – mit Raum, Lage und der Wand, in der sie sitzen (`elemente.gehoert_zu`). Ein neuer Index aktualisiert das Register; was er nicht mehr vorsieht, wird `soll_aktiv = false` (z. B. Verteiler Top 5 Vorraum nach Index C). Ein älterer Index ändert nichts mehr, sobald ein neuerer übernommen ist.
-- **Ist pro Nachricht:** Jeder Eintrag bekommt, wenn eindeutig, `element_id` und `schritt` (verrohrung, leitung_eingezogen, gesetzt, abnahme, beplankung, …). Die Sicht `element_stand` zeigt je Bauteil die erledigten und geplanten Schritte – das ist die Grundlage für den Zwilling.
-- **Testdaten:** `fake_data/drive/Projekt_Simmering/Plaene/Plan_E-03_Top3_IndexA.pdf` (5 Trockenbauwände in Top 3 mit Leitungen und Dosen), erzeugt mit `uv run python werkzeuge/plan_top3.py`. Fiktiv, die Pipeline ist echt.
-
-## Soll-Änderungen während der Bauphase
-
-Das Soll steht nicht nur im Plan: Auf der Baustelle wird umentschieden („Keller nur 3×3 statt 3×4“). Nach ÖNORM B 2110 kann der Auftraggeber Leistungsänderungen anordnen – auch mündlich, für den Beweis zählt aber die Schriftform. SiteTwin bildet das so ab (`soll.py`, läuft im Prüf-Agenten, kostenlos):
-
-| Wer meldet | Ergebnis |
-|---|---|
-| Bauleitung (`personen.darf_soll_aendern`, im BV Simmering: Thomas Meier, GU) | Änderung gilt sofort (`freigegeben`), Bauteil-Register wird angepasst, betroffene Signale werden gelöst. |
-| Jemand anderes („das haben wir geändert“) | Nur `vorgeschlagen`. Signale bleiben offen – der Arbeiter ist erst nach der Freigabe frei. |
-| Bauleitung antwortet (Art `freigabe`) | `freigegeben` (inkl. Register + Signale) oder `abgelehnt`. Freigaben von Unberechtigten werden ignoriert. |
-| Bauleitung schickt Foto/PDF eines Dokuments (Art `nachweis`) | `nachweis_status = vorhanden`. Sprachnachrichten und Fotos anderer zählen nicht. |
-
-Offene Aufgaben fürs Frontend liefert die Sicht **`offene_aufgaben`**: „Soll-Änderung bestätigen“ (vorgeschlagen) und „Schriftlichen Nachweis einreichen“ (freigegeben, Nachweis fehlt), mit `zustaendig`.
-
-## Sichten fürs Frontend (Abgleich mit `TALONA.md`)
-
-| Talona | Sicht / Tabelle |
-|---|---|
-| Project record (Zeile + Tag) | `eintraege_mit_quelle`, Spalte **`talona_tag`**: Reported done, Planned, Verified, Delivery, Change order, Decided, Sign-off, Issue, Request, Fix reported, Progress |
-| Changes, „No client sign-off“, „Photo needed“ | `soll_aenderungen` + **`offene_aufgaben`** (bestätigen / Nachweis einreichen) |
-| Alerts („If work is already built · Alert PM/SU“) | `signale` (+ Anruf über den Telefon-Agenten), Verlauf in `signal_verlauf` |
-| Check first („was morgen verdeckt wird“) | **`check_first`**: jede angekündigte/gemeldete Beplankung mit Status *At risk* (offenes Reihenfolge-Signal), *Resolved* oder *Clear* |
-| Sheets / Drawing | `plaene_aktuell`, Bauteile in `element_stand` |
-| Mehrkosten (lib/twin-model.ts) | `eintraege.taetigkeit`, `menge`, `einheit`, `lv_pos_nr` |
-
-## Prüf-Agent (Schritt 4)
-
-`pruefung.py` prüft jeden neuen Eintrag gegen den gültigen Plan und legt **Signale** an, solange noch jemand eingreifen kann. `lauf` übersetzt und prüft in einem Durchgang; einzeln geht's mit:
+## Running
 
 ```bash
-uv run python -m uebersetzer pruefen --trocken     # gegen Supabase prüfen, nichts schreiben (kostenlos)
-uv run python -m uebersetzer pruefen               # feste Regeln, schreibt Signale (kostenlos)
-uv run python -m uebersetzer pruefen --mit-claude  # zusätzlich Claude-Prüfung (kostet Geld)
+uv run pytest                                                  # tests (no Claude, no Supabase), free
+uv run python -m uebersetzer trockenlauf --ohne-claude         # fake_data, no Claude, writes nothing, free
+uv run python -m uebersetzer trockenlauf --limit 5             # costs money: 5 test sources with Claude
+uv run python -m uebersetzer lauf                              # costs money: translate and check new sources
+uv run python -m uebersetzer lauf --dauerhaft 30               # for the demo: look for new sources every 30 s
 ```
 
-| Stufe | Erkennt | Kosten |
+## How it works
+
+- **One source per Claude call**, in chronological order. Sent along are the last 40 sources as a timeline (so that "ok machen wir" or "laut unserem Plan" can be attributed), the valid plans and the master data (Tops, LV). Extraction is done only from the new source.
+- **Attachments:** Photos go to Claude as an image. iPhone photos in HEIC/HEIF format are converted to JPEG by the Übersetzer beforehand (`pillow-heif`, rotated upright, longest edge 1568 px), detected by extension or file header; checked with generated test images, not with a real iPhone photo. PDFs as text (`pypdf`) if the Ablage leaves `text` empty; PDFs without a text layer as a document. Voice messages only via the transcript in `text` – if it is missing, an entry with `unklar = true` and a follow-up question is created instead of guessed content.
+- **Handled without Claude:** deleted messages, master data files from the Drive (CSV, MD, TXT), empty sources.
+- **Idempotent:** If a source is processed again, its entries are replaced (`unique (quelle_hash, nr)`), not duplicated. Plans are merged; the most recent revision is the valid one (view `plaene_aktuell`).
+- **Errors:** Rate limit / network → source stays `neu`, the next run tries again. Otherwise `status = fehler` with the reason in `meta.fehler`.
+- **Continuous run (`--dauerhaft`):** If Supabase is briefly unreachable (e.g. DNS dropouts on the hotspot), only that cycle is aborted; the run reports `⚠ Netz/Supabase nicht erreichbar` and tries again in the next cycle.
+- **Model:** `claude-haiku-5-5` with Structured Outputs (Pydantic, `modell.py`), effort `medium`. Can be changed via `UEBERSETZER_MODELL`. The stable part of the prompt (rules + master data) is cached.
+
+## Component register (target state)
+
+So that the Prüf-Agent knows *which* cable or *which* wall is meant, the Übersetzer reads plans in as the target state:
+
+- **Target state from plans:** Plan documents (Drive `Plaene/…`, mail attachments `Plan_…`) provide all components – walls, cables, sockets, distribution boards, switches – with room, position and the wall they sit in (`elemente.gehoert_zu`). A new revision updates the register; whatever it no longer provides for becomes `soll_aktiv = false` (e.g. distribution board Top 5 Vorraum after revision C). An older revision changes nothing anymore once a newer one has been adopted.
+- **Actual state per message:** Every entry gets, if unambiguous, `element_id` and `schritt` (verrohrung, leitung_eingezogen, gesetzt, abnahme, beplankung, …). The view `element_stand` shows the completed and planned steps per component – this is the basis for the twin.
+- **Test data:** `fake_data/drive/Projekt_Simmering/Plaene/Plan_E-03_Top3_IndexA.pdf` (5 drywall partitions in Top 3 with cables and sockets), generated with `uv run python werkzeuge/plan_top3.py`. Fictional, the pipeline is real.
+
+## Target-state changes during construction
+
+The target state is not only in the plan: decisions are changed on site ("Keller nur 3×3 statt 3×4"). Under ÖNORM B 2110 the client can order changes to the works – verbally too, but for evidence the written form counts. SiteTwin models it like this (`soll.py`, runs in the Prüf-Agent, free):
+
+| Who reports | Result |
+|---|---|
+| Site management (`personen.darf_soll_aendern`, in BV Simmering: Thomas Meier, GU) | Change applies immediately (`freigegeben`), the component register is adjusted, affected signals are resolved. |
+| Someone else ("das haben wir geändert") | Only `vorgeschlagen`. Signals stay open – the worker is only cleared after the approval. |
+| Site management replies (type `freigabe`) | `freigegeben` (incl. register + signals) or `abgelehnt`. Approvals from unauthorized people are ignored. |
+| Site management sends a photo/PDF of a document (type `nachweis`) | `nachweis_status = vorhanden`. Voice messages and photos from others do not count. |
+
+Open tasks for the frontend come from the view **`offene_aufgaben`**: "Soll-Änderung bestätigen" (vorgeschlagen) and "Schriftlichen Nachweis einreichen" (freigegeben, proof missing), with `zustaendig`.
+
+## Views for the frontend (matched against `TALONA.md`)
+
+| Talona | View / table |
+|---|---|
+| Project record (row + tag) | `eintraege_mit_quelle`, column **`talona_tag`**: Reported done, Planned, Verified, Delivery, Change order, Decided, Sign-off, Issue, Request, Fix reported, Progress |
+| Changes, "No client sign-off", "Photo needed" | `soll_aenderungen` + **`offene_aufgaben`** (confirm / submit proof) |
+| Alerts ("If work is already built · Alert PM/SU") | `signale` (+ call via the phone agent), history in `signal_verlauf` |
+| Check first ("what gets covered up tomorrow") | **`check_first`**: every announced/reported boarding with status *At risk* (open sequence signal), *Resolved* or *Clear* |
+| Sheets / Drawing | `plaene_aktuell`, components in `element_stand` |
+| Additional costs (lib/twin-model.ts) | `eintraege.taetigkeit`, `menge`, `einheit`, `lv_pos_nr` |
+
+## Prüf-Agent (step 4)
+
+`pruefung.py` checks every new entry against the valid plan and creates **signals** as long as someone can still intervene. `lauf` translates and checks in one pass; individually it works with:
+
+```bash
+uv run python -m uebersetzer pruefen --trocken --ohne-claude  # check against Supabase, write nothing (free)
+uv run python -m uebersetzer pruefen --ohne-claude            # fixed rules, writes signals (free)
+uv run python -m uebersetzer pruefen                          # additionally the Claude check (costs money)
+```
+
+| Stage | Detects | Cost |
 |---|---|---|
-| Feste Regel `plan_veraltet` | Arbeit nach Plan-Index X, obwohl zu dem Zeitpunkt schon ein neuerer Index ausgegeben war („Änderung hat die Crew nicht erreicht“). Gelöst, sobald am selben Ort nach dem gültigen Index gearbeitet wird. | 0 |
-| Feste Regel Wand zu vor Installation | In einer Wand oder einem Raum soll zugemacht werden (oder ist es), obwohl laut Plan dort noch Installation fehlt (Leitung nicht verrohrt/eingezogen, Dose/Verteiler nicht gesetzt). Kritisch, solange es nur angekündigt ist. Angerufen wird der Vorarbeiter des Gewerks, dessen Installation fehlt (z. B. Elektro), nicht der, der zumacht. Gelöst, sobald alles gesetzt ist. Eine Abnahme ist bewusst keine Voraussetzung (Golden Set S1). | 0 |
-| Feste Regel Bauteil entfällt | Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht. Gelöst, sobald das Bauteil am neuen Ort erledigt ist. | 0 |
-| Feste Regel `unklar` | Gemeldete Arbeit, bei der unklar ist, was oder wo → Rückfrage statt Raten. Kurze Antworten wie „ok“ lösen nichts aus. | 0 |
-| Claude-Prüfung | Abweichung von Plan/LV ohne Anordnung, nicht weitergegebene Anweisungen; erkennt auch, wenn ein neuer Eintrag ein offenes Signal löst. **Reihenfolge-Signale (Wand zu vor Installation) kommen nur aus den festen Regeln:** Vorschläge dieser Art verwirft der Prüf-Agent, nach Fehlalarmen in zwei Testläufen. | pro Quelle 1 Aufruf |
+| Fixed rule `plan_veraltet` | Work according to plan revision X although a newer revision had already been issued at that time ("the change did not reach the crew"). Resolved as soon as work at the same location follows the valid revision. | 0 |
+| Fixed rule wall closed before installation | A wall or a room is about to be closed up (or already is) although according to the plan installation is still missing there (cable not conduited/pulled, socket/distribution board not set). Critical as long as it is only announced. The call goes to the foreman of the trade whose installation is missing (e.g. electrical), not the one closing up. Resolved as soon as everything is set. An acceptance inspection is deliberately not a prerequisite (Golden Set S1). | 0 |
+| Fixed rule component dropped | Work on a component that the valid plan no longer provides for. Resolved as soon as the component is done at the new location. | 0 |
+| Fixed rule `unklar` | Reported work where it is unclear what or where → follow-up question instead of guessing. Short replies like "ok" trigger nothing. | 0 |
+| Claude check | Deviation from plan/LV without an instruction, instructions that were not passed on; also detects when a new entry resolves an open signal. **Sequence signals (wall closed before installation) come only from the fixed rules:** the Prüf-Agent discards suggestions of this kind, after false alarms in two test runs. | 1 call per source |
 
-- Signale sind idempotent über `(projekt, schluessel)`: weitere Belege ergänzen ein Signal, statt ein neues anzulegen; ein gelöstes Signal geht bei neuer Abweichung wieder auf `offen` (außer es ist als Fehlalarm bewertet, siehe Lernschleife).
-- Lebenszyklus laut `KONZEPT.md`: `offen` (Prüf-Agent) → `in_bearbeitung` (setzt der Telefon-Agent nach dem Anruf) → `geloest` (Prüf-Agent). `signal_verlauf` protokolliert jeden Wechsel per Trigger.
-- `anruf_text` ist der Text für den Telefon-Agenten, `zustaendig` die Person aus der Meldung.
-- Geprüfte Einträge bekommen `geprueft_am`. Zum erneuten Prüfen: `update eintraege set geprueft_am = null`.
+- Signals are idempotent via `(projekt, schluessel)`: further evidence is added to a signal instead of creating a new one; a resolved signal goes back to `offen` on a new deviation (unless it is rated as a false alarm, see learning loop).
+- Lifecycle according to `KONZEPT.md`: `offen` (Prüf-Agent) → `in_bearbeitung` (set by the phone agent after the call) → `geloest` (Prüf-Agent). `signal_verlauf` logs every transition via trigger.
+- `anruf_text` is the text for the phone agent, `zustaendig` the person from the report.
+- Checked entries get `geprueft_am`. To check again: `update eintraege set geprueft_am = null`.
 
-### Lernschleife: Rückmeldungen der Baustelle
+### Learning loop: feedback from the site
 
-Der WhatsApp-Mitleser (`ablage/whatsapp-mitleser`, Abschnitt „Rückmeldung zu Warnungen“) schreibt die Antwort der Baustelle auf eine Warnung in `signale.bewertung` (`berechtigt` | `fehlalarm`) und `bewertung_notiz` („per WhatsApp, <Name>, <Zeit>: <Text>“). Der Prüf-Agent liest das so:
+The WhatsApp-Mitleser (`ablage/whatsapp-mitleser`, section "Feedback on warnings") writes the site's reply to a warning into `signale.bewertung` (`berechtigt` | `fehlalarm`) and `bewertung_notiz` ("per WhatsApp, <Name>, <Zeit>: <Text>"). The Prüf-Agent reads it like this:
 
-| Bewertung | Was der Prüf-Agent tut |
+| Rating | What the Prüf-Agent does |
 |---|---|
-| `fehlalarm` | Taucht dieselbe Lage wieder auf, wird das bewertete Signal **weder ergänzt noch wieder geöffnet**. Es bleibt samt Bewertung stehen. Stattdessen entsteht ein Folgesignal (`<schluessel>#nach-fehlalarm-1`). Es ist auf **`mittel` abgestuft**, der Titel beginnt mit „Früher als Fehlalarm bewertet: …“, die Begründung nennt die Notiz, der Anruftext bittet um kurze Bestätigung. Weitere Belege landen im Folgesignal, es löst sich wie das Original. |
-| `berechtigt` | Wie bisher: ergänzen, wieder öffnen, eskalieren. Die Bewertung bleibt beim Wiederöffnen stehen, ein späteres Urteil überschreibt sie. |
-| Claude-Stufe | Die letzten 10 bewerteten Signale des Projekts gehen als Block `<rueckmeldungen_der_baustelle>` in den Prompt (nach den offenen Signalen, vor den neuen Einträgen, nicht im gecachten Teil). Die Regel dazu: als Fehlalarm bewertete Lagen und ähnliche Fälle nicht wieder melden, außer ein neuer Eintrag zeigt klar etwas anderes. |
+| `fehlalarm` | If the same situation shows up again, the rated signal is **neither added to nor reopened**. It stays in place together with its rating. Instead a follow-up signal is created (`<schluessel>#nach-fehlalarm-1`). It is **downgraded to `mittel`**, the title starts with "Früher als Fehlalarm bewertet: …", the reasoning cites the note, the call text asks for a brief confirmation. Further evidence lands in the follow-up signal, it resolves like the original. |
+| `berechtigt` | As before: add, reopen, escalate. The rating stays in place on reopening, a later verdict overwrites it. |
+| Claude stage | The last 10 rated signals of the project go into the prompt as the block `<rueckmeldungen_der_baustelle>` (after the open signals, before the new entries, not in the cached part). The rule for it: do not report situations rated as false alarms and similar cases again, unless a new entry clearly shows something different. |
 
-Warum eine neue Zeile statt Wiederöffnen: Das Folgesignal trägt den Hinweis im Titel und die abgestufte Schwere, und das bewertete Signal bleibt unverändert stehen. (Der WhatsApp-Melder warnt inzwischen auch bei einem wieder geöffneten Signal erneut, mit „Wieder offen:“ im Titel.) Ganz unterdrückt wird nichts, weil auch ein Fehlalarm-Urteil falsch sein kann.
+Why a new row instead of reopening: the follow-up signal carries the hint in the title and the downgraded severity, and the rated signal stays unchanged. (The WhatsApp notifier meanwhile also warns again on a reopened signal, with "Wieder offen:" in the title.) Nothing is suppressed entirely, because a false-alarm verdict can be wrong too.
 
-Was sie **nicht** tut:
-- Sie lernt keine Regeln dazu. Die festen Regeln stufen nur genau dieselbe Lage ab (gleicher `schluessel`). Ähnliche Fälle an anderen Orten erkennt nur die Claude-Stufe, über den Prompt-Block.
-- Ein offenes Signal mit Bewertung `fehlalarm` wird nicht geschlossen (dafür gibt es keinen Status). Erscheint die Lage erneut, stehen in der Web-App beide Signale.
-- Der Telefon-Agent ruft auch beim abgestuften Folgesignal an, weil er jedes offene Signal anruft. Dann mit dem Hinweis im Anruftext.
+What it does **not** do:
+- It does not learn new rules. The fixed rules only downgrade exactly the same situation (same `schluessel`). Similar cases at other locations are only detected by the Claude stage, via the prompt block.
+- An open signal with rating `fehlalarm` is not closed (there is no status for that). If the situation appears again, both signals are shown in the web app.
+- The phone agent also calls for the downgraded follow-up signal, because it calls for every open signal. Then with the hint in the call text.
 
-**Stand:** nur mit der Fake-DB getestet (`tests/test_pruefung.py`, ohne Claude). Auf echten Bewertungen aus Supabase lief der Prüf-Agent mit dieser Logik noch nicht. Die Claude-Stufe mit dem neuen Block wurde nicht echt aufgerufen.
+**Status:** tested only with the fake DB (`tests/test_pruefung.py`, without Claude). The Prüf-Agent has not yet run with this logic on real ratings from Supabase. The Claude stage with the new block has not been called for real.
 
-## Vertrag mit der Ablage (ablage/SPEC.md §5)
+## Contract with the Ablage (ablage/SPEC.md §5)
 
-- Liest `quellen` direkt mit dem Service-Key, schreibt dort nur `status` und `meta.fehler`.
-- Belege über `content_hash`, nie über `id` – kein Fremdschlüssel, damit die Ablage leeren und neu importieren kann.
-- `fake_data/ERWARTET.md` (Lösungsschlüssel) geht nie in den Prompt; ein Test prüft das.
+- Reads `quellen` directly with the service key, writes only `status` and `meta.fehler` there.
+- Evidence via `content_hash`, never via `id` – no foreign key, so that the Ablage can empty the table and re-import.
+- `fake_data/ERWARTET.md` (answer key) never goes into the prompt; a test checks that.
 
-## Annahmen und Grenzen
+## Assumptions and limits
 
-- `testquellen.py` baut `quellen`-Zeilen direkt aus `fake_data/`, nur für Tests und Trockenläufe. Vereinfachtes Parsing und vereinfachter `content_hash` – ersetzt die Ablage nicht.
-- Keine eigene Audio-Transkription (siehe offene Frage an die Ablage).
-- Die Claude-Prüfung des Prüf-Agenten ist mit Fake-Antworten getestet; auf den echten Daten lief bisher nur die feste Regelstufe.
+- `testquellen.py` builds `quellen` rows directly from `fake_data/`, only for tests and dry runs. Simplified parsing and simplified `content_hash` – does not replace the Ablage.
+- No audio transcription of its own (see open question to the Ablage).
+- The Claude check of the Prüf-Agent is tested with fake responses; on the real data only the fixed rule stage has run so far.

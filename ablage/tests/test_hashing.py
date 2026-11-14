@@ -59,7 +59,7 @@ def test_anderer_exportdateiname_gleicher_hash(tmp_path, ctx):
         items = [i for i in whatsapp.parse(pfad, ctx) if isinstance(i, RawItem)]
         return [i.model_copy(update={"kanal": kanal}).content_hash() for i in items]
 
-    # kanal kommt aus dem Dateinamen; bei gleichem Kanal ist der Hash vom Dateinamen unabhängig
+    # kanal comes from the file name; with the same channel the hash is independent of the file name
     assert hashes(WA, "k") == hashes(kopie, "k")
 
 

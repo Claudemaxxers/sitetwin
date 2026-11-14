@@ -10,7 +10,7 @@ import { konfig } from '../config.js';
 import { PRAEFIX_ERLEDIGT, PRAEFIX_WARNUNG, ladeZustand, leererZustand, merkeWarnung, neuerMelder } from '../melder.js';
 
 const CHAT = '111-222@g.us';
-const T0 = 1_800_000_000; // Sekunden
+const T0 = 1_800_000_000; // seconds
 const zustand = () => {
   const z = leererZustand();
   z.gesendeteIds.push('W1', 'W2');
@@ -111,7 +111,7 @@ test('Ohne gemerkte Warnungen (Schalter aus / alter Zustand) wird nichts erkannt
   assert.equal(erkenneBewertung(reaktion('W1', '👍'), { zustand: leererZustand(), chatJid: CHAT }), null);
 });
 
-// ---- Schreiben ----
+// ---- Writing ----
 const fake = (antworten = []) => {
   const aufrufe = [];
   const fetchImpl = async (url, o) => {
@@ -169,7 +169,7 @@ test('Bestaetigung beginnt mit dem Melder-Praefix und wird nie als Bewertung gel
   assert.equal(erkenneBewertung(text('B', t), opt(zustand())), null);
 });
 
-// ---- Bewerter ----
+// ---- Rater ----
 function bauBewerter({ bestaetigen = true, antworten = [] } = {}) {
   const z = zustand();
   const f = fake(antworten);
@@ -218,7 +218,7 @@ test('Bewerter: Name aus pushName, bei eigenem Konto der eigene Name', async () 
   assert.match(JSON.parse(t.f.aufrufe[0].body).bewertung_notiz, /^per WhatsApp, Santino, /);
 });
 
-// ---- Schalter, Zustand, Melder ----
+// ---- Switch, state, notifier ----
 test('Rueckmeldung: aus per Standard, Verweigerung ohne Melder', () => {
   assert.equal(konfig({ WHATSAPP_CHATS: 'G' }).bewerten.an, false);
   assert.equal(konfig({ WHATSAPP_CHATS: 'G' }).bewerten.fehler, null);

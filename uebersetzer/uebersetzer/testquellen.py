@@ -1,6 +1,6 @@
-"""Baut `quellen`-Zeilen direkt aus fake_data/ – NUR für Tests und Trockenläufe des Übersetzers,
-solange Santinos Ablage noch nichts importiert hat. Ersetzt die Ablage nicht:
-vereinfachtes Parsing, vereinfachter content_hash (typ|original_ref statt SPEC §6).
+"""Builds `quellen` rows directly from fake_data/ – ONLY for tests and dry runs of the Übersetzer,
+as long as Santino's Ablage has not imported anything yet. Does not replace the Ablage:
+simplified parsing, simplified content_hash (typ|original_ref instead of SPEC §6).
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def whatsapp(ordner: Path, projekt: str) -> list[dict]:
             continue
         datum, uhrzeit, rest = m.groups()
         if ": " not in rest:
-            continue  # Systemzeile
+            continue  # system line
         absender, text = rest.split(": ", 1)
         zp = datetime.strptime(f"{datum} {uhrzeit}", "%d.%m.%y %H:%M").replace(tzinfo=WIEN)
         ref = f"{export.name}#L{nr}"

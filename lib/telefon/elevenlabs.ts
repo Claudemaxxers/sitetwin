@@ -3,13 +3,13 @@ import type { TelefonConfig } from "./config";
 import type { Signal } from "./types";
 
 /**
- * ElevenLabs Agents: ausgehender Anruf über die Twilio-Nummer des Agenten.
- * Doku: POST /v1/convai/twilio/outbound-call; Post-Call-Webhooks mit Header ElevenLabs-Signature.
+ * ElevenLabs Agents: outbound call via the agent's Twilio number.
+ * Docs: POST /v1/convai/twilio/outbound-call; post-call webhooks with header ElevenLabs-Signature.
  *
- * Die Variablennamen sind mit dem System-Prompt des Agenten "Construction Site checkin Agent"
- * abgestimmt. Bewusst KEINE conversation_config_override (erste Nachricht, Prompt): die lehnt die
- * API im Free-Plan ab. Die erste Nachricht ist im Agenten fest hinterlegt, der Prompt nennt bei
- * anruf_modus=ausgehend sofort Ort und Konflikt aus den Variablen.
+ * The variable names are aligned with the system prompt of the agent "Construction Site checkin Agent".
+ * Deliberately NO conversation_config_override (first message, prompt): the API rejects it
+ * on the free plan. The first message is fixed in the agent; with anruf_modus=ausgehend the prompt
+ * states location and conflict from the variables right away.
  */
 
 export interface OutboundBody {
@@ -33,7 +33,7 @@ export function vorname(name: string | null | undefined): string {
   return n.split(/\s+/)[0] || "";
 }
 
-/** "Top 5, Abstellraum" bzw. was vom Ort bekannt ist. */
+/** "Top 5, Abstellraum", or whatever is known about the location. */
 export function signalOrt(s: Pick<Signal, "top" | "raum" | "element">): string {
   const ort = [s.top, s.raum].filter((x): x is string => Boolean(x && x.trim())).join(", ");
   return ort || (s.element ?? "").trim() || "der Baustelle";
@@ -81,8 +81,8 @@ export const anrufStarten: AnrufStarter = async (body, cfg) => {
 };
 
 /**
- * Prüft `ElevenLabs-Signature: t=<unix s>,v0=<hex>`. Signiert wird `<t>.<rohdaten>` mit HMAC-SHA256
- * (wie constructEvent im ElevenLabs-SDK). Älter als 30 Minuten wird abgelehnt.
+ * Verifies `ElevenLabs-Signature: t=<unix s>,v0=<hex>`. What gets signed is `<t>.<raw body>` with HMAC-SHA256
+ * (like constructEvent in the ElevenLabs SDK). Anything older than 30 minutes is rejected.
  */
 export function signaturGueltig(rawBody: string, header: string | null, secret: string, jetztMs = Date.now()): boolean {
   if (!header || !secret) return false;
@@ -97,7 +97,7 @@ export function signaturGueltig(rawBody: string, header: string | null, secret: 
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Für Tests und Probeläufe: so signiert ElevenLabs. */
+/** For tests and trial runs: this is how ElevenLabs signs. */
 export function signieren(rawBody: string, secret: string, unixSekunden: number): string {
   const hex = createHmac("sha256", secret).update(`${unixSekunden}.${rawBody}`).digest("hex");
   return `t=${unixSekunden},v0=${hex}`;

@@ -1,1 +1,1 @@
-"""Adapter: reine Funktionen `parse(path, ctx) -> Iterator[RawItem | ParseFehler]`."""
+"""Adapters: pure functions `parse(path, ctx) -> Iterator[RawItem | ParseFehler]`."""

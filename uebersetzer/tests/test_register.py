@@ -1,4 +1,4 @@
-"""Bauteil-Register und Bauteil-Regeln, ohne Claude und ohne Supabase."""
+"""Component register and component rules, without Claude and without Supabase."""
 
 from uebersetzer.db import SpeicherDB, element_schluessel
 from uebersetzer.modell import Plan, SollElement
@@ -51,7 +51,7 @@ def test_neuer_index_deaktiviert_entfallene_bauteile_und_alter_ueberschreibt_nic
     assert b.neu == 1 and b.deaktiviert == 1
     nach_raum = {x["raum"]: x for x in db.elemente(P)}
     assert not nach_raum["Vorraum"]["soll_aktiv"] and nach_raum["Abstellraum"]["soll_aktiv"]
-    # Index B nochmal (z. B. Drive-Datei später importiert) darf C nicht kaputtmachen
+    # Index B again (e.g. Drive file imported later) must not break C
     soll_uebernehmen(db, P, [soll("Wohnungsverteiler", "verteiler", raum="Vorraum", top="Top 5")], plan("E-05", "B"), "hB", TOPS)
     nach_raum = {x["raum"]: x for x in db.elemente(P)}
     assert nach_raum["Abstellraum"]["soll_aktiv"]
@@ -68,8 +68,8 @@ def test_wand_zu_angekuendigt_bevor_installation_fertig_ist_kritisch():
     pruefe(db, None, None)
     [s] = db.signale_liste
     assert s["art"] == "reihenfolge" and s["schwere"] == "kritisch" and s["element_id"] == el["Wand B1"]["id"]
-    assert "Steckdose Waschtisch" in s["anruf_text"] and "Abnahme" not in s["anruf_text"]  # Abnahme blockiert nicht
-    assert "Leitung F4" not in s["anruf_text"]  # ist schon erledigt
+    assert "Steckdose Waschtisch" in s["anruf_text"] and "Abnahme" not in s["anruf_text"]  # acceptance does not block
+    assert "Leitung F4" not in s["anruf_text"]  # is already done
     assert s["anruf_text"].startswith("Servus Marek") and "noch nicht zumachen" in s["anruf_text"]
 
 
@@ -97,7 +97,7 @@ def test_reihenfolge_signal_loest_sich_wenn_installation_nachgeholt_wird():
     ]
     b = pruefe(db, None, None)
     [s] = db.signale_liste
-    assert s["status"] == "geloest" and s["geloest_durch"] == "3" and len(b.geloest) == 1  # mit der letzten fehlenden Dose
+    assert s["status"] == "geloest" and s["geloest_durch"] == "3" and len(b.geloest) == 1  # with the last missing socket
 
 
 def test_arbeit_an_entfallenem_bauteil_und_loesung_am_neuen_ort():
@@ -110,7 +110,7 @@ def test_arbeit_an_entfallenem_bauteil_und_loesung_am_neuen_ort():
         {"projekt": P, "plan_nr": "E-05", "plan_index": "C", "gueltig_ab": "2026-11-10T09:12:00+01:00"},
     ]
     db.eintraege = [
-        # Übersetzer kennt den Index (B) und das Bauteil → beide Regeln, aber nur ein Signal
+        # Übersetzer knows the index (B) and the component → both rules, but only one signal
         e("1", "2026-11-12T15:41:00+01:00", "arbeit_erledigt", raum["Vorraum"], "gesetzt", top="Top 5", raum="Vorraum",
           plan_nr="E-05", plan_index="B", person="Stefan Huber"),
         e("2", "2026-11-16T12:00:00+01:00", "arbeit_erledigt", raum["Abstellraum"], "gesetzt", top="Top 5", raum="Abstellraum",
@@ -123,8 +123,8 @@ def test_arbeit_an_entfallenem_bauteil_und_loesung_am_neuen_ort():
 
 
 def test_szenario_wand_top5_abstellraum_ohne_wand_im_plan():
-    """Santinos Szenario (fake_data/szenarien/wand_top5): Plan E-05 kennt nur den Verteiler, keine Wand.
-    Trockenbau kündigt an, im Abstellraum zuzumachen → Signal an den Elektro-Vorarbeiter. Gelöst, sobald der Verteiler gesetzt ist."""
+    """Santino's scenario (fake_data/szenarien/wand_top5): plan E-05 only knows the distribution board, no wall.
+    Drywall announces closing up in the Abstellraum → signal to the electrical foreman. Resolved once the board is set."""
     db = SpeicherDB([], [], [])
     db.personen_liste = [
         {"projekt": P, "name": "Stefan Huber", "aliase": [], "firma": "Elektro Gruber GmbH", "rolle": "vorarbeiter", "darf_soll_aendern": False},
@@ -137,7 +137,7 @@ def test_szenario_wand_top5_abstellraum_ohne_wand_im_plan():
         e("1", "2026-11-13T17:20:00+01:00", "arbeit_geplant", None, "beplankung", person="Marko Novak (Novak Trockenbau)",
           top="Top 5", raum="Abstellraum, Vorraum"),
         e("2", "2026-11-13T17:22:00+01:00", "arbeit_geplant", None, "beplankung", person="Marko Novak (Novak Trockenbau)",
-          top="Top 4", raum="Vorraum, Küche"),  # Falle F1: Top 4 hat keine offene Installation im Register
+          top="Top 4", raum="Vorraum, Küche"),  # trap F1: Top 4 has no open installation in the register
         e("3", "2026-11-14T06:05:00+01:00", "arbeit_geplant", wv["id"], "verrohrung", top="Top 5", raum="Abstellraum", person="Stefan Huber"),
         e("4", "2026-11-14T06:52:00+01:00", "arbeit_erledigt", wv["id"], "gesetzt", top="Top 5", raum="Abstellraum", person="Ali Demir"),
     ]
@@ -146,11 +146,11 @@ def test_szenario_wand_top5_abstellraum_ohne_wand_im_plan():
     assert s["art"] == "reihenfolge" and s["schwere"] == "kritisch" and s["zustaendig"] == "Stefan Huber"
     assert s["anruf_text"].startswith("Servus Stefan") and "Wohnungsverteiler (Plan E-05 C)" in s["anruf_text"]
     assert "Marko Novak" in s["anruf_text"]
-    assert s["status"] == "geloest" and s["geloest_durch"] == "4"  # 06:05 ("ziehen jetzt ein") löst noch nicht
+    assert s["status"] == "geloest" and s["geloest_durch"] == "4"  # 06:05 ("ziehen jetzt ein") does not resolve yet
 
 
 def test_gleicher_index_aus_zweitem_dokument_legt_keine_dubletten_an():
-    """Gesamtlauf 13.11.: Plan E-05 C kam als Drive-PDF und als Mail-Anhang, Claude benannte den Verteiler unterschiedlich."""
+    """Full run 13 Nov: plan E-05 C came as a Drive PDF and as a mail attachment, Claude named the distribution board differently."""
     db = SpeicherDB([], [], [])
     soll_uebernehmen(db, P, [soll("Wohnungsverteiler UP 3-reihig", "verteiler", raum="Abstellraum", top="Top 5")], plan("E-05", "C"), "drive", TOPS)
     b = soll_uebernehmen(db, P, [soll("WV 3-reihig", "verteiler", raum="Abstellraum", top="Top 5")], plan("E-05", "C"), "mail", TOPS)
@@ -158,8 +158,8 @@ def test_gleicher_index_aus_zweitem_dokument_legt_keine_dubletten_an():
 
 
 def test_plan_veraltet_erst_geloest_wenn_ersatz_gesetzt_und_s1_wird_kritisch():
-    """Golden Set S1/S2: 06:05 'ziehen jetzt die Verrohrung ein' löst nichts, 06:52 'Verteilerkasten gesetzt' löst beide.
-    S1 entsteht um 17:19 ('eine Seite beplankt', hoch) und wird um 17:20 ('Samstag machen wir zu') kritisch."""
+    """Golden set S1/S2: 06:05 'ziehen jetzt die Verrohrung ein' resolves nothing, 06:52 'Verteilerkasten gesetzt' resolves both.
+    S1 arises at 17:19 ('eine Seite beplankt', hoch) and becomes critical at 17:20 ('Samstag machen wir zu')."""
     db = SpeicherDB([], [], [])
     db.personen_liste = [{"projekt": P, "name": "Stefan Huber", "aliase": [], "firma": "Elektro Gruber GmbH", "rolle": "vorarbeiter", "darf_soll_aendern": False}]
     soll_uebernehmen(db, P, [soll("Wohnungsverteiler", "verteiler", raum="Vorraum", top="Top 5")], plan("E-05", "B"), "hB", TOPS)
@@ -170,7 +170,7 @@ def test_plan_veraltet_erst_geloest_wenn_ersatz_gesetzt_und_s1_wird_kritisch():
         e("2", "2026-11-13T17:19:00+01:00", "arbeit_erledigt", None, "beplankung", top="Top 5", raum="Abstellraum", person="Marko Novak"),
         e("3", "2026-11-13T17:20:00+01:00", "arbeit_geplant", None, "beplankung", top="Top 5", raum=None, person="Marko Novak"),
         e("3b", "2026-11-13T17:20:00+01:00", "arbeit_erledigt", None, "staenderwerk", top="Top 5", raum="Abstellraum", person="Marko Novak",
-          quelle_hash="h-3"),  # gleiche Sprachnachricht nennt den Raum nur hier
+          quelle_hash="h-3"),  # same voice message names the room only here
         e("4", "2026-11-14T06:05:00+01:00", "arbeit_erledigt", raum["Abstellraum"], "verrohrung", top="Top 5", raum="Abstellraum", person="Stefan Huber"),
         e("5", "2026-11-14T06:52:00+01:00", "arbeit_erledigt", raum["Abstellraum"], "gesetzt", top="Top 5", raum="Abstellraum", person="Ali Demir"),
     ]

@@ -49,7 +49,7 @@ const personen: Person[] = [
   { projekt: "BV Simmering", name: "Thomas Meier", aliase: ["Meier (Krenn Bau)"], rolle: "bauleitung", telefon: "0664 1234567" },
 ];
 
-/** Datenbank im Speicher, protokolliert alle Änderungen. */
+/** In-memory database, logs all changes. */
 function fakeDB(signale: Signal[], verlauf: VerlaufZeile[] = []) {
   const aenderungen: { id: string; felder: Partial<Signal> }[] = [];
   const db: SignalDB = {

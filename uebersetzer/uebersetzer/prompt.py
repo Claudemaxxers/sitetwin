@@ -1,5 +1,5 @@
-"""Prompt-Bausteine. Der System-Prompt ist stabil (pro Projekt gleich) und wird gecacht;
-alles Veränderliche (Zeitachse, aktuelle Pläne, neue Quelle) steht im User-Turn."""
+"""Prompt building blocks. The system prompt is stable (the same per project) and is cached;
+everything that varies (timeline, current plans, new source) goes in the user turn."""
 
 from __future__ import annotations
 

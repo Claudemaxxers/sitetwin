@@ -1,10 +1,10 @@
-"""Datenbankzugriff. Zwei Implementierungen mit derselben Schnittstelle:
+"""Database access. Two implementations with the same interface:
 
-- SupabaseDB: das echte Projekt (Service-Key aus .env)
-- SpeicherDB: alles im Speicher, für Tests und Trockenläufe mit fake_data
+- SupabaseDB: the real project (service key from .env)
+- SpeicherDB: everything in memory, for tests and dry runs with fake_data
 
-Vertrag mit der Ablage (ablage/SPEC.md §5): In `quellen` schreiben wir nur `status`
-und `meta.fehler`. Belege referenzieren wir über `content_hash`, nie über `id`.
+Contract with the Ablage (ablage/SPEC.md §5): in `quellen` we only write `status`
+and `meta.fehler`. We reference evidence via `content_hash`, never via `id`.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ def _eintrag_sort(e: Zeile) -> tuple:
 
 
 class DB(Protocol):
-    # Prüf-Agent
+    # Checking agent
     def ungepruefte_eintraege(self, projekt: str | None) -> list[Zeile]: ...
     def projekt_eintraege(self, projekt: str) -> list[Zeile]: ...
     def alle_plaene(self, projekt: str) -> list[Zeile]: ...
@@ -28,7 +28,7 @@ class DB(Protocol):
     def signal_einfuegen(self, zeile: Zeile) -> Zeile: ...
     def signal_aendern(self, signal_id: str, felder: Zeile) -> None: ...
     def als_geprueft(self, eintrag_ids: list[str]) -> None: ...
-    # Übersetzer
+    # Übersetzer (translator)
     def neue_quellen(self, projekt: str | None) -> list[Zeile]: ...
     def projekt_quellen(self, projekt: str) -> list[Zeile]: ...
     def anhang_laden(self, pfad: str) -> bytes: ...
@@ -37,11 +37,11 @@ class DB(Protocol):
     def eintraege_ersetzen(self, quelle_hash: str, zeilen: list[Zeile]) -> None: ...
     def plan_speichern(self, zeile: Zeile) -> None: ...
     def status_setzen(self, quelle: Zeile, status: str, fehler: str | None = None) -> None: ...
-    # Bauteil-Register
+    # Component register
     def elemente(self, projekt: str) -> list[Zeile]: ...
     def element_einfuegen(self, zeile: Zeile) -> Zeile: ...
     def element_aendern(self, element_id: str, felder: Zeile) -> None: ...
-    # Soll-Änderungen
+    # Soll changes
     def personen(self, projekt: str) -> list[Zeile]: ...
     def soll_aenderungen(self, projekt: str) -> list[Zeile]: ...
     def soll_aenderung_einfuegen(self, zeile: Zeile) -> Zeile: ...
@@ -54,14 +54,14 @@ def element_schluessel(top: str | None, raum: str | None, bezeichnung: str) -> s
 
 
 def _sortierschluessel(q: Zeile) -> tuple:
-    # Stammdaten (zeitpunkt = null) zuerst, dann chronologisch.
+    # Master data (zeitpunkt = null) first, then chronological.
     z = q.get("zeitpunkt")
     return (z is not None, str(z or ""), q.get("original_ref", ""))
 
 
 def _plan_mergen(alt: Zeile | None, neu: Zeile) -> Zeile:
-    """Leere Felder eines bestehenden Plans auffüllen, gesetzte nicht überschreiben –
-    außer gueltig_ab: das früheste bekannte Ausgabedatum gewinnt."""
+    """Fill empty fields of an existing plan, do not overwrite set ones –
+    except gueltig_ab: the earliest known issue date wins."""
     if not alt:
         return neu
     zeile = dict(alt)
@@ -131,7 +131,7 @@ class SupabaseDB:
             update["meta"] = {**(quelle.get("meta") or {}), "fehler": fehler[:2000]}
         self.client.table("quellen").update(update).eq("content_hash", quelle["content_hash"]).execute()
 
-    # --- Prüf-Agent ---
+    # --- Checking agent ---
     def _alle(self, tabelle: str, projekt: str | None, **filter_) -> list[Zeile]:
         zeilen: list[Zeile] = []
         start = 0
@@ -204,7 +204,7 @@ class SupabaseDB:
 
 
 class SpeicherDB:
-    """In-Memory-Ersatz. Anhänge liegen als lokale Dateipfade in `anhang_pfad`."""
+    """In-memory replacement. Attachments are local file paths in `anhang_pfad`."""
 
     def __init__(self, quellen: list[Zeile], tops: list[Zeile], lv: list[Zeile]):
         self.quellen = quellen
@@ -255,7 +255,7 @@ class SpeicherDB:
         if fehler is not None:
             quelle["meta"] = {**(quelle.get("meta") or {}), "fehler": fehler}
 
-    # --- Prüf-Agent ---
+    # --- Checking agent ---
     def ungepruefte_eintraege(self, projekt: str | None) -> list[Zeile]:
         return sorted((e for e in self.eintraege if not e.get("geprueft_am") and (not projekt or e["projekt"] == projekt)), key=_eintrag_sort)
 
@@ -331,7 +331,7 @@ class SpeicherDB:
                 e["geprueft_am"] = "jetzt"
 
     def eintraege_ersetzen(self, quelle_hash: str, zeilen: list[Zeile]) -> None:
-        import uuid  # IDs wie in Postgres, damit der Prüf-Agent darauf verweisen kann
+        import uuid  # IDs as in Postgres, so the checking agent can reference them
 
         for z in zeilen:
             z.setdefault("id", str(uuid.uuid4()))
@@ -339,7 +339,7 @@ class SpeicherDB:
 
 
 def _plan_neuer(a: Zeile, b: Zeile) -> bool:
-    """Gleiche Logik wie die Sicht plaene_aktuell: jüngstes gueltig_ab, sonst höherer Index."""
+    """Same logic as the view plaene_aktuell: most recent gueltig_ab, otherwise higher index."""
     ga, gb = a.get("gueltig_ab"), b.get("gueltig_ab")
     if ga and gb and ga != gb:
         return str(ga) > str(gb)

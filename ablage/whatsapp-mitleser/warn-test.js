@@ -1,4 +1,4 @@
-// Trockenlauf des Melders: liest Supabase (nur GET) und zeigt, was gesendet WUERDE. Kein WhatsApp, kein Socket.
+// Dry run of the notifier: reads Supabase (GET only) and shows what WOULD be sent. No WhatsApp, no socket.
 import { supabaseZugang, ladeEnv } from './config.js';
 import { alleSignale, baueText, neuesteOffene, offeneSignale } from './melder.js';
 

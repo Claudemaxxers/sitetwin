@@ -13,7 +13,7 @@ def test_erster_import_39_neu_zweiter_0(ctx):
 
     zwei = store.speichern(whatsapp.parse(WA, ctx), backend)
     assert (zwei.gelesen, zwei.neu, zwei.duplikate, zwei.fehler) == (39, 0, 39, [])
-    assert len(backend.zeilen) == 39 and backend.uploads == 5  # kein Doppel-Upload
+    assert len(backend.zeilen) == 39 and backend.uploads == 5  # no double upload
 
 
 def test_zeilen_passen_zur_tabelle(ctx):

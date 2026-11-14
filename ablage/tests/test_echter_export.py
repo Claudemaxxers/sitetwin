@@ -1,4 +1,4 @@
-"""Formen, die echte WhatsApp-Exporte haben: iPhone-Zip (_chat.txt), englisches Handy, 12-Stunden-Zeit."""
+"""Shapes that real WhatsApp exports have: iPhone zip (_chat.txt), English phone, 12-hour time."""
 
 import zipfile
 
@@ -39,7 +39,7 @@ def test_iphone_zip_mit_chat_txt_und_sprachnachricht(tmp_path, ctx):
     items = [e for e in alles if isinstance(e, RawItem)]
     system = [e for e in alles if isinstance(e, whatsapp.Systemzeile)]
 
-    assert len(system) == 1  # Verschlüsselungshinweis; "hat diese Gruppe erstellt" kommt als Nachricht durch
+    assert len(system) == 1  # encryption notice; "hat diese Gruppe erstellt" comes through as a message
     assert {i.kanal for i in items} == {"Baustelle Test"}
     audio = next(i for i in items if i.anhang and i.anhang.typ.value == "audio")
     assert audio.anhang.dateiname.endswith(".opus") and audio.anhang.inhalt == b"OggS-echt"

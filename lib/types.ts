@@ -12,8 +12,8 @@ export type Source = "telegram" | "mail" | "foto" | "chat" | "ui" | "seed";
 
 /** Work steps in the order they must happen on a wall. */
 export const STEP_ORDER = [
-  "mep_rough_in_done", // Installation (Elektro/Sanitär) fertig
-  "inspection_passed", // Abnahme vor dem Schließen
+  "mep_rough_in_done", // MEP rough-in (electrical/plumbing) done
+  "inspection_passed", // inspection before closing
   "wall_closed", // Trockenbau beplankt / Wand geschlossen
   "finishing_done", // Spachteln / Malen
 ] as const;
@@ -21,7 +21,7 @@ export type Step = (typeof STEP_ORDER)[number];
 
 export type Action =
   | Step
-  | "wall_close_planned" // Ankündigung: "mache morgen zu" – früh genug zum Eingreifen
+  | "wall_close_planned" // announcement: "mache morgen zu" (closing up tomorrow) – early enough to intervene
   | "inspection_failed"
   | "drawing_revised"
   | "change_acknowledged"

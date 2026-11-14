@@ -1,4 +1,4 @@
-"""Prüf-Agent ohne Claude und ohne Supabase."""
+"""Checking agent without Claude and without Supabase."""
 
 from uebersetzer.db import SpeicherDB
 from uebersetzer.modell import Pruefergebnis, SignalGeloest, SignalVorschlag
@@ -75,7 +75,7 @@ def test_wieder_offenes_signal_wird_erneut_angerufen():
     pruefe(db, None, None)
     s = db.signale_liste[0]
     assert s["status"] == "geloest"
-    # Der Telefon-Agent hatte vor der Lösung schon angerufen
+    # The phone agent had already called before the resolution
     db.signal_aendern(s["id"], {"angerufen_am": "2026-11-12T11:00:00+01:00", "anruf_id": "conv_1"})
     db.eintraege.append(e("3", "2026-11-17T09:00:00+01:00", "arbeit_erledigt", plan_nr="E-05", plan_index="B"))
     b = pruefe(db, None, None)
@@ -125,8 +125,8 @@ def test_claude_signal_und_loesung():
     assert b.claude_aufrufe == 2
     s = db.signale_liste[0]
     assert s["schluessel"] == "ki|Top 3|wand12-zu-vor-abnahme" and s["status"] == "geloest" and s["geloest_durch"] == "2"
-    assert "ki|Top 3|wand12-zu-vor-abnahme" in anfragen[1]  # offenes Signal wird im zweiten Aufruf mitgegeben
-    assert "Marek will Wand 12" in anfragen[1]  # Stand der Baustelle enthält den früheren Eintrag
+    assert "ki|Top 3|wand12-zu-vor-abnahme" in anfragen[1]  # open signal is passed along in the second call
+    assert "Marek will Wand 12" in anfragen[1]  # state of the site contains the earlier entry
 
 
 def test_claude_darf_regel_signale_nicht_loesen():
@@ -166,7 +166,7 @@ def test_reihenfolge_vorschlaege_von_claude_werden_verworfen():
     assert db.signale_liste == []
 
 
-# --- Lernschleife: Rückmeldungen der Baustelle (signale.bewertung) ---------------
+# --- Learning loop: feedback from the site (signale.bewertung) -------------------
 
 NOTIZ = "per WhatsApp, Stefan Huber, 14.11. 12:03: 👎"
 
@@ -186,17 +186,17 @@ def test_fehlalarm_wird_bei_gleicher_lage_abgestuft_statt_ergaenzt():
     b = pruefe(db, None, None)
 
     assert len(db.signale_liste) == 2
-    assert alt == alt_vorher  # bewertetes Signal bleibt unverändert stehen, samt Bewertung
+    assert alt == alt_vorher  # rated signal stays unchanged, including its rating
     neu = db.signale_liste[1]
     assert neu["schluessel"] == alt["schluessel"] + "#nach-fehlalarm-1"
     assert neu["status"] == "offen" and neu["schwere"] == "mittel" and neu["eintrag_ids"] == ["2"]
-    assert neu["titel"].startswith("Früher als Fehlalarm bewertet: ")  # sichtbar in WhatsApp und Web-App
+    assert neu["titel"].startswith("Früher als Fehlalarm bewertet: ")  # visible in WhatsApp and the web app
     assert NOTIZ in neu["begruendung"] and "sonst kritisch" in neu["begruendung"]
     assert neu["anruf_text"].startswith("Servus Stefan") and "Fehlalarm" in neu["anruf_text"]
     assert neu.get("bewertung") is None
     assert b.abgestuft == [neu["titel"]] and b.ergaenzt == 0 and b.wieder_offen == 0
 
-    # weitere Belege landen im Folgesignal, bleiben abgestuft, kein drittes Signal
+    # further evidence lands in the follow-up signal, stays downgraded, no third signal
     db.eintraege.append(e("3", "2026-11-13T08:00:00+01:00", "arbeit_geplant", plan_nr="E-05", plan_index="B"))
     pruefe(db, None, None)
     assert len(db.signale_liste) == 2
@@ -241,7 +241,7 @@ def test_berechtigt_bleibt_wie_bisher():
     b = pruefe(db, None, None)
     assert len(db.signale_liste) == 1 and b.wieder_offen == 1 and not b.abgestuft
     assert s["status"] == "offen" and s["schwere"] == "kritisch" and "Fehlalarm" not in s["titel"]
-    assert s["bewertung"] == "berechtigt"  # Bewertung bleibt beim Wiederöffnen stehen
+    assert s["bewertung"] == "berechtigt"  # rating stays when the signal is reopened
 
 
 def test_claude_prompt_enthaelt_rueckmeldungen_der_baustelle():
@@ -265,7 +265,7 @@ def test_claude_prompt_enthaelt_rueckmeldungen_der_baustelle():
     assert f"- fehlalarm · plan_veraltet · Top 5 / Vorraum / Wohnungsverteiler: nach Index B statt C · {NOTIZ}" in block
     assert "- berechtigt · abweichung_plan · Top 3 Bad: Wand 12 zu vor Abnahme" in block
     assert text.index("</rueckmeldungen_der_baustelle>") < text.index("<neue_eintraege")
-    assert system[-1]["cache_control"] == {"type": "ephemeral"}  # Caching unverändert
+    assert system[-1]["cache_control"] == {"type": "ephemeral"}  # caching unchanged
     assert "rueckmeldungen_der_baustelle" in system[0]["text"]
 
 

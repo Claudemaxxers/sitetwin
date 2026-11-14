@@ -1,26 +1,26 @@
-// Melder: schickt eine Warnung in EINEN WhatsApp-Chat, wenn der Pruef-Agent in Supabase ein Signal anlegt.
-// Reine Logik ohne Baileys-Import: Auswahl, Text, Rate-Limit, Schleifenschutz, Zustand. Per Test pruefbar.
-// Supabase wird nur gelesen (REST, GET). Gesendet wird ueber die Funktion `senden`, die der Aufrufer liefert.
+// Notifier: sends a warning into ONE WhatsApp chat when the check agent creates a signal in Supabase.
+// Pure logic without a Baileys import: selection, text, rate limit, loop protection, state. Verifiable by test.
+// Supabase is only read (REST, GET). Sending goes through the function `senden`, which the caller provides.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export const PRAEFIX_WARNUNG = '⚠️ SiteTwin-Warnung (automatisch)';
 export const PRAEFIX_ERLEDIGT = '✅ SiteTwin:';
 export const MAX_ZEICHEN = 700;
-export const MAX_WIEDERHOLUNGEN = 3; // nach dem ersten Versuch
+export const MAX_WIEDERHOLUNGEN = 3; // after the first attempt
 const MAX_GESENDETE_IDS = 500;
 
 const ohneVS = (s) => String(s ?? '').replace(/️/g, '');
 const leer = (v) => v == null || String(v).trim() === '';
 export const sauber = (v) =>
   String(v ?? '')
-    .replace(/\+?\d[\d\s/().-]{6,}\d/g, '') // keine Telefonnummern im Text
+    .replace(/\+?\d[\d\s/().-]{6,}\d/g, '') // no phone numbers in the text
     .replace(/[ \t]+/g, ' ')
     .trim();
 
-// ---- Konfiguration --------------------------------------------------------
+// ---- Configuration --------------------------------------------------------
 
-/** Liest die Melder-Einstellungen. Wirft nie; `fehler` ist gesetzt, wenn der Melder nicht starten darf. */
+/** Reads the notifier settings. Never throws; `fehler` is set when the notifier must not start. */
 export function warnKonfig(env, allowlist, jetzt = new Date()) {
   const an = String(env.WHATSAPP_WARNEN ?? '').trim() === '1';
   const zahl = (v, std, min = 1) => {
@@ -51,7 +51,7 @@ export function warnKonfig(env, allowlist, jetzt = new Date()) {
 
 const istJid = (s) => /@(g\.us|s\.whatsapp\.net|lid)$/.test(s);
 
-/** Warn-Chat muss gesetzt sein und auf der Allowlist stehen. Gibt eine Fehlermeldung oder null. */
+/** The warn chat must be set and be on the allowlist. Returns an error message or null. */
 export function pruefeChat(chat, allowlist) {
   if (!chat) return 'WHATSAPP_WARNEN=1, aber WHATSAPP_WARN_CHAT ist leer. Der Melder startet nicht.';
   const auf = allowlist && !allowlist.leer && (istJid(chat) ? allowlist.jids.has(chat.toLowerCase()) : allowlist.namen.has(chat.toLowerCase()));
@@ -63,7 +63,7 @@ export function pruefeChat(chat, allowlist) {
 
 // ---- Text -----------------------------------------------------------------
 
-/** Warntext aus einer Zeile der Tabelle `signale`. Rein. Leere Felder fallen weg, Obergrenze MAX_ZEICHEN. */
+/** Warning text from a row of the table `signale`. Pure. Empty fields are dropped, upper limit MAX_ZEICHEN. */
 export function baueText(s, max = MAX_ZEICHEN, { wieder = false } = {}) {
   const kopf = PRAEFIX_WARNUNG;
   const titel = sauber(s.titel);
@@ -75,22 +75,22 @@ export function baueText(s, max = MAX_ZEICHEN, { wieder = false } = {}) {
   const wer = sauber(s.zustaendig) ? `Zuständig: ${sauber(s.zustaendig)}` : '';
 
   const feste = [kopf, was, wer].filter(Boolean).join('\n');
-  const frei = max - feste.length - 1; // 1 fuer den Zeilenumbruch vor `tun`
+  const frei = max - feste.length - 1; // 1 for the line break before `tun`
   let mitte = tun;
   if (mitte && frei < mitte.length) mitte = frei > 1 ? `${mitte.slice(0, frei - 1).trimEnd()}…` : '';
   const teile = [kopf, was, mitte, wer].filter(Boolean);
   return teile.join('\n').slice(0, max);
 }
 
-/** Kurze Folgenachricht, wenn ein Signal geloest ist. */
+/** Short follow-up message when a signal is resolved. */
 export function baueErledigt(s, max = 200) {
   const titel = sauber(s.titel) || 'Signal';
   return `${PRAEFIX_ERLEDIGT} erledigt – ${titel}`.slice(0, max);
 }
 
-// ---- Schleifenschutz ------------------------------------------------------
+// ---- Loop protection ------------------------------------------------------
 
-/** Text einer Baileys-Nachricht (ohne Import von mapping.js, damit dieses Modul eigenstaendig bleibt). */
+/** Text of a Baileys message (without importing mapping.js, so that this module stays self-contained). */
 export function textVon(msg) {
   let m = msg?.message;
   for (let i = 0; i < 5 && m; i++) {
@@ -107,14 +107,14 @@ export function hatMelderPraefix(text) {
   return t.startsWith(ohneVS(PRAEFIX_WARNUNG)) || t.startsWith(ohneVS(PRAEFIX_ERLEDIGT));
 }
 
-/** true = diese Nachricht stammt vom Melder und darf NICHT an die Ablage gehen. */
+/** true = this message comes from the notifier and must NOT go to the Ablage. */
 export function istMelderNachricht(msg, zustand) {
   const id = msg?.key?.id;
   if (id && zustand?.gesendeteIds?.includes(id)) return true;
   return hatMelderPraefix(textVon(msg));
 }
 
-// ---- Zustand --------------------------------------------------------------
+// ---- State ----------------------------------------------------------------
 
 export function leererZustand() {
   return { gewarnt: {}, gesendeteIds: [] };
@@ -125,7 +125,7 @@ export function ladeZustand(datei) {
     if (!existsSync(datei)) return leererZustand();
     const z = JSON.parse(readFileSync(datei, 'utf8'));
     const k = { gewarnt: z.gewarnt && typeof z.gewarnt === 'object' ? z.gewarnt : {}, gesendeteIds: Array.isArray(z.gesendeteIds) ? z.gesendeteIds : [] };
-    // Nur Rueckmeldung (WHATSAPP_BEWERTEN): welche gesendete Nachricht gehoert zu welchem Signal. Alte Dateien haben das Feld nicht.
+    // Feedback only (WHATSAPP_BEWERTEN): which sent message belongs to which signal. Old files do not have this field.
     if (z.warnungen && typeof z.warnungen === 'object' && !Array.isArray(z.warnungen)) k.warnungen = z.warnungen;
     return k;
   } catch {
@@ -147,8 +147,8 @@ export function merkeGesendet(zustand, id) {
 }
 
 /**
- * Merkt, welches Signal zu einer gesendeten Warnung gehoert: warnungen[nachrichtenId] = {signal, ts, titel}.
- * Wird nur mit WHATSAPP_BEWERTEN=1 aufgerufen. Das Feld entsteht erst hier (alte Zustandsdateien bleiben gueltig).
+ * Remembers which signal belongs to a sent warning: warnungen[nachrichtenId] = {signal, ts, titel}.
+ * Only called with WHATSAPP_BEWERTEN=1. The field is only created here (old state files stay valid).
  */
 export function merkeWarnung(zustand, msgId, signalId, ts, titel = '') {
   if (!msgId || !signalId) return;
@@ -160,9 +160,9 @@ export function merkeWarnung(zustand, msgId, signalId, ts, titel = '') {
   }
 }
 
-// ---- Rate-Limit -----------------------------------------------------------
+// ---- Rate limit -----------------------------------------------------------
 
-/** Mindestens `abstandMs` zwischen zwei Nachrichten, hoechstens `max` je `fensterMs`. */
+/** At least `abstandMs` between two messages, at most `max` per `fensterMs`. */
 export function neuesLimit({ abstandMs = 3000, max = 6, fensterMs = 10 * 60 * 1000 } = {}) {
   let zeiten = [];
   return {
@@ -180,7 +180,7 @@ export function neuesLimit({ abstandMs = 3000, max = 6, fensterMs = 10 * 60 * 10
   };
 }
 
-// ---- Supabase (nur lesen) -------------------------------------------------
+// ---- Supabase (read only) -------------------------------------------------
 
 const eq = (v) => `eq.${encodeURIComponent(v)}`;
 
@@ -194,43 +194,43 @@ async function rest({ url, key, fetchImpl = fetch }, pfad) {
   return r.json();
 }
 
-/** Offene Signale eines Projekts, aelteste zuerst. */
+/** Open signals of a project, oldest first. */
 export const offeneSignale = (sb, projekt) =>
   rest(sb, `signale?select=*&projekt=${eq(projekt)}&status=in.(offen,in_bearbeitung)&order=erstellt_am.asc`);
 
-/** Neueste offene Signale (fuer den Trockenlauf). */
+/** Newest open signals (for the dry run). */
 export const neuesteOffene = (sb, projekt, n = 5) =>
   rest(sb, `signale?select=*&projekt=${eq(projekt)}&status=eq.offen&order=erstellt_am.desc&limit=${n}`);
 
-/** Alle Signale eines Projekts (nur fuer den Trockenlauf: Spalten und Zaehlung nach Status). */
+/** All signals of a project (only for the dry run: columns and count per status). */
 export const alleSignale = (sb, projekt) => rest(sb, `signale?select=*&projekt=${eq(projekt)}&order=erstellt_am.desc&limit=200`);
 
-/** Von diesen Ids die, die inzwischen geloest sind. */
+/** Of these ids, the ones that have been resolved in the meantime. */
 export async function geloesteAus(sb, ids) {
   if (!ids.length) return [];
   const liste = ids.map((i) => encodeURIComponent(i)).join(',');
   return rest(sb, `signale?select=*&id=in.(${liste})&status=eq.geloest`);
 }
 
-// ---- Auswahl --------------------------------------------------------------
+// ---- Selection ------------------------------------------------------------
 
-/** Letzte Aenderung des Signals in ms: max(erstellt_am, aktualisiert_am); fehlt eines, zaehlt das andere. NaN, wenn beide fehlen. */
+/** Last change of the signal in ms: max(erstellt_am, aktualisiert_am); if one is missing, the other counts. NaN if both are missing. */
 export function stand(s) {
   const t = [s?.erstellt_am, s?.aktualisiert_am].map((x) => (x == null ? NaN : new Date(x).getTime())).filter(Number.isFinite);
   return t.length ? Math.max(...t) : NaN;
 }
 
 /**
- * Welche der offenen Signale bekommen jetzt eine Warnung? Rein.
- * Regel: Status offen/in_bearbeitung, Projekt passt, max(erstellt_am, aktualisiert_am) >= ab, und das Signal ist
- * nicht "gewarnt und noch offen". Ein Signal, dessen Erledigt-Meldung schon kam (entry.erledigt), ist wieder
- * wartbar: wer es wieder oeffnet, bekommt eine neue Warnung. Spaetere Updates eines offenen, gewarnten Signals
- * (mehr Belege, Bewertung) loesen nichts aus.
+ * Which of the open signals get a warning now? Pure.
+ * Rule: status offen/in_bearbeitung, project matches, max(erstellt_am, aktualisiert_am) >= ab, and the signal is
+ * not "warned and still open". A signal whose resolved message has already been sent (entry.erledigt) can be
+ * warned about again: whoever reopens it gets a new warning. Later updates of an open, warned signal
+ * (more evidence, rating) trigger nothing.
  */
 export function waehleNeue(signale, { ab, zustand, verworfen = new Set(), projekt }) {
   const abMs = ab instanceof Date ? ab.getTime() : new Date(ab).getTime();
   return signale.filter((s) => {
-    // auch 'in_bearbeitung': setzt ein Telefon-Agent den Status, bevor der Melder abfragt, soll die Warnung nicht ausfallen
+    // also 'in_bearbeitung': if a phone agent sets the status before the notifier polls, the warning should not be lost
     if (!s?.id || !['offen', 'in_bearbeitung'].includes(s.status)) return false;
     if (projekt && s.projekt !== projekt) return false;
     const t = stand(s);
@@ -242,15 +242,15 @@ export function waehleNeue(signale, { ab, zustand, verworfen = new Set(), projek
   });
 }
 
-// ---- Melder ---------------------------------------------------------------
+// ---- Notifier -------------------------------------------------------------
 
 const kurzId = (id) => String(id).slice(0, 8);
 const vorschau = (t) => t.replace(/\s+/g, ' ').slice(0, 40);
 
 /**
- * @param opts.cfg        Ergebnis von warnKonfig, plus projekt
+ * @param opts.cfg        result of warnKonfig, plus projekt
  * @param opts.sb         {url, key, fetchImpl?}
- * @param opts.senden     async (text) => Nachrichten-ID (string) | null; wirft bei Fehler
+ * @param opts.senden     async (text) => message ID (string) | null; throws on error
  * @param opts.speichern  (zustand) => void
  */
 export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen = false, speichern = () => {}, log = () => {}, jetzt = Date.now, schlafen = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
@@ -289,7 +289,7 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen 
     }
   }
 
-  /** Ein Durchlauf: neue Signale warnen, geloeste einmal melden. Wirft nie. */
+  /** One pass: warn about new signals, report resolved ones once. Never throws. */
   async function tick() {
     if (laeuft || gestoppt) return;
     laeuft = true;
@@ -299,7 +299,7 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen 
         if (gestoppt) break;
         let eintrag = zustand.gewarnt[s.id];
         if (!eintrag || eintrag.erledigt) {
-          // neuer Zyklus: erstes Mal oder wieder geoeffnet nach Erledigt-Meldung
+          // new cycle: first time or reopened after the resolved message
           eintrag = zustand.gewarnt[s.id] = { gesendet: false, erledigt: false, versuche: 0, zyklus: (eintrag?.zyklus ?? 0) + (eintrag ? 1 : 0), wieder: Boolean(eintrag) };
         }
         const r = await schicke(baueText(s, MAX_ZEICHEN, { wieder: Boolean(eintrag.wieder) }), s.id, eintrag, 'gesendet', s.titel);
@@ -312,7 +312,7 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen 
           const eintrag = zustand.gewarnt[s.id];
           if (!eintrag || eintrag.erledigt || (eintrag.versuchteErledigt ?? 0) > MAX_WIEDERHOLUNGEN) continue;
           if (!cfg.erledigt) {
-            // Meldung abgeschaltet: Zyklus trotzdem schliessen, damit ein Wieder-Oeffnen neu warnt
+            // message switched off: close the cycle anyway so that reopening warns again
             eintrag.erledigt = true;
             speichern(zustand);
             continue;
@@ -320,7 +320,7 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen 
           const r = await schicke(baueErledigt(s), s.id, eintrag, 'erledigt');
           if (r === 'fehler') eintrag.versuchteErledigt = (eintrag.versuchteErledigt ?? 0) + 1;
           if (r === 'verworfen') {
-            eintrag.erledigt = true; // nicht spaeter nachholen, nur diese Meldung faellt weg
+            eintrag.erledigt = true; // do not catch up later, only this message is dropped
             speichern(zustand);
           }
         }
@@ -332,7 +332,7 @@ export function neuerMelder({ cfg, projekt, sb, zustand, senden, merkeWarnungen 
     }
   }
 
-  /** Kurze Folgenachricht (Bestaetigung einer Rueckmeldung) ueber denselben Weg und dasselbe Rate-Limit. Wirft nie. */
+  /** Short follow-up message (confirmation of a feedback) via the same path and the same rate limit. Never throws. */
   async function meldeKurz(text, signalId) {
     if (gestoppt) return 'gestoppt';
     return schicke(text, signalId, {}, 'kurz');

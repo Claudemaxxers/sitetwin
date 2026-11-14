@@ -1,4 +1,4 @@
-"""Konfiguration aus uebersetzer/.env (nie committen) bzw. Umgebungsvariablen."""
+"""Configuration from uebersetzer/.env (never commit) or environment variables."""
 
 from __future__ import annotations
 

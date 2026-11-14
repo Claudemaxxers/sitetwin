@@ -1,4 +1,4 @@
-"""WhatsApp-Export (SPEC §7.1). Input: Ordner, .zip oder die Exportdatei selbst."""
+"""WhatsApp export (SPEC §7.1). Input: folder, .zip or the export file itself."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from pathlib import Path, PurePosixPath
 
 from ..models import AnhangTyp, Anhang, ImportKontext, ParseFehler, QuellTyp, RawItem
 
-# Android: "WhatsApp Chat mit <Gruppe>.txt" (EN: "with"); iPhone: "_chat.txt" im Zip.
+# Android: "WhatsApp Chat mit <group>.txt" (EN: "with"); iPhone: "_chat.txt" in the zip.
 EXPORT_MUSTER = re.compile(r"^(?:WhatsApp Chat (?:mit|with) (?P<gruppe>.+)|_chat)\.txt$")
 _CONTAINER = re.compile(r"^WhatsApp[ -]Chat(?: - | mit | with )(?P<gruppe>.+)$")
 _UNSICHTBAR = re.compile("[\u200e\u200f\u202a-\u202f\ufeff]")
-# Gruppen 1–7: Tag, Monat, Jahr, Stunde, Minute, Sekunde?, AM/PM?
+# Groups 1–7: day, month, year, hour, minute, second?, AM/PM?
 _STEMPEL = r"(\d{1,2})[./](\d{1,2})[./](\d{2}|\d{4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?(?:\s?([AaPp])\.?[Mm]\.?)?"
 _ANDROID = re.compile(rf"^{_STEMPEL} - (?P<rest>.*)$")
 _IOS = re.compile(rf"^\[{_STEMPEL}\] (?P<rest>.*)$")
@@ -31,7 +31,7 @@ _OHNE_MEDIEN = re.compile(
     r"|(?:Bild|Audio|Video|Sticker|GIF|Dokument|Kontaktkarte) weggelassen"
     r"|(?:image|audio|video|sticker|GIF|document|Contact card) omitted)$"
 )
-# iPhone schreibt Systemhinweise mit dem Chatnamen als "Absender".
+# iPhone writes system notices with the chat name as the "sender".
 _SYSTEMTEXT = ("Nachrichten und Anrufe sind Ende-zu-Ende-verschlüsselt", "Messages and calls are end-to-end encrypted")
 
 
@@ -50,7 +50,7 @@ class _Roh:
 
 
 class _Quelle:
-    """Exportdatei + Mediendateien, egal ob Ordner oder Zip. Schlüssel = Dateiname."""
+    """Export file + media files, whether folder or zip. Key = file name."""
 
     def __init__(self, path: Path) -> None:
         self.dateien: dict[str, Callable[[], bytes]] = {}
@@ -83,9 +83,9 @@ def _zeit(m: re.Match[str], ctx: ImportKontext) -> datetime:
     sekunde = int(m.group(6)) if m.group(6) else 0
     if jahr < 100:
         jahr += 2000
-    if monat > 12 >= tag:  # US-Export: Monat zuerst
+    if monat > 12 >= tag:  # US export: month first
         tag, monat = monat, tag
-    if m.group(7):  # 12-Stunden-Format
+    if m.group(7):  # 12-hour format
         stunde = stunde % 12 + (12 if m.group(7).lower() == "p" else 0)
     return datetime(jahr, monat, tag, stunde, minute, sekunde, tzinfo=ctx.tz)
 
@@ -129,7 +129,7 @@ def _item(roh: _Roh, exportname: str, kanal: str, quelle: _Quelle, ctx: ImportKo
     m = _ANHANG.match(erste.strip())
     if m:
         name = m.group("name") or m.group("ios")
-        text = rest.strip()  # Bildunterschrift, sonst leer
+        text = rest.strip()  # caption, otherwise empty
         lies = quelle.dateien.get(name)
         if lies is None:
             meta["anhang_fehlt"] = True
@@ -159,7 +159,7 @@ def _item(roh: _Roh, exportname: str, kanal: str, quelle: _Quelle, ctx: ImportKo
 
 
 def _kanal(exportname: str, path: Path) -> str:
-    """Gruppenname aus dem Dateinamen; bei iPhone-Exporten (_chat.txt) aus Zip- bzw. Ordnernamen."""
+    """Group name from the file name; for iPhone exports (_chat.txt) from the zip or folder name."""
     m = EXPORT_MUSTER.match(exportname)
     if m and m.group("gruppe"):
         return m.group("gruppe")
@@ -173,7 +173,7 @@ def _kanal(exportname: str, path: Path) -> str:
 
 
 def ereignisse(path: Path, ctx: ImportKontext) -> Iterator[RawItem | ParseFehler | Systemzeile]:
-    """Wie `parse`, liefert zusätzlich die übersprungenen Systemzeilen (für Tests/Statistik)."""
+    """Like `parse`, additionally returns the skipped system lines (for tests/statistics)."""
     path = Path(path)
     if not path.exists():
         yield ParseFehler(ref=str(path), grund="Pfad nicht gefunden")
@@ -190,7 +190,7 @@ def ereignisse(path: Path, ctx: ImportKontext) -> Iterator[RawItem | ParseFehler
             if isinstance(e, _Roh):
                 try:
                     yield _item(e, exportname, kanal, quelle, ctx)
-                except Exception as fehler:  # eine kaputte Nachricht bricht den Import nicht ab
+                except Exception as fehler:  # one broken message does not abort the import
                     yield ParseFehler(ref=f"{exportname}#L{e.zeile}", grund=str(fehler))
             else:
                 yield e

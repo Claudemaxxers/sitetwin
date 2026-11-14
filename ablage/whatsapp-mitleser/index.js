@@ -1,5 +1,5 @@
-// WhatsApp-Mitleser: liest als gekoppeltes Geraet in erlaubten Chats mit und reicht neue
-// Nachrichten an die Ablage weiter. Nur lesen, nie senden. Inoffiziell (Baileys), nur Prototyp.
+// WhatsApp-Mitleser: reads along in allowed chats as a linked device and forwards new
+// messages to the Ablage. Read only, never send. Unofficial (Baileys), prototype only.
 import { mkdirSync } from 'node:fs';
 import pino from 'pino';
 import qrTerminal from 'qrcode-terminal';
@@ -24,8 +24,8 @@ const logger = pino({ level: 'silent' });
 const kurz = (s, n = 40) => (s.length > n ? `${s.slice(0, n)}...` : s).replace(/\s+/g, ' ');
 const log = (...a) => console.log(new Date().toLocaleTimeString('de-AT'), ...a);
 
-const gruppen = new Map(); // jid -> Betreff
-let warteschlange = Promise.resolve(); // haelt die Reihenfolge ein
+const gruppen = new Map(); // jid -> subject
+let warteschlange = Promise.resolve(); // keeps the order
 let wartezeitMs = 2000;
 
 if (!nurChats) {
@@ -39,13 +39,13 @@ if (!nurChats) {
   }
 }
 
-// Melder (Warnungen in einen Chat): standardmaessig aus, dann bleibt der Dienst rein lesend.
+// Notifier (warnings into a chat): off by default, then the service stays read-only.
 const warnAn = !nurChats && cfg.warnen.an;
-const warnProbe = process.argv.includes('--warn-probe'); // eine als TEST markierte Warnung senden, dann beenden
+const warnProbe = process.argv.includes('--warn-probe'); // send one warning marked as TEST, then exit
 let melderZustand = null;
 let melder = null;
 let bewerter = null;
-const bewertenAn = warnAn && cfg.bewerten.an; // Rueckmeldung zu Warnungen (einziger Schreibzugriff auf Supabase)
+const bewertenAn = warnAn && cfg.bewerten.an; // feedback on warnings (the only write access to Supabase)
 if (!nurChats && cfg.bewerten.fehler) {
   console.error(`Rueckmeldung: ${cfg.bewerten.fehler}`);
   process.exit(1);
@@ -64,7 +64,7 @@ if (warnAn) {
   if (bewertenAn) console.log(`Rueckmeldung AN: Reaktion, Antwort oder Kurznachricht im Warn-Chat wird am Signal gespeichert${cfg.bewerten.bestaetigen ? ', mit Bestaetigung im Chat' : ''}.`);
 }
 
-/** Ziel-JID des Warn-Chats: JID direkt, sonst ueber den Gruppennamen aus der bekannten Gruppenliste. */
+/** Target JID of the warn chat: JID directly, otherwise via the group name from the known group list. */
 function warnJid() {
   const c = cfg.warnen.chat;
   if (/@(g\.us|s\.whatsapp\.net|lid)$/.test(c)) return c;
@@ -72,8 +72,8 @@ function warnJid() {
   return null;
 }
 
-// Probe (npm run warn-probe): schickt EINE als Test markierte Warnung in den Warn-Chat, gebaut aus dem
-// neuesten Signal des Projekts (egal welcher Status), und prueft, dass sie nicht in die Ablage zurueckfliesst.
+// Probe (npm run warn-probe): sends ONE warning marked as a test into the warn chat, built from the
+// newest signal of the project (whatever its status), and checks that it does not flow back into the Ablage.
 async function probe(sock) {
   const jid = warnJid();
   if (!jid) {
@@ -95,7 +95,7 @@ async function probe(sock) {
     speichereZustand(ZUSTAND_DATEI, melderZustand);
   }
   const warteS = bewertenAn ? 180 : 10;
-  if (bewertenAn) richteBewertungEin(sock); // Melder nur fuer die Bestaetigung, ohne start(): kein Abruf, keine weiteren Warnungen
+  if (bewertenAn) richteBewertungEin(sock); // notifier only for the confirmation, without start(): no polling, no further warnings
   log(`Probe gesendet an "${cfg.warnen.chat}" (Nachrichten-Id ${id ? 'erhalten' : 'FEHLT'}). Warte ${warteS} s auf die eigene Nachricht${bewertenAn ? ' und auf eine Bewertung (Reaktion, Antwort oder Kurznachricht im Warn-Chat)' : ''} ...`);
   setTimeout(() => {
     log('Probe beendet.');
@@ -103,7 +103,7 @@ async function probe(sock) {
   }, warteS * 1000);
 }
 
-/** Melder-Objekt (Sendeweg, Rate-Limit, Zustand) und Bewerter. Mit start() laeuft der Abruf, ohne nur der Sendeweg. */
+/** Notifier object (send path, rate limit, state) and rater. With start() the polling runs, without it only the send path. */
 function richteBewertungEin(sock) {
   melder?.stop();
   melder = neuerMelder({
@@ -144,16 +144,16 @@ async function verbinden() {
   try {
     ({ version } = await fetchLatestBaileysVersion());
   } catch {
-    /* Standardversion der Bibliothek */
+    /* the library's default version */
   }
   const sock = makeWASocket({
     auth: state,
     ...(version ? { version } : {}),
     logger,
     browser: Browsers.macOS('Chrome'),
-    markOnlineOnConnect: false, // nie als online erscheinen
+    markOnlineOnConnect: false, // never appear as online
     syncFullHistory: false,
-    shouldSyncHistoryMessage: () => false, // kein Verlauf, nur Live
+    shouldSyncHistoryMessage: () => false, // no history, live only
     generateHighQualityLinkPreview: false,
   });
   let kopplungAngefragt = false;
@@ -216,7 +216,7 @@ async function verbinden() {
         );
         process.exit(1);
       }
-      const sofort = code === DisconnectReason.restartRequired; // normal direkt nach dem Koppeln
+      const sofort = code === DisconnectReason.restartRequired; // normal right after pairing
       log(`Verbindung getrennt (Code ${code ?? '?'}), neuer Versuch${sofort ? '' : ` in ${Math.round(wartezeitMs / 1000)} s`}.`);
       const pause = sofort ? 0 : wartezeitMs;
       wartezeitMs = Math.min(wartezeitMs * 2, 60000);
@@ -256,21 +256,21 @@ async function gruppenname(sock, jid) {
 
 async function verarbeite(sock, msg) {
   if (!msg?.key?.remoteJid || !msg.message) return;
-  // Eigene Warnungen des Melders nie an die Ablage weiterreichen (keine Rueckkopplung).
+  // Never forward the notifier's own warnings to the Ablage (no feedback loop).
   if (melderZustand && istMelderNachricht(msg, melderZustand)) {
     if (warnProbe) log(`Probe: eigene Warnung kam zurueck und wurde NICHT weitergereicht (per Id erkannt: ${melderZustand.gesendeteIds.includes(msg.key?.id) ? 'ja' : 'nein'}).`);
     return;
   }
   if (cfg.allowlist.leer) return;
   const zeit = Number(msg.messageTimestamp?.toNumber?.() ?? msg.messageTimestamp ?? 0);
-  if (zeit && zeit < startSekunden - 60) return; // Verlauf, nicht live
+  if (zeit && zeit < startSekunden - 60) return; // history, not live
 
   const jid = msg.key.remoteJid;
   const name = await gruppenname(sock, jid);
-  // Ab hier nichts loggen, was nicht auf der Allowlist steht.
+  // From here on, do not log anything that is not on the allowlist.
   if (!istErlaubt(cfg.allowlist, { jid, jidAlt: msg.key.remoteJidAlt, gruppenname: name })) return;
 
-  // Rueckmeldung zu einer Warnung (nur Warn-Chat, nur mit WHATSAPP_BEWERTEN=1). Weitergereicht wird danach wie sonst.
+  // Feedback on a warning (warn chat only, only with WHATSAPP_BEWERTEN=1). Forwarding then happens as usual.
   if (bewerter) await bewerter.verarbeite(msg, { chatJid: warnJid(), eigenerName: sock.user?.name });
 
   const i = inhalt(msg);
@@ -300,7 +300,7 @@ async function verarbeite(sock, msg) {
     eigenerName: sock.user?.name,
   });
   if (!body) return;
-  if (!body.text && !body.anhang) return; // Medium ohne Anhang und ohne Text: nichts zu speichern
+  if (!body.text && !body.anhang) return; // medium without attachment and without text: nothing to store
 
   const r = await sende(cfg.ablageUrl, body);
   const vorschau = body.text ? ` "${kurz(body.text)}"` : '';
