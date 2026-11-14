@@ -88,7 +88,7 @@ Drei Endpunkte nehmen echte Eingänge aus Gmail und Google Drive an. Die OAuth-A
 - Token: `ABLAGE_IMPORT_TOKEN` in `.env` setzen, n8n sendet ihn als Header `X-Ablage-Token`. Ohne Wert keine Prüfung. Gilt nur für diese drei Endpunkte.
 - Einrichtung in n8n: siehe `n8n/README.md`.
 
-In Tests geprüft (für `gmail-felder` mit n8n-Items, die aus den sechs `.eml` in `fake_data/email/` nachgebaut sind). Der Drive-Weg ist am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst), der Gmail-Weg **noch nicht**: Die erste Fassung scheiterte an der n8n-Cloud-Sperre, die neue ist nicht gegen echtes n8n gelaufen.
+In Tests geprüft (für `gmail-felder` mit n8n-Items, die aus den sechs `.eml` in `fake_data/email/` nachgebaut sind). Der Drive-Weg ist am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst), der Gmail-Weg über `gmail-felder` ebenfalls einmal (von Hand ausgelöst, Testmail ohne Anhang, `neu: 1`). Anhänge, Duplikat-Lauf und Dauerbetrieb sind dort ungeprüft. Der Rohweg `gmail` scheitert auf n8n Cloud an der Sperre der Google-Anmeldung.
 
 ## Eigenen WhatsApp-Chat testen
 
