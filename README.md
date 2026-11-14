@@ -1,96 +1,329 @@
-# SiteTwin – live digital twin of the construction site
+# SiteTwin
 
-> Talona Track 01 · *Context for the Physical World*
+> Building Better Worlds Hackathon, Talona Track 01 *Context for the Physical World*
 
-Construction runs on group chats, email threads and spreadsheets. One crew closes a wall before the inspection, another builds from last week's drawings. **SiteTwin** listens to the channels the site already uses, keeps **one live record of what changed and who decided it**, shows it on a 3D model of the building, and flags problems early enough for the superintendent to act.
+Construction runs on group chats, email threads and shared folders. One crew closes a wall before the electricians have run their pipes, another builds from last week's drawing. **SiteTwin** plugs into what the site already uses (WhatsApp, mail, photos, drawings, a Drive folder), keeps every message unchanged as raw data, turns it into structured records (what, where, who, when, which drawing, who decided, what is waiting on whom), checks each new record against the valid drawing, and raises a **signal** while somebody can still act, before rework happens. The office sees the live state of each project in a web app (the "digital twin"). Nobody on site has to change how they work.
 
-## What it does
+How this maps to the Talona brief:
 
-| | |
+| Talona brief | Where it lives here |
 |---|---|
-| **Connects to what the site uses** | Telegram group (webhook), pasted emails, site photos (Claude vision), plus a simulator in the UI |
-| **One live record** | Every message becomes structured events in an append-only log. The twin state is *derived* from that log (event sourcing), so the timeline slider replays the site at any point in time |
-| **Flags issues as they happen** | Deterministic rule engine runs on every event (see below) |
-| **Decisions go to the superintendent** | Inbox with *Stop* / *Approve* + comment. The decision is itself an event in the log and is pushed back to Telegram |
-| **For people, agents and robots** | `GET /api/twin/elements/:id` returns status, valid drawing revision, open flags, block state and full history as JSON |
+| Catch it before the rework: missed change, work out of sequence, outdated drawing | Prüf-Agent (checking agent) in `uebersetzer/`, signals in the table `signale` |
+| Live picture of the place | Web app: changes, inbox, daily log, record, alerts per project (`app/`, `components/app/`) |
+| Dock onto what the site already uses | Ablage (ingest layer) in `ablage/`: WhatsApp export or Twilio, `.eml`/Gmail, Drive folder, call transcripts |
+| Live log: what changed, who decided, what waits on whom | Table `eintraege` (columns for decision and "waits on"), view `eintraege_mit_quelle`, table `signal_verlauf` |
+| Crews ask, decisions go to the foreman | "Ask" drawer in the web app (answers only from the record); signal lifecycle in `KONZEPT.md` |
 
-| **Answers questions** | Crews text a question (*"Darf ich Wand 12 zumachen?"*) and get an answer built only from the record: valid revision, missing inspection, open or stopped flags |
-| **Learning loop** | Superintendent decisions feed back: a flag type the superintendent keeps approving for a trade is downgraded automatically; stopped flag types never are (`lib/answer.ts`) |
+**Language note.** The domain is a German-speaking building site. Folder and table names are German and stay as they are: `ablage` = filing / ingest, `quellen` = sources (raw data), `Übersetzer` = translator (structuring), `Prüf-Agent` = checking agent, `eintraege` = structured entries, `signale` = signals (flags), `plaene` = drawings, `Vorarbeiter` = foreman, `Bauleitung` = site management. The fictional project is "BV Simmering".
 
-### Rules
+All test data is **fictional** (see [Assumptions and limits](#8-assumptions-and-limits)).
 
-| Rule | Severity | Example |
+## Contents
+
+1. [Architecture](#1-architecture)
+2. [Prerequisites and environment](#2-prerequisites-and-environment)
+3. [Setup and start](#3-setup-and-start)
+4. [Tests](#4-tests)
+5. [Demo walkthrough](#5-demo-walkthrough)
+6. [Live sources (optional)](#6-live-sources-optional)
+7. [First prototype (/v1)](#7-first-prototype-v1)
+8. [Assumptions and limits](#8-assumptions-and-limits)
+9. [Repo layout and sub-docs](#9-repo-layout-and-sub-docs)
+10. [License](#10-license)
+
+## 1. Architecture
+
+```
+ WhatsApp export / Twilio    .eml / Gmail (n8n)    Drive folder (n8n)    call JSON
+            \                       |                     |                 /
+             v                      v                     v                v
+        +--------------------------------------------------------------------+
+        | Ablage (ablage/, Python + FastAPI + CLI)                           |
+        | parses, never interprets; photos/voice/PDF go to the bucket        |
+        +-----------------------------+--------------------------------------+
+                                      | writes (insert only)
+                                      v
+        +--------------------------------------------------------------------+
+        | Supabase: table `quellen` (raw data) + private bucket `ablage`     |   <-- interface Ablage / Übersetzer
+        +-----------------------------+--------------------------------------+
+                                      | reads status='neu' (+ project timeline)
+                                      v
+        +--------------------------------------------------------------------+
+        | Übersetzer (uebersetzer/, Python, Claude with structured output)   |
+        | -> `eintraege`, `plaene`, `elemente` (component register)          |
+        +-----------------------------+--------------------------------------+
+                                      v
+        +--------------------------------------------------------------------+
+        | Prüf-Agent (uebersetzer/uebersetzer/pruefung.py)                   |
+        | fixed rules (free) + optional Claude check -> `signale`            |
+        +----------------+---------------------------------+-----------------+
+                         | signal (flag)                   | reads everything
+                         v                                 v
+        +-------------------------------+   +-----------------------------------+
+        | Telefon-Agent (phone agent)   |   | Web app / digital twin            |
+        | NOT IN THIS REPO, see below   |   | (Next.js: app/, components/, lib/)|
+        +-------------------------------+   +-----------------------------------+
+```
+
+**Ablage** (`ablage/`, owner: Santino). Ingest layer. Reads WhatsApp chat exports (`.zip`/`.txt`, Android and iPhone, German and English), `.eml` files, a Drive-style folder, call-transcript JSON, and live inputs (Twilio WhatsApp webhook, Gmail and Drive via n8n). Stores everything unchanged: one row per message/mail/file/call in `quellen`, files in the private bucket `ablage`. Duplicates are detected by `content_hash`, so importing twice yields 0 new rows. Voice messages are transcribed on import if a transcription key is set, PDFs get their text via `pypdf`. Interface: FastAPI (`ablage/ablage/api.py`) and the CLI `python -m ablage`.
+
+**`quellen` is the interface** between Ablage and Übersetzer. Ablage only inserts; the Übersetzer reads it directly with the service key and writes back only `status` and `meta.fehler`. Evidence elsewhere refers to `quellen.content_hash`, never to `id`, so `quellen` can be emptied and re-imported. Contract: [`ablage/SPEC.md`](ablage/SPEC.md) sections 5 and 6.
+
+**Übersetzer** (`uebersetzer/`, owner: Hendrik). Reads new rows of `quellen` one by one (with the last 40 sources as timeline, the valid drawings and the master data) and asks Claude for structured entries: what, where (unit "Top", room, component), who, when, which drawing index, who decided, what waits on whom. Writes `eintraege`, new drawing indices in `plaene`, and the component register `elemente` (planned state read from drawings). Idempotent: re-processing a source replaces its entries. Schema: [`uebersetzer/schema.sql`](uebersetzer/schema.sql).
+
+**Prüf-Agent** (`uebersetzer/uebersetzer/pruefung.py`, owner: Hendrik). Checks each new entry against the valid drawing and creates **signals** in `signale` while someone can still act: work after an outdated drawing index, wall closed (or announced) before installation is done, work on a component the valid drawing no longer contains, unclear message. A second stage can ask Claude to check further. The signal lifecycle is `offen` (open) -> `in_bearbeitung` (in progress) -> `geloest` (resolved); every change is logged in `signal_verlauf`. Details: [`uebersetzer/README.md`](uebersetzer/README.md).
+
+**Telefon-Agent** (phone agent, owner: Melih). **There is no phone-agent code in this repository.** What exists is its interface: `POST /import/call` in Ablage accepts a call transcript as JSON ("call contract v1", `ablage/SPEC.md` section 7.4, sample in `fake_data/calls/`); the table `signale` has the columns `anruf_text` (text for the call), `zustaendig`, `telefon`, `anruf_id`, `angerufen_am`; the table `personen` holds phone numbers; the web app shows "called at ..." / "call follows" per signal. Nothing in this repo places a call or sets a signal to `in_bearbeitung`. The calls in `fake_data/` are fictional transcripts.
+
+**Web app / digital twin** (`app/`, `components/`, `lib/`; owner: Max, built on Melih's first prototype). Next.js app that reads the Supabase tables server-side (`lib/sb.ts`, service key stays on the server) and polls every 6 seconds. `/` lists projects, `/projekt/<projekt>` opens one project with the views Changes, Inbox, Daily log (Bautagebuch), Record (Protokoll) and Notifications (alerts and the rules behind them). An "Ask" drawer answers questions only from the record (`POST /api/fragen`). The web app is read-only with respect to Supabase: it writes nothing back.
+
+## 2. Prerequisites and environment
+
+Required tools:
+
+| Tool | For |
+|---|---|
+| A Supabase project (database + Storage) | `quellen`, `eintraege`, `signale`, bucket `ablage` |
+| Python 3.11 or newer | `ablage/`, `uebersetzer/` |
+| [uv](https://docs.astral.sh/uv/) (optional for `uebersetzer/`, a `pip` alternative is given) | `uebersetzer/` |
+| Node.js 24 and npm | web app and first prototype (`node:sqlite` is used). On Node 22.15 the web app, `/v1` and `npm test` also ran, but `npm run demo` fails there because that Node version cannot run a `.mts` file directly |
+| An Anthropic API key | Übersetzer (needed to create structured entries), optional elsewhere |
+
+Never commit secrets. Credentials come only from the `.env` files below.
+
+### Root: `.env.local` (web app and first prototype)
+
+`cp .env.example .env.local` (PowerShell: `copy .env.example .env.local`). Read by Next.js.
+
+| Variable | Required | Without it |
 |---|---|---|
-| Closed (or *planned* to close) before inspection | critical | "Mache morgen Wand 12 zu" while the inspection is missing |
-| Work from an outdated drawing | high | "nach Plan Rev B" while Rev C is valid |
-| Out of sequence | high | Filling before boarding, inspection before rough-in |
-| Change not acknowledged | medium | A trade works on a wall after a revision it never confirmed |
-| Unclear message | medium | "bin hinten fertig mit dem zeug" → ask back instead of guessing |
+| `SUPABASE_URL` | for the digital twin | `/projekt/<id>` returns 404, the project list shows only the two demo cards |
+| `SUPABASE_SERVICE_KEY` | for the digital twin | same. Server only, never expose as `NEXT_PUBLIC_` |
+| `ABLAGE_BUCKET` | optional, default `ablage` | default is used; serves photos and PDFs through `/api/anhang` |
+| `ANTHROPIC_API_KEY` | optional | `/v1` uses a rule-based extractor; the "Ask" drawer falls back to keyword search over the record |
+| `ANTHROPIC_AUTH_TOKEN` | optional alternative to the key | same as above |
+| `SITETWIN_MODEL` | optional, default `claude-sonnet-5-5` | model for `/v1` extraction |
+| `SITETWIN_ASK_MODEL` | optional, default `claude-opus-5-5` | model for the "Ask" drawer |
+| `TELEGRAM_BOT_TOKEN` | optional, `/v1` only | no Telegram messages |
+| `TELEGRAM_SUPER_CHAT_ID` | optional, `/v1` only | no alerts to Telegram |
+| `TELEGRAM_WEBHOOK_SECRET` | optional, `/v1` only | webhook accepts any caller |
 
-## Digital twin (Supabase)
+### `ablage/.env` (Ablage)
 
-`/` lists the company's projects, `/projekt/<projekt>` is the twin: KPIs on top, the building in 3D on the right, data for the current selection on the left, a timeline at the bottom.
+`copy ablage\.env.example ablage\.env`. Read by `ablage/ablage/config.py`.
 
-- Reads Hendrik's structured tables (`uebersetzer/schema.sql`) server-side: `projekte`, `tops`, `eintraege_mit_quelle`, `signale`, `plaene_aktuell`, `lv_positionen`. Polls every 6 s.
-- The building is generated from `tops` (storeys, units, rooms). Click a storey: the house is sliced and the storey pulled out; click a unit: rooms, and the place of a signal lights up (e.g. distribution board as built vs. where the valid plan puts it).
-- KPIs are derived, nothing is written back: progress = electrical work stages reported done per unit; extra costs = hours at the Regie rate plus extra pieces at LV unit prices.
-- Setup: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` in `.env.local` (server only). Melih's first prototype is still at `/v1`.
+| Variable | Required | Without it |
+|---|---|---|
+| `SUPABASE_URL` | yes (except `--dry-run` and tests) | import cannot write |
+| `SUPABASE_SERVICE_KEY` | yes (except `--dry-run` and tests) | same |
+| `ABLAGE_BUCKET` | optional, default `ablage` | default is used |
+| `DEFAULT_PROJEKT` | optional, default `BV Simmering` | used when an import gives no project |
+| `TZ` | optional, default `Europe/Vienna` | default is used |
+| `WHATSAPP_LIVE_KANAL` | optional | live WhatsApp rows get no channel name |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | optional, Twilio only | no media download, no signature check |
+| `TWILIO_WEBHOOK_URL` | optional, Twilio only | no signature check |
+| `ABLAGE_IMPORT_TOKEN` | optional | `/import/email/gmail` and `/import/drive/datei` are not protected; if set, they require the header `X-Ablage-Token` |
+| `TRANSKRIPT_API_KEY` | optional | voice messages are stored without transcript (unless a sidecar `<audio>.txt` exists) |
+| `TRANSKRIPT_BASE_URL` | optional, default `https://api.openai.com/v1` | default |
+| `TRANSKRIPT_MODELL` | optional, default `whisper-1` | default |
 
-## Architecture
+### `uebersetzer/.env` (Übersetzer and Prüf-Agent)
 
+`copy uebersetzer\.env.example uebersetzer\.env`. Read by `uebersetzer/uebersetzer/konfig.py` and the Anthropic SDK.
+
+| Variable | Required | Without it |
+|---|---|---|
+| `SUPABASE_URL` | yes for `lauf` and `pruefen` | command exits with a message. Not needed for `trockenlauf` and the tests. **`.env.example` ships a prefilled project URL; replace it with your own** |
+| `SUPABASE_SERVICE_KEY` | yes for `lauf` and `pruefen` | same |
+| `ABLAGE_BUCKET` | optional, default `ablage` | default |
+| `DEFAULT_PROJEKT` | optional, default `BV Simmering` | used by `trockenlauf` |
+| `ANTHROPIC_API_KEY` | yes for anything with `--mit-claude` | no structured entries are created; without Claude only the free rule stage of the Prüf-Agent runs. **Read by the Anthropic SDK, listed in `.env.example`** |
+| `UEBERSETZER_MODELL` | optional, default `claude-haiku-5-5` | default |
+| `UEBERSETZER_EFFORT` | optional, default `medium` | default |
+| `UEBERSETZER_KONTEXT` | optional, default `40` | number of earlier sources sent as timeline |
+
+**Cost guard.** Every Übersetzer command that calls Claude requires the flag `--mit-claude`; without it nothing calls the API (the code and `.env.example` mark this as `HACKATHON-KOSTENSPERRE`). The Übersetzer README states about 4 cents for one full run over the fictional data (measured by the team on 13.11.).
+
+## 3. Setup and start
+
+Order for a juror: database, Ablage, import, Übersetzer + Prüf-Agent, web app. The commands below are PowerShell (Windows) unless a bash variant is shown.
+
+### 3.1 Database (Supabase)
+
+In the Supabase SQL editor, run in this order:
+
+1. The table `quellen` (copied from `ablage/SPEC.md` section 5; no separate `.sql` file exists for it):
+
+```sql
+create table if not exists quellen (
+  id            uuid primary key default gen_random_uuid(),
+  typ           text not null check (typ in ('whatsapp','email','drive','call')),
+  projekt       text not null,
+  kanal         text,
+  absender      text,
+  zeitpunkt     timestamptz,
+  text          text not null default '',
+  anhang_pfad   text,
+  anhang_typ    text,
+  anhang_name   text,
+  original_ref  text not null,
+  content_hash  text not null unique,
+  status        text not null default 'neu' check (status in ('neu','verarbeitet','fehler')),
+  meta          jsonb not null default '{}',
+  importiert_am timestamptz not null default now()
+);
+create index if not exists quellen_status_idx on quellen (status, zeitpunkt);
+create index if not exists quellen_projekt_idx on quellen (projekt, zeitpunkt);
 ```
-Telegram · Mail · Photo · UI ─► /api/ingest ─► Claude extraction (structured output)
-                                               │  { element, action, trade, drawing_rev, confidence }
-                                               ▼
-                                   append-only event log (SQLite)
-                                     ├─► twin = derive(events)      lib/twin.ts
-                                     ├─► rules(event, twin) → flags lib/rules.ts
-                                     └─► SSE ─► 3D twin · feed · superintendent inbox
+
+2. `uebersetzer/schema.sql` (structured tables and views; it uses `quellen`, so run it second; it can be run repeatedly).
+3. `uebersetzer/stammdaten_bv_simmering.sql` (master data of the fictional project: project, bill of quantities, units, people).
+
+Then, under Storage, create a **private** bucket named `ablage`.
+
+### 3.2 Ablage API and import of the fictional data
+
+```powershell
+cd ablage
+py -3 -m venv .venv
+.venv\Scripts\python -m pip install -e .
+copy .env.example .env          # fill in SUPABASE_URL and SUPABASE_SERVICE_KEY
 ```
 
-- Next.js 16 (App Router), TypeScript, Tailwind
-- `@react-three/fiber` + drei for the 3D model (`lib/model.ts`: one floor, 6 rooms, 19 walls)
-- SQLite via Node's built-in `node:sqlite` (no native build step)
-- Anthropic SDK, `claude-sonnet-5-5` with structured outputs. **Without an API key a rule-based extractor is used**, so the demo runs offline.
+bash alternative: `python3 -m venv .venv && .venv/bin/python -m pip install -e . && cp .env.example .env`, then use `.venv/bin/python` instead of `.venv\Scripts\python`.
 
-## Run it
+Import the fictional base data plus the scenario "Wand Top 5" (from `ablage/`; add `--dry-run` to parse without writing):
 
-Requires Node 24+.
+```powershell
+.venv\Scripts\python -m ablage import whatsapp ..\fake_data\whatsapp --projekt "BV Simmering"
+.venv\Scripts\python -m ablage import email    ..\fake_data\email    --projekt "BV Simmering"
+.venv\Scripts\python -m ablage import ordner   ..\fake_data\drive    --projekt "BV Simmering"
+.venv\Scripts\python -m ablage import call     ..\fake_data\calls    --projekt "BV Simmering"
+.venv\Scripts\python -m ablage import whatsapp ..\fake_data\szenarien\wand_top5\whatsapp --projekt "BV Simmering"
+.venv\Scripts\python -m ablage import call     ..\fake_data\szenarien\wand_top5\calls    --projekt "BV Simmering"
+.venv\Scripts\python -m ablage zeige --projekt "BV Simmering" --limit 10
+.venv\Scripts\python -m ablage audit --projekt "BV Simmering"
+```
+
+Base data is 39 WhatsApp messages, 8 mails (6 mails + 2 attachments), 6 Drive files and 1 call; the scenario adds 11 rows (65 in total, per `ablage/SPEC.md` section 10). `audit` reads `quellen` and the bucket and runs data-quality checks against `fake_data/`. Importing twice is harmless.
+
+Start the API (needed only for the live sources and the `/import/...` endpoints, not for the CLI import):
+
+```powershell
+.venv\Scripts\python -m uvicorn ablage.api:app --port 8000
+```
+
+`GET /health`, interactive docs at `http://localhost:8000/docs`. Endpoints are listed in [`ablage/README.md`](ablage/README.md). The API has no login except the optional token on the two n8n endpoints: run it locally or behind a tunnel only.
+
+### 3.3 Übersetzer and Prüf-Agent
+
+With `uv` (a `uv.lock` is committed):
 
 ```bash
+cd uebersetzer
+cp .env.example .env            # PowerShell: copy .env.example .env
+                                # fill in SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY
+uv sync
+```
+
+Without `uv` (`pyproject.toml` has no build backend, so install the dependencies directly; versions as in `pyproject.toml`):
+
+```powershell
+cd uebersetzer
+py -3 -m venv .venv
+.venv\Scripts\python -m pip install "anthropic>=0.70" "supabase>=2.10" "pydantic>=2.7" "pypdf>=4.0" python-dotenv tzdata pytest
+copy .env.example .env
+```
+
+(bash: `.venv/bin/python` instead of `.venv\Scripts\python`.) Replace `uv run python` with `.venv\Scripts\python` in the commands below. This `pip` route is not what the team's lockfile pins; `uv` is the tested path.
+
+Free commands (no Claude):
+
+```bash
+uv run python -m uebersetzer trockenlauf        # translates fake_data without Claude, writes nothing (shows what would be sent)
+uv run python -m uebersetzer pruefen --trocken  # checks existing entries in Supabase against the rules, writes nothing
+```
+
+Commands that call Claude (cost money, need `ANTHROPIC_API_KEY`):
+
+```bash
+uv run python -m uebersetzer lauf --mit-claude                 # translate all new sources, then run the Prüf-Agent
+uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30  # loop, look again every 30 s (live demo)
+uv run python -m uebersetzer pruefen                           # fixed rules only, writes signals (free)
+uv run python -m uebersetzer pruefen --mit-claude              # additionally the Claude check
+```
+
+Note: `lauf` without `--mit-claude` skips the translation step and only runs the free rule stage. On a database that holds only `quellen`, structured entries (and therefore signals) appear only after a run with `--mit-claude`.
+
+### 3.4 Web app (digital twin)
+
+From the repository root:
+
+```powershell
 npm install
-cp .env.example .env.local   # optional: add ANTHROPIC_API_KEY
-npm run dev                  # http://localhost:3000
+copy .env.example .env.local    # fill in SUPABASE_URL and SUPABASE_SERVICE_KEY (and optionally ANTHROPIC_API_KEY)
+npm run dev                     # http://localhost:3000
 ```
 
-Click **▶ Demo** in the header to play the storyline step by step, or run it from a terminal against the running server:
+bash: `cp .env.example .env.local`. For a production build: `npm run build` then `npm start`.
+
+Open `http://localhost:3000`. The card "BV Simmering" opens the twin; the cards "Wiener Staatsoper" and "Holzhybrid Seestadt (fiktiv)" are static demo cards without data and do not open anything. Without Supabase variables only those two cards appear.
+
+## 4. Tests
+
+| Part | Command | Needs |
+|---|---|---|
+| Ablage | `cd ablage` then `.venv\Scripts\python -m pytest -q` | no Supabase, uses `fake_data/` as fixtures |
+| Übersetzer + Prüf-Agent | `cd uebersetzer` then `uv run pytest` (or `.venv\Scripts\python -m pytest` with the `pip` route) | no Claude, no Supabase |
+| Web app and first prototype | `npm test` (Vitest, rules and twin derivation of the `/v1` prototype); `npm run typecheck` | nothing |
+
+The Übersetzer tests use fake Claude answers; the Claude stage of the Prüf-Agent was only tested that way (see limits). `npm test` covers the first prototype's rule engine (`tests/rules.test.ts`), not the Supabase-based views.
+
+## 5. Demo walkthrough
+
+Chain from raw data to the office view, using the fictional data. The scenario is the core example of `KONZEPT.md`: the drywall crew announces on Friday that it will close the wall in the storage room of unit "Top 5" on Saturday at 7:00, but the valid drawing (index C) moves the distribution board there and the electricians have not yet done it.
+
+1. Do 3.1 to 3.4 (database, import of base data and scenario).
+2. Run `uv run python -m uebersetzer lauf --mit-claude` in `uebersetzer/`. The output reports translated sources, entries, drawings, new signals and resolved signals.
+3. Open `http://localhost:3000` and click "BV Simmering". Check:
+   - **Notifications** (bell icon): signals with severity, who would be called and the text for the call (`anruf_text`).
+   - **Changes**: detected changes per unit with the sources behind each (WhatsApp, voice, photo, mail).
+   - **Inbox**, **Daily log**, **Record**: the raw messages and the structured record, each entry linked to its source.
+   - **Ask** drawer: e.g. a question about Top 5; the answer cites record entries.
+4. Live feeling: leave `uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30` running, import another message (for example the Twilio route, section 6, or `python -m ablage import ...`), and watch the web app pick it up within a few seconds (it polls every 6 s). A message that reports the fix moves the signal to resolved.
+
+What you will not see: an actual phone call (no phone agent in the repo) and the status `in_bearbeitung` being set automatically.
+
+## 6. Live sources (optional)
+
+All of these are optional and none is needed for the walkthrough above. Status of each is in section 8.
+
+- **WhatsApp via Twilio sandbox**: `POST /import/whatsapp/twilio`; setup in [`ablage/README.md`](ablage/README.md), section "WhatsApp live über Twilio".
+- **Gmail and Google Drive via n8n**: `POST /import/email/gmail` and `POST /import/drive/datei`, two importable n8n flows; setup in [`ablage/n8n/README.md`](ablage/n8n/README.md). Needs a public tunnel to the Ablage API and `ABLAGE_IMPORT_TOKEN`.
+- **Voice-message transcription**: set `TRANSKRIPT_API_KEY` (and optionally base URL and model) in `ablage/.env`; any OpenAI-compatible transcription API; details in [`ablage/README.md`](ablage/README.md), section "Sprachnachrichten transkribieren".
+- **Own WhatsApp chat**: export a chat with media and import the `.zip` under a separate project name (`ablage/README.md`, "Eigenen WhatsApp-Chat testen").
+
+## 7. First prototype (/v1)
+
+The first prototype (Melih) is a self-contained Next.js app at `/v1`. It is **separate from the Supabase chain** above: it has its own SQLite event log (`data/sitetwin.db`, created on first start), its own extraction (`lib/extract.ts`, Claude or a rule-based fallback), its own rule engine (`lib/rules.ts`) and its own 3D model. It does not read `quellen`, `eintraege` or `signale`, and nothing from the Supabase chain flows into it. Its Telegram bot is the only notification channel it has; it is not the phone agent.
+
+What it does: a Telegram group, pasted emails, site photos (Claude vision) or the simulator in the UI produce events in an append-only log; the twin state is derived from the log, so a timeline slider replays the site. A rule engine flags closed-before-inspection walls, work from an outdated drawing revision, out-of-sequence work, unacknowledged changes and unclear messages. The superintendent decides with *Stop* or *Approve* in an inbox, and a decision is again an event. Crews can ask a question and get an answer built only from the record; flag types the superintendent keeps approving for a trade are downgraded automatically (`lib/answer.ts`).
+
+Run (from the root, `.env.local` optional):
 
 ```bash
-npm run demo
+npm run dev      # then open http://localhost:3000/v1 and click "Demo" in the header
+npm run demo     # plays the storyline from a terminal against the running server (needs Node 24, see section 2)
+npm run db:reset # resets the SQLite log to the seed data (server must run)
 ```
 
-Tests (rules, twin derivation, the full demo scenario):
-
-```bash
-npm test
-```
-
-### Telegram (optional)
-
-1. Create a bot with @BotFather, put the token into `TELEGRAM_BOT_TOKEN`, and the superintendent's chat id into `TELEGRAM_SUPER_CHAT_ID`.
-2. Add the bot to the site group and disable privacy mode so it sees all messages.
-3. Expose the dev server (e.g. a tunnel) and set the webhook: `https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<host>/api/telegram&secret_token=<TELEGRAM_WEBHOOK_SECRET>`
-
-## Demo storyline
-
-1. Electrician: *"Leitungen in Bad 1.04 Wand 12 fertig"* → wall 12 turns blue.
-2. Planner (mail): *"Ab sofort gilt Rev C"* → bathroom walls switch to Rev C, acknowledgements reset.
-3. Drywall: *"Mache morgen früh Wand 12 zu, nach Plan Rev B"* → **critical + high flag**, wall pulses red, superintendent is alerted.
-4. Drywall asks *"Darf ich Wand 12 heute zumachen?"* → SiteTwin answers from the record: not yet, inspection missing, waiting on the superintendent.
-5. Superintendent clicks **Stop** with a comment → logged, wall turns orange (blocked until it passes inspection).
-6. Drag the timeline back: who changed what, when, and who decided.
-
-## API
+| Rule | Severity |
+|---|---|
+| Closed (or planned to close) before inspection | critical |
+| Work from an outdated drawing | high |
+| Out of sequence | high |
+| Change not acknowledged | medium |
+| Unclear message | medium |
 
 | Method | Path | |
 |---|---|---|
@@ -99,9 +332,85 @@ npm test
 | `POST` | `/api/decide` | `{ flagId, outcome: "approve" \| "stop", comment }` |
 | `GET` | `/api/twin/elements/:id` | wall / room / `ALL` as JSON for agents |
 | `GET` | `/api/stream` | Server-Sent Events on every change |
-| `POST` | `/api/telegram` | Telegram webhook |
+| `POST` | `/api/telegram` | Telegram webhook (optional; set it with `https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<host>/api/telegram&secret_token=<TELEGRAM_WEBHOOK_SECRET>`) |
 | `POST` | `/api/reset` | reset to seed data |
 
-## License
+The Supabase-based routes of the web app are `GET /api/projekt/:id`, `POST /api/fragen` and `GET /api/anhang?pfad=...`.
+
+## 8. Assumptions and limits
+
+Status as of the night before submission. Built beats promised: what is not listed as working here should be read as not working.
+
+**Data**
+- All test data in `fake_data/` is fictional (people, company, project, plans). Photos are placeholders. The two voice files are two seconds of silence; the transcripts of the fictional voice messages come from hand-written sidecar files (`<audio>.txt`), not from speech recognition. The PDF plans are generated (`uebersetzer/werkzeuge/plan_top3.py` for one of them).
+- The Übersetzer's own `testquellen.py` builds `quellen`-like rows from `fake_data/` for tests and dry runs with simplified parsing; it does not replace Ablage.
+
+**Live inputs**
+- **Drive -> n8n Cloud -> tunnel -> Ablage -> Supabase** ran once for real on 14.11.2026, triggered by hand with a test PDF. Continuous operation (activated flow, one-minute polling) is untested.
+- **Gmail flow does not work on n8n Cloud as built.** The HTTP Request node that fetches the raw mail may not use the n8n-managed Google credential. Two ways out are documented in `ablage/n8n/README.md` and not built. Importing `.eml` files works and is tested.
+- **Voice-message transcription** is built for an OpenAI-compatible API but was only tested against a mocked interface, never with a real key or a real WhatsApp voice message. A voice message stored without a transcript does not get one later (insert-only table; delete the row and import again).
+- The **Twilio WhatsApp endpoint** is built to Twilio's documented format and tested, but has never run against a real Twilio account.
+- The same WhatsApp message imported once live and once via export gives two rows (different identity). Two identical messages by the same person within the same minute collapse into one.
+- The Ablage API has no authentication except the optional token on the two n8n endpoints.
+
+**Agents**
+- **No phone agent in this repository** (see section 1). The signal text for the call is produced; the call is not.
+- The Prüf-Agent's fixed rules (outdated drawing, wall closed before installation, component dropped from the plan, unclear message) are the stage that ran on the real test data. Its Claude stage is only tested with fake answers.
+- The Übersetzer uses Claude (default `claude-haiku-5-5`). Results depend on the model; a source that fails because of rate limit or network stays `neu` and is retried. Use your own API key.
+- The Übersetzer does not transcribe audio itself.
+- Not solved (see `KONZEPT.md`, open points): what happens if the foreman never picks up or never reports a fix (re-call, escalation).
+
+**Web app**
+- Read-only against Supabase; the signal status is never changed from the UI. `in_bearbeitung` is not set by anything in this repo.
+- The twin is generated from the table `tops` (units and rooms); it is a schematic, not a scanned model.
+- **Numbers that are derived, not measured:**
+  - *Progress* is the share of electrical work stages that were **reported** done per unit in messages. It is not an inspected or measured value.
+  - *Extra costs* are estimates: hours times the Regie rate plus extra pieces at bill-of-quantities unit prices. Where a message carries no quantity, `lib/demo-preise.ts` supplies **hard-coded demo estimates** keyed by unit and topic (marked "Demo estimates" in the code, and noted as partly from the demo calculation in the Changes view). These figures are not taken from any invoice.
+  - Alert rules in the Notifications view (`REGELN` in `lib/vm.ts`) describe which signal kinds are routed to whom; they are display text, not configurable rules.
+  - The confirmation drafts in the Changes view are text for a person to send; the app sends nothing.
+  - The two additional project cards on the home page are static demo cards with no data behind them.
+
+**First prototype (/v1)**
+- Not connected to the Supabase chain (section 7). Telegram and the SQLite log belong to that prototype only. Whether the Telegram bot was ever run against a real bot is not documented.
+
+**Repository**
+- The repository is private, as required by the Talona rules.
+
+## 9. Repo layout and sub-docs
+
+```
+.
+├── KONZEPT.md              core idea and process (source of truth)
+├── TALONA.md               design and function reference taken from the Talona product
+├── CLAUDE.md               rules and ownership for AI sessions in this repo
+├── ablage/                 Ablage: ingest layer (Python, FastAPI, CLI)
+│   ├── ablage/             package: adapters/, api.py, store.py, ...
+│   ├── n8n/                two n8n flows (Gmail, Drive) and setup
+│   └── tests/
+├── uebersetzer/            Übersetzer + Prüf-Agent (Python, Claude)
+│   ├── uebersetzer/        package: lauf.py, pruefung.py, extraktion.py, ...
+│   ├── schema.sql          structured tables, views
+│   ├── stammdaten_bv_simmering.sql
+│   └── tests/
+├── fake_data/              fictional test data: whatsapp/, email/, drive/, calls/, szenarien/
+├── app/                    Next.js routes: /, /projekt/[id], /v1, app/api/*
+├── components/             web app UI (components/app/) and the /v1 prototype UI
+├── lib/                    Supabase access, view model (vm.ts, twin-model.ts), /v1 pipeline
+├── scripts/demo.mts        terminal demo of the /v1 prototype
+└── tests/                  Vitest tests (/v1 rules)
+```
+
+| Doc | Content |
+|---|---|
+| [`KONZEPT.md`](KONZEPT.md) | core idea, process, signal lifecycle |
+| [`ablage/README.md`](ablage/README.md) | Ablage setup, CLI, endpoints, Twilio, transcription |
+| [`ablage/SPEC.md`](ablage/SPEC.md) | contract of the table `quellen` (sections 5 and 6), adapters, API |
+| [`ablage/n8n/README.md`](ablage/n8n/README.md) | Gmail and Drive via n8n, with known limits |
+| [`uebersetzer/README.md`](uebersetzer/README.md) | Übersetzer, component register, Prüf-Agent, views for the front end |
+| [`uebersetzer/schema.sql`](uebersetzer/schema.sql) | structured database schema |
+| [`TALONA.md`](TALONA.md) | what the web app imitates from the Talona product |
+| [`fake_data/szenarien/wand_top5/README.md`](fake_data/szenarien/wand_top5/README.md) | the demo scenario in detail |
+
+## 10. License
 
 Talona track of the Building Better Worlds Hackathon: all work in this repository belongs to Talona. The repository is private and is not published under the MIT license.
