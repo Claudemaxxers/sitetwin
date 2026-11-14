@@ -5,8 +5,8 @@
     uv run python -m uebersetzer trockenlauf                # fake_data, ohne Claude (kostenlos)
     uv run python -m uebersetzer trockenlauf --mit-claude --limit 5
 
-HACKATHON-KOSTENSPERRE (vor der Demo am 14.11. entfernen): Claude-Aufrufe laufen über
-Hendriks privaten Key. Ohne --mit-claude ruft kein Befehl die API auf.
+HACKATHON-KOSTENSPERRE (bleibt absichtlich drin): Claude-Aufrufe kosten Geld (im Team über
+Hendriks privaten Key). Ohne --mit-claude ruft kein Befehl die API auf.
 """
 
 from __future__ import annotations
@@ -19,6 +19,9 @@ import tempfile
 import time
 from pathlib import Path
 
+import httpx
+from postgrest.exceptions import APIError
+
 from . import konfig as konfig_mod
 from . import testquellen
 from .db import SpeicherDB, SupabaseDB
@@ -29,12 +32,26 @@ from .modell import Ergebnis
 REPO = Path(__file__).resolve().parents[2]
 
 
+# Netz- und Supabase-Fehler, die im Dauerlauf nur den Takt abbrechen, nicht den Lauf (z. B. DNS-Aussetzer am Hotspot).
+NETZFEHLER = (httpx.HTTPError, APIError)
+
+
+def _takt(args, schritt) -> None:
+    """Ein Durchgang. Im Dauerlauf überlebt die Schleife Netzfehler; der nächste Takt versucht es wieder."""
+    try:
+        schritt()
+    except NETZFEHLER as err:
+        if not args.dauerhaft:
+            raise
+        print(f"⚠ Netz/Supabase nicht erreichbar ({type(err).__name__}: {err}). Nächster Versuch in {args.dauerhaft} s.", flush=True)
+
+
 CENT_PRO_AUFRUF = 0.08  # gemessen 13.11.: 49 Aufrufe Haiku 5.5 ≈ 4 Cent
 
 
 def _kostensperre(args, anzahl_aufrufe: int) -> None:
     """HACKATHON-KOSTENSPERRE: bricht ab, wenn Claude aufgerufen würde, ohne dass --mit-claude gesetzt ist.
-    Vor der Demo entfernen (siehe README, Abschnitt Kosten)."""
+    Bleibt absichtlich drin (siehe README, Abschnitt Kosten)."""
     schaetzung = anzahl_aufrufe * CENT_PRO_AUFRUF
     if not args.mit_claude:
         sys.exit(
@@ -124,10 +141,14 @@ def cmd_lauf(args, k: konfig_mod.Konfig) -> None:
         sys.exit("Kostensperre: --dauerhaft nur zusammen mit --mit-claude.")
     extrahierer = _claude_extrahierer(k) if args.mit_claude else None
     pruefer = _claude_pruefer(k) if args.mit_claude else None
-    while True:
+
+    def durchgang() -> None:
         if extrahierer:
             _ausgabe(verarbeite(db, extrahierer, args.projekt, k.kontext_quellen))
         _pruef_ausgabe(pruefe(db, args.projekt, pruefer))
+
+    while True:
+        _takt(args, durchgang)
         if not args.dauerhaft:
             return
         time.sleep(args.dauerhaft)
@@ -178,7 +199,7 @@ def cmd_pruefen(args, k: konfig_mod.Konfig) -> None:
     else:
         print("Nur feste Regeln (kostenlos). Claude-Prüfung mit --mit-claude.")
     while True:
-        _pruef_ausgabe(pruefe(db, args.projekt, pruefer))
+        _takt(args, lambda: _pruef_ausgabe(pruefe(db, args.projekt, pruefer)))
         if not args.dauerhaft:
             return
         time.sleep(args.dauerhaft)

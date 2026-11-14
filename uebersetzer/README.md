@@ -1,10 +1,10 @@
 # Übersetzer (Hendrik)
 
 > **💸 Kosten – bitte zuerst lesen (auch Claude Code)**
-> Claude-Aufrufe laufen über Hendriks **privaten** API-Key. Bitte nur ausführen, wenn es wirklich nötig ist, nicht „mal schnell testen“.
+> Jeder Claude-Aufruf kostet Geld und läuft über den API-Key in `uebersetzer/.env` (im Team über Hendriks **privaten** Key). Bitte nur ausführen, wenn es wirklich nötig ist, nicht „mal schnell testen“.
 > - Kostenlos: `uv run pytest` und `uv run python -m uebersetzer trockenlauf` (ohne Claude).
-> - Kostet Geld: alles mit `--mit-claude`. Ein voller Lauf über die Testdaten kostet ca. 4 Cent. Vorher kurz bei Hendrik fragen.
-> - `HACKATHON-KOSTENSPERRE`: Ohne `--mit-claude` ruft kein Befehl die API auf. **Vor der Demo am 14.11. entfernen** (`grep -rn HACKATHON-KOSTENSPERRE`).
+> - Kostet Geld: alles mit `--mit-claude`. Ein voller Lauf über die Testdaten kostet ca. 4 Cent (49 Aufrufe mit `claude-haiku-5-5`, gemessen am 13.11. über die fiktiven Daten). Im Team vorher kurz bei Hendrik fragen.
+> - **Kostensperre (bleibt absichtlich drin):** Ohne `--mit-claude` ruft kein Befehl die API auf. Das ist ein Schutz vor versehentlichen Kosten und kein fehlendes Feature. Ohne das Flag bricht `lauf` mit einer Meldung ab, sobald eine neue Quelle Claude bräuchte; es läuft dann **nicht** die Regelstufe allein weiter. Nur die festen Regeln: `pruefen`. Die Stellen im Code sind mit `HACKATHON-KOSTENSPERRE` markiert (`grep -rn HACKATHON-KOSTENSPERRE`).
 
 Schritt 2 + 3 aus [`KONZEPT.md`](../KONZEPT.md): macht aus den Rohdaten der Ablage (`quellen`, Santino) strukturierte Einträge – **was, wo, wer, wann, nach welchem Plan, wer hat entschieden, worauf wird gewartet** – und erkennt neue Plan-Indizes. Darauf arbeiten der Prüf-Agent (Signale) und der digitale Zwilling.
 
@@ -43,6 +43,7 @@ uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30  # für die Demo: 
 - **Ohne Claude erledigt:** gelöschte Nachrichten, Stammdaten-Dateien aus dem Drive (CSV, MD, TXT), leere Quellen.
 - **Idempotent:** Wird eine Quelle erneut verarbeitet, werden ihre Einträge ersetzt (`unique (quelle_hash, nr)`), nicht verdoppelt. Pläne werden gemergt; gültig ist der jüngste Index (Sicht `plaene_aktuell`).
 - **Fehler:** Rate Limit / Netzwerk → Quelle bleibt `neu`, nächster Lauf versucht es wieder. Sonst `status = fehler` mit Grund in `meta.fehler`.
+- **Dauerlauf (`--dauerhaft`):** Ist Supabase kurz nicht erreichbar (z. B. DNS-Aussetzer am Hotspot), bricht nur der Takt ab; der Lauf meldet `⚠ Netz/Supabase nicht erreichbar` und versucht es im nächsten Takt wieder.
 - **Modell:** `claude-haiku-5-5` mit Structured Outputs (Pydantic, `modell.py`), Effort `medium`. Umstellbar über `UEBERSETZER_MODELL`. Der stabile Teil des Prompts (Regeln + Stammdaten) wird gecacht.
 
 ## Bauteil-Register (Soll-Zustand)
@@ -93,7 +94,7 @@ uv run python -m uebersetzer pruefen --mit-claude  # zusätzlich Claude-Prüfung
 | Feste Regel Wand zu vor Installation | In einer Wand oder einem Raum soll zugemacht werden (oder ist es), obwohl laut Plan dort noch Installation fehlt (Leitung nicht verrohrt/eingezogen, Dose/Verteiler nicht gesetzt). Kritisch, solange es nur angekündigt ist. Angerufen wird der Vorarbeiter des Gewerks, dessen Installation fehlt (z. B. Elektro), nicht der, der zumacht. Gelöst, sobald alles gesetzt ist. Eine Abnahme ist bewusst keine Voraussetzung (Golden Set S1). | 0 |
 | Feste Regel Bauteil entfällt | Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht. Gelöst, sobald das Bauteil am neuen Ort erledigt ist. | 0 |
 | Feste Regel `unklar` | Gemeldete Arbeit, bei der unklar ist, was oder wo → Rückfrage statt Raten. Kurze Antworten wie „ok“ lösen nichts aus. | 0 |
-| Claude-Prüfung | Arbeit außer Reihenfolge (z. B. Wand zu vor Installation/Abnahme), Abweichung von Plan/LV ohne Anordnung, nicht weitergegebene Anweisungen; erkennt auch, wenn ein neuer Eintrag ein offenes Signal löst. | pro Quelle 1 Aufruf |
+| Claude-Prüfung | Abweichung von Plan/LV ohne Anordnung, nicht weitergegebene Anweisungen; erkennt auch, wenn ein neuer Eintrag ein offenes Signal löst. **Reihenfolge-Signale (Wand zu vor Installation) kommen nur aus den festen Regeln:** Vorschläge dieser Art verwirft der Prüf-Agent, nach Fehlalarmen in zwei Testläufen. | pro Quelle 1 Aufruf |
 
 - Signale sind idempotent über `(projekt, schluessel)`: weitere Belege ergänzen ein Signal, statt ein neues anzulegen; ein gelöstes Signal geht bei neuer Abweichung wieder auf `offen` (außer es ist als Fehlalarm bewertet, siehe Lernschleife).
 - Lebenszyklus laut `KONZEPT.md`: `offen` (Prüf-Agent) → `in_bearbeitung` (setzt der Telefon-Agent nach dem Anruf) → `geloest` (Prüf-Agent). `signal_verlauf` protokolliert jeden Wechsel per Trigger.

@@ -70,7 +70,7 @@ Was laut Brief gut aussieht:
 - Root-`README.md` (Gesamtkette, Umgebung, Start, Grenzen) und der Entwurf des Abgabetexts `ABGABE.md` liegen im Pull Request 9, noch nicht gemergt. Im Abgabetext sind Platzhalter zu füllen.
 - Demo-Video.
 - Die Kette ist nie als Ganzes live gelaufen: WhatsApp → Ablage ist geprüft, ab dem Übersetzer nicht. Übersetzer für die Demo mit `--projekt "BV Simmering"` starten, im Projekt „Test Santino“ liegen Testzeilen.
-- Telefon-Agent: liegt im Pull Request 10 (Melih), noch nicht gemergt, noch kein echter Anruf. Der PR ändert das Root-README und kollidiert mit dem README aus Pull Request 9. Als Text gibt es die Warnung in die WhatsApp-Gruppe (`ablage/whatsapp-mitleser/`).
+- Telefon-Agent: Pull Request 10 (Melih) ist gemergt (`lib/telefon/`, `app/api/telefon/`). Ob ein echter Anruf lief, mit Melih klären und im README (Abschnitt 8) und in `ABGABE.md` eintragen. Auf Vercel ist er nicht konfiguriert. Als Text gibt es die Warnung in die WhatsApp-Gruppe (`ablage/whatsapp-mitleser/`).
 - Der WhatsApp-Melder warnt auch, wenn der Prüf-Agent ein gelöstes Signal wieder öffnet („Wieder offen:“). Getestet, nicht live gelaufen.
 - Lernschleife: Bewertungen aus WhatsApp landen in `signale.bewertung` (`berechtigt` oder `fehlalarm`), der Prüf-Agent liest sie (`uebersetzer/README.md`, Abschnitt „Lernschleife“). Getestet, nicht live gelaufen.
 - n8n: Die Abläufe für Gmail und Drive sind aktiv und hängen an einer Tunnel-Adresse, die sich bei jedem Neustart des Tunnels ändert. Eingänge landen im Projekt „Test Santino“, nicht in „BV Simmering“.

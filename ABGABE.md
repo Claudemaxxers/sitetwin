@@ -18,7 +18,7 @@ Team Claudemaxxers, Talona track (Track 01, Context for the Physical World).
 |---|---|
 | Santino Schrader | Ablage: ingest layer for WhatsApp, mail, Drive and calls; test data |
 | Hendrik Boettcher | Database, Übersetzer (structuring with Claude), Prüf-Agent (checking agent) |
-| Melih Kurtulmus | First prototype; phone agent [status to confirm] |
+| Melih Kurtulmus | First prototype; phone agent |
 | Maximilian Dieringer | Concept, web app (digital twin) |
 
 ## Problem
@@ -42,7 +42,7 @@ What ran for real, and what did not:
 - A warning for a signal was posted into the WhatsApp group from the linked account, once, as a test built from an existing signal. A signal that is reopened gets a new warning; that part is covered by tests only. [After the rehearsal, state here whether a new WhatsApp message triggers signal and warning end to end, and how long it takes.]
 - The fixed rules of the Prüf-Agent ran on the test data. Its optional Claude stage is tested with fake answers only.
 - All site data is fictional (project "BV Simmering"); photos and voice files in the test data are placeholders.
-- [Phone agent: the interface exists (call text and phone number per signal, endpoint for call transcripts). A phone agent that calls open signals through ElevenLabs and Twilio is in pull request 10, with tests, not merged; as of Saturday noon no real call has been placed. State here whether it is merged and whether a real call was placed.]
+- Phone agent: for each open signal it calls the responsible person through ElevenLabs and Twilio, sets the signal to in progress and feeds the call transcript back into the chain. It is merged and covered by tests with fake responses. [State here whether a real call was placed, and to whom.]
 - Learning loop: a thumbs up or down (or a reply) on a warning in the WhatsApp group is stored on the signal as justified or false alarm; this ran once for real. The checking agent reads these ratings: a situation rated as a false alarm is not raised again at full severity, it comes back as a downgraded follow-up signal that says so, and the last ten ratings go into the prompt of its Claude stage. This part is tested against a rebuilt database and has not run live. [Update after the rehearsal if it has.] The first prototype downgrades flag types the superintendent keeps approving.
 - The WhatsApp reader uses an unofficial library and is a prototype. The official route (Twilio webhook) is built and tested, but has not run against a real Twilio account.
 - Numbers in the web app for progress and extra cost are derived from reported messages and, in part, from demo estimates. They are not measurements.

@@ -2,7 +2,9 @@
 
 > Building Better Worlds Hackathon, Talona Track 01 *Context for the Physical World*
 
-Construction runs on group chats, email threads and shared folders. One crew closes a wall before the electricians have run their pipes, another builds from last week's drawing. **SiteTwin** plugs into what the site already uses (WhatsApp, mail, photos, drawings, a Drive folder), keeps every message unchanged as raw data, turns it into structured records (what, where, who, when, which drawing, who decided, what is waiting on whom), checks each new record against the valid drawing, and raises a **signal** while somebody can still act, before rework happens. The office sees the live state of each project in a web app (the "digital twin"). Nobody on site has to change how they work.
+**Live demo:** [sitetwin-hendriks-projects-491d3237.vercel.app](https://sitetwin-hendriks-projects-491d3237.vercel.app) (fictional test data)
+
+Construction runs on group chats, email threads and shared folders. One crew closes a wall before the electricians have run their pipes, another builds from last week's drawing. **SiteTwin** plugs into what the site already uses (WhatsApp, mail, photos, drawings, a Drive folder), keeps every message unchanged as raw data, turns it into structured records (what, where, who, when, which drawing, who decided, what is waiting on whom), checks each new record against the valid drawing, and raises a **signal** while somebody can still act, before rework happens. A phone agent calls the foreman responsible for an open signal. The office sees the live state of each project in a web app (the "digital twin"). Nobody on site has to change how they work.
 
 How this maps to the Talona brief:
 
@@ -12,7 +14,7 @@ How this maps to the Talona brief:
 | Live picture of the place | Web app: changes, inbox, daily log, record, alerts per project (`app/`, `components/app/`) |
 | Dock onto what the site already uses | Ablage (ingest layer) in `ablage/`: WhatsApp (export, linked-device reader or Twilio), `.eml`/Gmail, Drive folder, call transcripts |
 | Live log: what changed, who decided, what waits on whom | Table `eintraege` (columns for decision and "waits on"), view `eintraege_mit_quelle`, table `signal_verlauf` |
-| Crews ask, decisions go to the foreman | "Ask" drawer in the web app (answers only from the record); signal lifecycle in `KONZEPT.md` |
+| Crews ask, decisions go to the foreman | "Ask" drawer in the web app (answers only from the record); phone agent calls the foreman for each open signal (`lib/telefon/`); signal lifecycle in `KONZEPT.md` |
 
 **Language note.** The domain is a German-speaking building site. Folder and table names are German and stay as they are: `ablage` = filing / ingest, `quellen` = sources (raw data), `Übersetzer` = translator (structuring), `Prüf-Agent` = checking agent, `eintraege` = structured entries, `signale` = signals (flags), `plaene` = drawings, `Vorarbeiter` = foreman, `Bauleitung` = site management. The fictional project is "BV Simmering".
 
@@ -61,7 +63,8 @@ All test data is **fictional** (see [Assumptions and limits](#8-assumptions-and-
                          v                                 v
         +-------------------------------+   +-----------------------------------+
         | Telefon-Agent (phone agent)   |   | Web app / digital twin            |
-        | NOT IN THIS REPO, see below   |   | (Next.js: app/, components/, lib/)|
+        | ElevenLabs + Twilio           |   | (Next.js: app/, components/, lib/)|
+        | (lib/telefon/, app/api/telefon)|  |                                   |
         +-------------------------------+   +-----------------------------------+
 ```
 
@@ -73,7 +76,21 @@ All test data is **fictional** (see [Assumptions and limits](#8-assumptions-and-
 
 **Prüf-Agent** (`uebersetzer/uebersetzer/pruefung.py`, owner: Hendrik). Checks each new entry against the valid drawing and creates **signals** in `signale` while someone can still act: work after an outdated drawing index, wall closed (or announced) before installation is done, work on a component the valid drawing no longer contains, unclear message. A second stage can ask Claude to check further. The signal lifecycle is `offen` (open) -> `in_bearbeitung` (in progress) -> `geloest` (resolved); every change is logged in `signal_verlauf`. Details: [`uebersetzer/README.md`](uebersetzer/README.md).
 
-**Telefon-Agent** (phone agent, owner: Melih). **There is no phone-agent code in this repository.** What exists is its interface: `POST /import/call` in Ablage accepts a call transcript as JSON ("call contract v1", `ablage/SPEC.md` section 7.4, sample in `fake_data/calls/`); the table `signale` has the columns `anruf_text` (text for the call), `zustaendig`, `telefon`, `anruf_id`, `angerufen_am`; the table `personen` holds phone numbers; the web app shows "called at ..." / "call follows" per signal. Nothing in this repo places a call or sets a signal to `in_bearbeitung`. The calls in `fake_data/` are fictional transcripts. As a text substitute, the WhatsApp reader can post the warning into the group chat (section 6); that is a message, not a call.
+**Telefon-Agent** (phone agent, `lib/telefon/`, `app/api/telefon/`, `scripts/telefon.mts`; owner: Melih). Step 5 of `KONZEPT.md`: when the Prüf-Agent creates a signal (`signale.status = offen`), SiteTwin calls the responsible person, names the conflict and asks to pause the affected work until it is clarified. The voice agent runs at ElevenLabs with a Twilio number; this app selects the signals, places the call and handles the way back.
+
+```
+signale (offen, angerufen_am null) ─► POST /api/telefon/anrufen ─► ElevenLabs outbound call (Twilio)
+       status = in_bearbeitung, anruf_id, angerufen_am, telefon          │
+                                                                         ▼ conversation
+ElevenLabs post-call webhook ─► POST /api/telefon/webhook ─► Ablage POST /import/call ─► Übersetzer ─► Prüf-Agent
+```
+
+- **Selection:** `status = offen` and `angerufen_am is null`. The number comes from `signale.telefon`, otherwise from `personen` (name or alias of `zustaendig`), normalised to E.164.
+- **Call:** `POST /v1/convai/twilio/outbound-call` with `dynamic_variables` (`anruf_modus`, `zustaendig_name`, `signal_id`, `signal_filter`, `signal_titel`, `anruf_text`, `signal_begruendung`, `signal_ort`, `projekt_name`). The agent reads place and conflict from them; it writes its decision and note itself through its tool `signal_abschliessen` (`status`, `bewertung_notiz`) into Supabase.
+- **Way back:** the transcript goes through the post-call webhook to Ablage (`/import/call`, call contract v1, `ablage/SPEC.md` section 7.4) and runs through Übersetzer and Prüf-Agent like any other source. Not reached (`call_initiation_failure`): the signal goes back to `offen` and is tried again after `TELEFON_WARTEZEIT_MIN`, at most `TELEFON_MAX_VERSUCHE` times (counted in `signal_verlauf`).
+- **Safeguards:** `TELEFON_TROCKEN=1` only selects and does not call. `TELEFON_TESTNUMMER` redirects all calls to one number (always set it for demo and tests, the test data holds placeholder numbers). `TELEFON_TOKEN` protects the call endpoint, `ELEVENLABS_WEBHOOK_SECRET` checks the webhook signature.
+
+As a text channel next to the call, the WhatsApp reader can post the warning into the group chat (section 6). The calls in `fake_data/` are fictional transcripts.
 
 **Web app / digital twin** (`app/`, `components/`, `lib/`; owner: Max, built on Melih's first prototype). Next.js app that reads the Supabase tables server-side (`lib/sb.ts`, service key stays on the server) and polls every 6 seconds. `/` lists projects, `/projekt/<projekt>` opens one project with the views Changes, Inbox, Daily log (Bautagebuch), Record (Protokoll) and Notifications (alerts and the rules behind them). An "Ask" drawer answers questions only from the record (`POST /api/fragen`). The web app is read-only with respect to Supabase: it writes nothing back.
 
@@ -107,6 +124,13 @@ Never commit secrets. Credentials come only from the `.env` files below.
 | `TELEGRAM_BOT_TOKEN` | optional, `/v1` only | no Telegram messages |
 | `TELEGRAM_SUPER_CHAT_ID` | optional, `/v1` only | no alerts to Telegram |
 | `TELEGRAM_WEBHOOK_SECRET` | optional, `/v1` only | webhook accepts any caller |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_PHONE_NUMBER_ID` | phone agent only | no calls; `GET /api/telefon/anrufen` reports `konfiguriert: false` |
+| `ELEVENLABS_WEBHOOK_SECRET` | optional, phone agent | webhook signature is not checked |
+| `TELEFON_TESTNUMMER` | set it for demo and tests | calls go to the numbers in `personen` (placeholders in the test data) |
+| `TELEFON_TROCKEN` | optional, `.env.example` ships `1` | `1` = select and log, do not call; `0` = real calls |
+| `TELEFON_TOKEN` | optional | `POST /api/telefon/anrufen` is not protected; if set, it requires the header `X-Telefon-Token` |
+| `ABLAGE_URL`, `ABLAGE_IMPORT_TOKEN` | optional, phone agent | call transcripts are not forwarded to Ablage |
+| `DEFAULT_PROJEKT`, `TELEFON_LAENDERVORWAHL`, `TELEFON_MAX_VERSUCHE`, `TELEFON_WARTEZEIT_MIN` | optional | defaults `BV Simmering`, `+43`, `3`, `10` |
 
 ### `ablage/.env` (Ablage)
 
@@ -133,7 +157,7 @@ Never commit secrets. Credentials come only from the `.env` files below.
 
 | Variable | Required | Without it |
 |---|---|---|
-| `SUPABASE_URL` | yes for `lauf` and `pruefen` | command exits with a message. Not needed for `trockenlauf` and the tests. **`.env.example` ships a prefilled project URL; replace it with your own** |
+| `SUPABASE_URL` | yes for `lauf` and `pruefen` | command exits with a message. Not needed for `trockenlauf` and the tests. `.env.example` ships a placeholder; replace it with your project URL |
 | `SUPABASE_SERVICE_KEY` | yes for `lauf` and `pruefen` | same |
 | `ABLAGE_BUCKET` | optional, default `ablage` | default |
 | `DEFAULT_PROJEKT` | optional, default `BV Simmering` | used by `trockenlauf` |
@@ -253,7 +277,7 @@ uv run python -m uebersetzer pruefen                           # fixed rules onl
 uv run python -m uebersetzer pruefen --mit-claude              # additionally the Claude check
 ```
 
-Note: `lauf` without `--mit-claude` skips the translation step and only runs the free rule stage. On a database that holds only `quellen`, structured entries (and therefore signals) appear only after a run with `--mit-claude`.
+Note: `lauf` without `--mit-claude` stops with a message as soon as a new source would need Claude (cost guard); it does not continue with the rule stage alone. For the fixed rules only, use `pruefen`. On a database that holds only `quellen`, structured entries (and therefore signals) appear only after a run with `--mit-claude`.
 
 ### 3.4 Web app (digital twin)
 
@@ -269,6 +293,19 @@ bash: `cp .env.example .env.local`. For a production build: `npm run build` then
 
 Open `http://localhost:3000`. The card "BV Simmering" opens the twin; the cards "Wiener Staatsoper" and "Holzhybrid Seestadt (fiktiv)" are static demo cards without data and do not open anything. Without Supabase variables only those two cards appear.
 
+### 3.5 Telefon-Agent (phone agent, optional)
+
+1. In `.env.local`: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_PHONE_NUMBER_ID`, `TELEFON_TESTNUMMER`, and `ABLAGE_URL` of the running Ablage API. For real calls set `TELEFON_TROCKEN=0`.
+2. In ElevenLabs, set the agent's post-call webhook to `https://<host>/api/telefon/webhook` (events `post_call_transcription` and `call_initiation_failure`) and put its secret into `ELEVENLABS_WEBHOOK_SECRET`. Locally, put a tunnel in front of `npm run dev`.
+3. `npm run dev`, then in a second terminal:
+
+```bash
+npm run telefon            # call open signals every 30 s
+npm run telefon:einmal     # one pass
+```
+
+`GET /api/telefon/anrufen` shows the state (configured, dry run, test number set, open signals without a call).
+
 ## 4. Tests
 
 | Part | Command | Needs |
@@ -276,9 +313,9 @@ Open `http://localhost:3000`. The card "BV Simmering" opens the twin; the cards 
 | Ablage | `cd ablage` then `.venv\Scripts\python -m pytest -q` | no Supabase, uses `fake_data/` as fixtures |
 | Übersetzer + Prüf-Agent | `cd uebersetzer` then `uv run pytest` (or `.venv\Scripts\python -m pytest` with the `pip` route) | no Claude, no Supabase |
 | WhatsApp reader | `cd ablage/whatsapp-mitleser` then `npm install` and `npm test` | no network, no WhatsApp account |
-| Web app and first prototype | `npm test` (Vitest, rules and twin derivation of the `/v1` prototype); `npm run typecheck` | nothing |
+| Web app, phone agent and first prototype | `npm test` (Vitest: phone agent with fake ElevenLabs and Supabase, rules and twin derivation of the `/v1` prototype); `npm run typecheck` | nothing |
 
-The Übersetzer tests use fake Claude answers; the Claude stage of the Prüf-Agent was only tested that way (see limits). `npm test` covers the first prototype's rule engine (`tests/rules.test.ts`), not the Supabase-based views.
+The Übersetzer tests use fake Claude answers; the Claude stage of the Prüf-Agent was only tested that way (see limits). `npm test` covers the phone agent (`tests/telefon.test.ts`, no network) and the first prototype's rule engine (`tests/rules.test.ts`), not the Supabase-based views.
 
 ## 5. Demo walkthrough
 
@@ -293,7 +330,7 @@ Chain from raw data to the office view, using the fictional data. The scenario i
    - **Ask** drawer: e.g. a question about Top 5; the answer cites record entries.
 4. Live feeling: leave `uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30` running, import another message (for example through the WhatsApp reader, section 6, or `python -m ablage import ...`), and watch the web app pick it up within a few seconds (it polls every 6 s). A message that reports the fix moves the signal to resolved.
 
-What you will not see: an actual phone call (no phone agent in the repo) and the status `in_bearbeitung` being set automatically.
+5. Optional, with the phone agent set up (3.5): `npm run telefon:einmal` calls the responsible person for each open signal and sets it to `in_bearbeitung`; the web app then shows "called at ...". Without the ElevenLabs variables no call is placed and the signal stays `offen`.
 
 ## 6. Live sources (optional)
 
@@ -327,7 +364,7 @@ npm run db:reset # resets the SQLite log to the seed data (server must run)
 | Change not acknowledged | medium |
 | Unclear message | medium |
 
-On Vercel: the app deploys as a standard Next.js project (Node 24.x, env vars from `.env.example`). Vercel's project directory is read-only, so the SQLite event log of this prototype lives in `/tmp` there. It is per function instance and ephemeral: every cold start begins again from the seed scenario, and the live stream (`/api/stream`) only sees changes made on the same instance. The digital twin reads from Supabase and is not affected.
+On Vercel: the app is live at https://sitetwin-hendriks-projects-491d3237.vercel.app, deployed automatically from `feature/sitetwin` as a standard Next.js project (Node 24.x, env vars from `.env.example`). Vercel's project directory is read-only, so the SQLite event log of this prototype lives in `/tmp` there. It is per function instance and ephemeral: every cold start begins again from the seed scenario, and the live stream (`/api/stream`) only sees changes made on the same instance. The digital twin reads from Supabase and is not affected. The phone agent is not configured on the Vercel deployment; calls are placed from a local instance.
 
 | Method | Path | |
 |---|---|---|
@@ -339,7 +376,7 @@ On Vercel: the app deploys as a standard Next.js project (Node 24.x, env vars fr
 | `POST` | `/api/telegram` | Telegram webhook (optional; set it with `https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<host>/api/telegram&secret_token=<TELEGRAM_WEBHOOK_SECRET>`) |
 | `POST` | `/api/reset` | reset to seed data |
 
-The Supabase-based routes of the web app are `GET /api/projekt/:id`, `POST /api/fragen` and `GET /api/anhang?pfad=...`.
+The Supabase-based routes of the web app are `GET /api/projekt/:id`, `POST /api/fragen` and `GET /api/anhang?pfad=...`. The phone agent adds `GET`/`POST /api/telefon/anrufen` and `POST /api/telefon/webhook`.
 
 ## 8. Assumptions and limits
 
@@ -360,15 +397,15 @@ Status as of Saturday 14.11.2026, noon. Built beats promised: what is not listed
 - The Ablage API has no authentication except the optional token on the n8n endpoints.
 
 **Agents**
-- **No phone agent in this repository** (see section 1). The signal text for the call is produced; the call is not.
+- **Phone agent:** the automated tests run against fake ElevenLabs and Supabase responses (`tests/telefon.test.ts`). The voice agent itself, its prompt and its tool `signal_abschliessen` live in the team's ElevenLabs workspace, not in this repository. If nobody picks up, the signal stays open and visible in the web app after `TELEFON_MAX_VERSUCHE` attempts; there is no escalation to the office yet. The agent decides itself whether it resolves the signal; the Prüf-Agent additionally sets `geloest` as soon as a message reports the fix. The phone agent also calls for a follow-up signal that was downgraded after a false-alarm rating.
 - **Learning loop: built, not yet run live.** A rating given in WhatsApp is stored on the signal (`signale.bewertung`: `berechtigt` or `fehlalarm`), and the Prüf-Agent reads it. If a situation rated as a false alarm comes up again, the rated signal is left alone and a follow-up signal is created, downgraded to `mittel` and titled "Früher als Fehlalarm bewertet: …". The last ten rated signals of the project also go into the prompt of the Claude stage. It does not learn new rules: the fixed rules only downgrade exactly the same situation. All of this is tested against a rebuilt database with fake answers; storing a rating ran once for real, the Prüf-Agent acting on one has not. Details in [`uebersetzer/README.md`](uebersetzer/README.md), section "Lernschleife". The first prototype (`/v1`) has its own, separate loop (section 7).
 - The Prüf-Agent's fixed rules (outdated drawing, wall closed before installation, component dropped from the plan, unclear message) are the stage that ran on the real test data. Its Claude stage is only tested with fake answers.
 - The Übersetzer uses Claude (default `claude-haiku-5-5`). Results depend on the model; a source that fails because of rate limit or network stays `neu` and is retried. Use your own API key.
 - The Übersetzer does not transcribe audio itself.
-- Not solved (see `KONZEPT.md`, open points): what happens if the foreman never picks up or never reports a fix (re-call, escalation).
+- Partly solved (see `KONZEPT.md`, open points): if the foreman does not pick up, the phone agent retries a limited number of times. Not solved: escalation to the office, and what happens if a fix is never reported.
 
 **Web app**
-- Read-only against Supabase; the signal status is never changed from the UI. `in_bearbeitung` is not set by anything in this repo.
+- Read-only against Supabase; the signal status is never changed from the UI. `in_bearbeitung` is set only by the phone agent (server routes under `app/api/telefon/`).
 - The twin is generated from the table `tops` (units and rooms); it is a schematic, not a scanned model.
 - **Numbers that are derived, not measured:**
   - *Progress* is the share of electrical work stages that were **reported** done per unit in messages. It is not an inspected or measured value.
@@ -403,9 +440,9 @@ Status as of Saturday 14.11.2026, noon. Built beats promised: what is not listed
 ├── fake_data/              fictional test data: whatsapp/, email/, drive/, calls/, szenarien/
 ├── app/                    Next.js routes: /, /projekt/[id], /v1, app/api/*
 ├── components/             web app UI (components/app/) and the /v1 prototype UI
-├── lib/                    Supabase access, view model (vm.ts, twin-model.ts), /v1 pipeline
-├── scripts/demo.mts        terminal demo of the /v1 prototype
-└── tests/                  Vitest tests (/v1 rules)
+├── lib/                    Supabase access, view model (vm.ts, twin-model.ts), phone agent (telefon/), /v1 pipeline
+├── scripts/                demo.mts (terminal demo of /v1), telefon.mts (phone agent loop)
+└── tests/                  Vitest tests (phone agent, /v1 rules)
 ```
 
 | Doc | Content |
