@@ -1,0 +1,21 @@
+{
+  "name": "whatsapp-mitleser",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Liest in den eigenen WhatsApp-Chats mit (Baileys, inoffiziell) und reicht neue Nachrichten an die Ablage weiter.",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "chats": "node index.js --chats",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "baileys": "^7.0.0-rc14",
+    "pino": "^10.4.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

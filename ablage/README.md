@@ -90,6 +90,10 @@ Drei Endpunkte nehmen echte Eingänge aus Gmail und Google Drive an. Die OAuth-A
 
 In Tests geprüft (für `gmail-felder` mit n8n-Items, die aus den sechs `.eml` in `fake_data/email/` nachgebaut sind). Der Drive-Weg ist am 14.11.2026 einmal über eine echte n8n-Cloud-Instanz gelaufen (von Hand ausgelöst), der Gmail-Weg über `gmail-felder` ebenfalls einmal (von Hand ausgelöst, Testmail ohne Anhang, `neu: 1`). Anhänge, Duplikat-Lauf und Dauerbetrieb sind dort ungeprüft. Der Rohweg `gmail` scheitert auf n8n Cloud an der Sperre der Google-Anmeldung.
 
+## WhatsApp mitlesen (inoffiziell, nur Prototyp)
+
+`whatsapp-mitleser/` ist ein eigenständiger Node-Dienst (Baileys), der als gekoppeltes Gerät im eigenen WhatsApp mitliest und neue Nachrichten ausgewählter Chats an `POST /import/whatsapp/nachricht` schickt. Nur lesen, Allowlist, ohne Chats in `WHATSAPP_CHATS` geht nichts raus. Inoffiziell und gegen die Nutzungsbedingungen von WhatsApp; Sperrrisiko für die Nummer. Offizieller Weg bleibt Twilio. Setup und Grenzen: [whatsapp-mitleser/README.md](whatsapp-mitleser/README.md).
+
 ## Eigenen WhatsApp-Chat testen
 
 1. In WhatsApp einen Test-Chat öffnen (am besten eine neue Gruppe nur mit Testnachrichten) → Menü → **Chat exportieren → Medien einschließen**. Die `.zip` auf den Rechner legen.
