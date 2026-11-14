@@ -75,6 +75,10 @@ Tests (rules, twin derivation, the full demo scenario):
 npm test
 ```
 
+### Vercel
+
+Deploys as a standard Next.js project (Node 24.x, env vars from `.env.example`). Limitation: Vercel's project directory is read-only, so the SQLite event log lives in `/tmp` there. It is per function instance and ephemeral: every cold start begins again from the seed scenario, and the live stream (`/api/stream`) only sees changes made on the same instance. The digital twin reads from Supabase and is not affected.
+
 ### Telegram (optional)
 
 1. Create a bot with @BotFather, put the token into `TELEGRAM_BOT_TOKEN`, and the superintendent's chat id into `TELEGRAM_SUPER_CHAT_ID`.

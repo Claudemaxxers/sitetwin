@@ -67,9 +67,13 @@ WHATSAPP_CHATS=<muss denselben Chat enthalten, gleiche Schreibweise>
 
 Alle Einstellungen: `WHATSAPP_WARN_AB` (nur Signale ab diesem ISO-Zeitpunkt, Standard Startzeit des Dienstes, damit ein Neustart nie alte Signale in den Chat kippt), `WHATSAPP_WARN_ERLEDIGT` (Standard 1), `WARN_INTERVALL_S` (Standard 5), `WARN_MAX_PRO_10MIN` (Standard 6), `SUPABASE_URL` und `SUPABASE_SERVICE_KEY` (aus dieser `.env`, sonst aus `../.env`; aus der Ablage-`.env` werden nur diese zwei Werte gelesen). Das Projekt ist `ABLAGE_PROJEKT`.
 
-**Ablauf.** Alle `WARN_INTERVALL_S` Sekunden werden die offenen Signale des Projekts gelesen (nur `GET`; geschrieben wird nur bei der Rückmeldung, siehe unten). Jedes Signal mit `erstellt_am >= WHATSAPP_WARN_AB` bekommt genau eine Warnung. Wird ein gemeldetes Signal später `geloest`, folgt einmal `✅ SiteTwin: erledigt – <Titel>`. Der Stand (gemeldete Signal-IDs, IDs gesendeter Nachrichten) liegt in `zustand/melder.json` (git-ignoriert, nicht in `auth/`), damit ein Neustart nichts wiederholt.
+**Ablauf.** Alle `WARN_INTERVALL_S` Sekunden werden die offenen Signale des Projekts gelesen (nur `GET`; geschrieben wird nur bei der Rückmeldung, siehe unten). Jedes Signal mit Status `offen` oder `in_bearbeitung`, dessen letzte Änderung (`erstellt_am` oder `aktualisiert_am`, der spätere Wert) nicht vor `WHATSAPP_WARN_AB` liegt, bekommt eine Warnung, und zwar einmal je Runde. Wird ein gemeldetes Signal später `geloest`, folgt einmal `✅ SiteTwin: erledigt – <Titel>`, damit ist die Runde zu. Öffnet der Prüf-Agent dasselbe Signal wieder (gleiche Zeile, Status zurück auf `offen`), kommt eine neue Warnung, deren Titel mit „Wieder offen:“ beginnt. Solange ein gemeldetes Signal offen ist, lösen weitere Änderungen daran (mehr Belege, Bewertung, Anruf) nichts aus.
 
-Genutzte Spalten von `signale`: `id`, `projekt`, `status`, `erstellt_am`, `titel`, `schwere`, `top`, `raum`, `element`, `anruf_text` (ersatzweise `begruendung`), `zustaendig`. `telefon` wird nie gelesen oder gesendet. Beispieltext:
+Zwei Grenzen: Wird ein Signal zwischen zwei Abrufen gelöst und gleich wieder geöffnet, bemerkt der Melder das nicht, weil er nur den Stand je Abruf sieht. Und ein offenes Signal von vor `WHATSAPP_WARN_AB`, das der Melder noch nie gemeldet hat, wird gemeldet, sobald irgendetwas es ändert, auch ein Anruf des Telefon-Agenten.
+
+Der Stand (gemeldete Signal-IDs, IDs gesendeter Nachrichten) liegt in `zustand/melder.json` (git-ignoriert, nicht in `auth/`), damit ein Neustart nichts wiederholt.
+
+Genutzte Spalten von `signale`: `id`, `projekt`, `status`, `erstellt_am`, `aktualisiert_am`, `titel`, `schwere`, `top`, `raum`, `element`, `anruf_text` (ersatzweise `begruendung`), `zustaendig`. `telefon` wird nie gelesen oder gesendet. Beispieltext:
 
 ```
 ⚠️ SiteTwin-Warnung (automatisch)

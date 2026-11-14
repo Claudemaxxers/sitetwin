@@ -1,5 +1,6 @@
 import { ts, zwilling, type ProjektDaten, type Zwilling } from "@/lib/twin-model";
 import {
+  abweichungen,
   aenderungen,
   anfragen,
   firmaFuerRolle,
@@ -8,6 +9,7 @@ import {
   nachrichten,
   personenVerzeichnis,
   tagesberichte,
+  type Abweichung,
   type Aenderung,
   type Anfrage,
   type Leistung,
@@ -23,6 +25,7 @@ export interface Modell {
   z: Zwilling;
   pers: Personen;
   ch: Aenderung[];
+  abw: Abweichung[];
   req: Anfrage[];
   leist: Leistung[];
   logs: Tagesbericht[];
@@ -44,6 +47,7 @@ export function baueModell(d: ProjektDaten): Modell {
     z,
     pers,
     ch,
+    abw: abweichungen(d, pers, ch),
     req,
     leist: leistungen(d, pers),
     logs: tagesberichte(d, pers),
