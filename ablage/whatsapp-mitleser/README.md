@@ -76,9 +76,9 @@ Node-Testrunner, kein Netz, 21 Tests: Abbildung handgebauter Baileys-Nachrichten
 
 **Geprüft:** diese Tests; der Start ohne Sitzung kommt bis zum QR-Code (Verbindung zu WhatsApp mit der installierten Version steht); ein Testrequest aus der Abbildung (nur Text, fiktiv) wurde von der laufenden Ablage mit `neu: 1` angenommen, ein zweiter identischer mit `duplikate: 1`.
 
-**Echter Lauf am 14.11.2026** (eigenes Konto als gekoppeltes Gerät, eine eigens angelegte Testgruppe, Projekt „Test Santino“): Kopplung per QR-Code, Gruppenliste und Freigabe per JID haben funktioniert. Drei eigene Nachrichten vom Handy kamen an und stehen in `quellen`: Text, Foto mit Bildunterschrift (`.jpg` im Bucket) und Sprachnachricht (`.ogg`, ohne Transkript, weil kein `TRANSKRIPT_API_KEY` gesetzt war). Der Absender wurde mit Name und Nummer aufgelöst.
+**Echter Lauf am 14.11.2026** (eigenes Konto als gekoppeltes Gerät, eine eigens angelegte Testgruppe, Projekt „Test Santino“): Kopplung per QR-Code, Gruppenliste und Freigabe per JID haben funktioniert. Drei eigene Nachrichten vom Handy kamen an und stehen in `quellen`: Text, Foto mit Bildunterschrift (`.jpg` im Bucket) und Sprachnachricht (`.ogg`, ohne Transkript, weil kein `TRANSKRIPT_API_KEY` gesetzt war). Der Absender wurde mit Name und Nummer aufgelöst. Eine abgebrochene Verbindung (Code 428) hat der Dienst nach 14 Sekunden von selbst wiederhergestellt.
 
-**Nicht geprüft:** Nachrichten anderer Teilnehmer, Dokumente und Videos, Kopplung per Code statt QR, Freigabe per Gruppenname, Wiederverbindung nach Abbruch, Abmeldung vom Handy aus, Betrieb über längere Zeit und in großen Gruppen. Version: `baileys` 7.0.0-rc14 (Release Candidate, die als `latest` geführte Version; die Linie 6.x ist als `legacy` markiert).
+**Nicht geprüft:** Nachrichten anderer Teilnehmer, Dokumente und Videos, Kopplung per Code statt QR, Freigabe per Gruppenname, Abmeldung vom Handy aus, Betrieb über längere Zeit und in großen Gruppen. Version: `baileys` 7.0.0-rc14 (Release Candidate, die als `latest` geführte Version; die Linie 6.x ist als `legacy` markiert).
 
 ## Dateien
 
