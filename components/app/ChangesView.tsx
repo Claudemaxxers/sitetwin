@@ -1,14 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ts } from "@/lib/twin-model";
-import { exposure as exposureTabelle, istAudio, istFoto, tagKey, type Aenderung } from "@/lib/vm";
+import { SIGNAL_ART_LABEL, ts } from "@/lib/twin-model";
+import { exposure as exposureTabelle, istAudio, istFoto, tagKey, type Abweichung, type Aenderung } from "@/lib/vm";
 import { anhangUrl, type Modell, type Nav } from "./modell";
 import { Avatar, Btn, Card, eur, eurK, Feld, H2, I, Kuerzel, MonoLabel, PageHead, Pill, QuelleChip, Suche, tagKurz, tagZeit, Tabs, zeit } from "./ui";
 import { Erkennung } from "./Erkennung";
-import { Abweichungen, SignalPill, SignalSchritte } from "./Signal";
+import { anrufZeile, oeffneSignal, SignalPill, SignalSchritte } from "./Signal";
 
 type Tab = "uebersicht" | "gewerk" | "top";
+/** One row of the table: a possible change, or a deviation the checking agent found. */
+type Zeile = { key: string; zeit: string; aktiv: boolean; top: string; gewerk: string; c?: Aenderung; a?: Abweichung };
 const FARBEN = ["#EE783B", "#5683D2", "#6FA77F", "#9A86C9", "#B8B2AB", "#D9B04C", "#7FB3B8"];
 
 export function ChangesView({ m, detail, exposure, nav }: { m: Modell; detail: string | null; exposure: boolean; nav: Nav }) {
@@ -25,7 +27,16 @@ export function ChangesView({ m, detail, exposure, nav }: { m: Modell; detail: s
 function Uebersicht({ m, nav }: { m: Modell; nav: Nav }) {
   const [tab, setTab] = useState<Tab>("uebersicht");
   const [q, setQ] = useState("");
-  const liste = m.ch.filter((c) => !q || `${c.titel} ${c.ort} ${c.gewerk} ${c.von.name} ${c.nr}`.toLowerCase().includes(q.toLowerCase()));
+  const passt = (text: string) => !q || text.toLowerCase().includes(q.toLowerCase());
+  // Deviations sit in the same table as changes; the ones still with the foreman go first.
+  const liste: Zeile[] = [
+    ...m.ch
+      .filter((c) => passt(`${c.titel} ${c.ort} ${c.gewerk} ${c.von.name} ${c.nr}`))
+      .map((c) => ({ key: c.key, zeit: c.erhoben, aktiv: false, top: c.top ?? "Allgemein", gewerk: c.gewerk, c })),
+    ...m.abw
+      .filter((a) => passt(`${a.titel} ${a.ort} ${a.gewerk} ${a.von.name} ${a.zustaendig.name} ${SIGNAL_ART_LABEL[a.s.art]} Abweichung`))
+      .map((a) => ({ key: a.s.id, zeit: a.zeit, aktiv: a.s.status !== "geloest", top: a.top ?? "Allgemein", gewerk: a.gewerk, a })),
+  ].sort((x, y) => Number(y.aktiv) - Number(x.aktiv) || ts(y.zeit) - ts(x.zeit));
   const wert = m.ch.reduce((a, c) => a + (c.schaetzung?.betrag ?? 0), 0);
   const offen = m.ch.filter((c) => !c.bereit).reduce((a, c) => a + (c.schaetzung?.betrag ?? 0), 0);
   const ersteOffene = m.ch.find((c) => !c.bereit) ?? m.ch[0];
@@ -63,7 +74,6 @@ function Uebersicht({ m, nav }: { m: Modell; nav: Nav }) {
 
         {tab === "uebersicht" && (
           <>
-            <Abweichungen m={m} nav={nav} />
             <Card className="mt-6 px-8 py-7">
               <div className="text-[14px] text-[rgba(12,10,8,.6)]">Seit Baubeginn</div>
               <button onClick={nav.exposure} className="mt-1 flex items-center gap-1 text-[22px] tracking-[-0.01em] hover:underline">
@@ -75,11 +85,11 @@ function Uebersicht({ m, nav }: { m: Modell; nav: Nav }) {
               </div>
               <Flaeche m={m} />
             </Card>
-            <Tabelle titel={`${m.d.projekt.name ?? m.d.projekt.projekt} · Mögliche Änderungen`} liste={liste} nav={nav} jetzt={m.jetzt} />
+            <Tabelle titel={`${m.d.projekt.name ?? m.d.projekt.projekt} · Mögliche Änderungen`} liste={liste} m={m} nav={nav} />
           </>
         )}
-        {tab === "gewerk" && <Gruppiert liste={liste} by={(c) => c.gewerk} nav={nav} jetzt={m.jetzt} />}
-        {tab === "top" && <Gruppiert liste={liste} by={(c) => c.top ?? "Allgemein"} nav={nav} jetzt={m.jetzt} />}
+        {tab === "gewerk" && <Gruppiert liste={liste} by={(z) => z.gewerk} m={m} nav={nav} />}
+        {tab === "top" && <Gruppiert liste={liste} by={(z) => z.top} m={m} nav={nav} />}
       </div>
     </div>
   );
@@ -165,9 +175,10 @@ function Flaeche({ m }: { m: Modell }) {
   );
 }
 
-/** Talona's "Potential changes" table. */
-function Tabelle({ titel, liste, nav, jetzt }: { titel: string; liste: Aenderung[]; nav: Nav; jetzt: number }) {
-  const woche = liste.filter((c) => jetzt - ts(c.erhoben) < 7 * 86400000).length;
+/** Talona's "Potential changes" table, with the agent's deviations as rows of their own. */
+function Tabelle({ titel, liste, m, nav }: { titel: string; liste: Zeile[]; m: Modell; nav: Nav }) {
+  const woche = liste.filter((z) => m.jetzt - ts(z.zeit) < 7 * 86400000).length;
+  const grau = "text-[rgba(12,10,8,.65)]";
   return (
     <Card className="mt-6 overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4">
@@ -188,25 +199,46 @@ function Tabelle({ titel, liste, nav, jetzt }: { titel: string; liste: Aenderung
           </tr>
         </thead>
         <tbody>
-          {liste.map((c) => (
-            <tr key={c.key} onClick={() => nav.aenderung(c.key)} className="cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-[var(--wash)]">
-              <td className="py-4 pl-6 pr-4">
-                <div>{c.titel}</div>
-                <div className="mono text-[11px] text-[rgba(12,10,8,.45)]">{c.nr}</div>
-              </td>
-              <td className="pr-4 text-[rgba(12,10,8,.65)]">{c.ort}</td>
-              <td className="pr-4 text-[rgba(12,10,8,.65)]">{c.gewerk}</td>
-              <td className="pr-4 text-[rgba(12,10,8,.65)]">
-                {c.von.vorname}
-                {c.imAuftrag ? <span className="text-[rgba(12,10,8,.45)]">, für {c.imAuftrag.vorname}</span> : null}
-              </td>
-              <td className="pr-4 text-[#a4562a]">{c.belege.text}</td>
-              <td className="pr-4">{c.schaetzung ? eur(c.schaetzung.betrag) : <span className="text-[rgba(12,10,8,.4)]">–</span>}</td>
-              <td className="pr-6">
-                <Pill ton={c.status.ton}>{c.status.label}</Pill>
-              </td>
-            </tr>
-          ))}
+          {liste.map(({ key, c, a }) =>
+            c ? (
+              <tr key={key} onClick={() => nav.aenderung(c.key)} className="cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-[var(--wash)]">
+                <td className="py-4 pl-6 pr-4">
+                  <div>{c.titel}</div>
+                  <div className="mono text-[11px] text-[rgba(12,10,8,.45)]">{c.nr}</div>
+                </td>
+                <td className={`pr-4 ${grau}`}>{c.ort}</td>
+                <td className={`pr-4 ${grau}`}>{c.gewerk}</td>
+                <td className={`pr-4 ${grau}`}>
+                  {c.von.vorname}
+                  {c.imAuftrag ? <span className="text-[rgba(12,10,8,.45)]">, für {c.imAuftrag.vorname}</span> : null}
+                </td>
+                <td className="pr-4 text-[#a4562a]">{c.belege.text}</td>
+                <td className="pr-4">{c.schaetzung ? eur(c.schaetzung.betrag) : <span className="text-[rgba(12,10,8,.4)]">–</span>}</td>
+                <td className="pr-6">
+                  <Pill ton={c.status.ton}>{c.status.label}</Pill>
+                </td>
+              </tr>
+            ) : a ? (
+              <tr key={key} onClick={() => oeffneSignal(a.s, m, nav)} className="cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-[var(--wash)]">
+                <td className="max-w-[460px] py-4 pl-6 pr-4">
+                  <div className="line-clamp-2">{a.titel}</div>
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-[rgba(12,10,8,.5)]">
+                    <span className="mono text-[11px] uppercase">Abweichung</span>· {SIGNAL_ART_LABEL[a.s.art]} ·
+                    <I.Phone className="size-3" />
+                    {a.zustaendig.vorname} {anrufZeile(a.s)}
+                  </div>
+                </td>
+                <td className={`pr-4 ${grau}`}>{a.ort}</td>
+                <td className={`pr-4 ${grau}`}>{a.gewerk}</td>
+                <td className={`pr-4 ${grau}`}>{a.von.vorname}</td>
+                <td className="pr-4 text-[#a4562a]">{a.belege.text}</td>
+                <td className="pr-4 text-[rgba(12,10,8,.4)]">–</td>
+                <td className="pr-6">
+                  <SignalPill s={a.s} />
+                </td>
+              </tr>
+            ) : null,
+          )}
           {!liste.length && (
             <tr>
               <td colSpan={7} className="px-6 py-8 text-[rgba(12,10,8,.55)]">
@@ -220,14 +252,17 @@ function Tabelle({ titel, liste, nav, jetzt }: { titel: string; liste: Aenderung
   );
 }
 
-function Gruppiert({ liste, by, nav, jetzt }: { liste: Aenderung[]; by: (c: Aenderung) => string; nav: Nav; jetzt: number }) {
+function Gruppiert({ liste, by, m, nav }: { liste: Zeile[]; by: (z: Zeile) => string; m: Modell; nav: Nav }) {
   const gruppen = [...new Set(liste.map(by))].sort((a, b) => a.localeCompare(b, "de", { numeric: true }));
   return (
     <div>
       {gruppen.map((g) => {
-        const items = liste.filter((c) => by(c) === g);
-        const summe = items.reduce((a, c) => a + (c.schaetzung?.betrag ?? 0), 0);
-        return <Tabelle key={g} titel={`${g} · ${eur(summe)} · ${items.length} ${items.length === 1 ? "Änderung" : "Änderungen"}`} liste={items} nav={nav} jetzt={jetzt} />;
+        const items = liste.filter((z) => by(z) === g);
+        const summe = items.reduce((a, z) => a + (z.c?.schaetzung?.betrag ?? 0), 0);
+        const n = items.filter((z) => z.c).length;
+        const k = items.length - n;
+        const zaehler = [n && `${n} ${n === 1 ? "Änderung" : "Änderungen"}`, k && `${k} ${k === 1 ? "Abweichung" : "Abweichungen"}`].filter(Boolean).join(" · ");
+        return <Tabelle key={g} titel={`${g} · ${eur(summe)} · ${zaehler}`} liste={items} m={m} nav={nav} />;
       })}
     </div>
   );

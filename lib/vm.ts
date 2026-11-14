@@ -317,6 +317,57 @@ export function aenderungen(d: ProjektDaten, pers: Personen, signale: Signal[]):
   return out.sort((a, b) => ts(b.erhoben) - ts(a.erhoben));
 }
 
+/* ------------------------------------------------------------------ */
+/* Deviations from Hendrik's checking agent, as rows next to changes    */
+/* ------------------------------------------------------------------ */
+
+export interface Abweichung {
+  s: Signal;
+  titel: string;
+  top: string | null;
+  ort: string;
+  gewerk: string;
+  von: Person; // whose message triggered it
+  zustaendig: Person; // who SiteTwin calls
+  belege: Belege;
+  zeit: string;
+  change: string | null; // change it belongs to, if any
+  quelle: string | null; // source message
+}
+
+/** "Top 5 / Vorraum / Verteiler: entfällt" -> "Verteiler: entfällt" (Ort has its own column). */
+export function signalTitel(s: Signal) {
+  let t = s.titel.trim();
+  if (s.top && t.startsWith(s.top)) t = t.slice(s.top.length).replace(/^[\s/·,:]+/, "");
+  const teile = t.split(" / ");
+  if (teile.length > 1) t = teile.filter((x) => x !== s.raum).join(" / ");
+  else if (s.top && s.titel.startsWith(s.top)) {
+    const i = t.indexOf(": ");
+    if (i > 0 && i < 40) t = t.slice(i + 2);
+  }
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+export function abweichungen(d: ProjektDaten, pers: Personen, ch: Aenderung[]): Abweichung[] {
+  return d.signale.map((s) => {
+    const list = d.eintraege.filter((e) => s.eintrag_ids.includes(e.id)).sort((a, b) => ts(a.zeitpunkt) - ts(b.zeitpunkt));
+    const b = belege(list);
+    return {
+      s,
+      titel: signalTitel(s),
+      top: s.top,
+      ort: [s.top, s.raum].filter(Boolean).join(" · ") || "Baustelle",
+      gewerk: gewerkLabel(list.find((e) => e.gewerk && e.gewerk !== "planung")?.gewerk ?? null),
+      von: pers(list[0]?.person ?? s.zustaendig),
+      zustaendig: pers(s.zustaendig),
+      belege: list.length ? b : { ...b, nachrichten: s.quelle_hashes.length, text: `${s.quelle_hashes.length} Nachr.` },
+      zeit: s.erstellt_am,
+      change: ch.find((c) => c.signale.some((x) => x.id === s.id))?.key ?? null,
+      quelle: s.quelle_hashes[0] ?? list[0]?.quelle_hash ?? null,
+    };
+  });
+}
+
 export const GEWERK: Record<string, string> = {
   elektro: "Elektro",
   gu: "Generalunternehmer",
@@ -513,8 +564,9 @@ export function morgen(d: ProjektDaten, pers: Personen, ch: Aenderung[], req: An
   return {
     heute,
     empfaenger: pers(d.eintraege.find((e) => istGU(pers(e.person)))?.person ?? "Bauleitung"),
+    // KONZEPT.md: the foreman acts, the office watches. Signals are not on the office's to-do list.
+    laeuft: signale.filter((s) => s.status !== "geloest"),
     braucht: [
-      ...signale.filter((s) => s.status !== "geloest").map((s) => ({ text: s.titel, pill: { label: "In Bearbeitung", ton: "blau" as Ton } })),
       ...ch.filter((c) => c.fehlend.some((f) => f === GRUND.freigabe || f === GRUND.bauleitung || f === GRUND.nachweis)).slice(0, 3).map((c) => ({ text: `${c.titel}${c.top ? ` (${c.top})` : ""}: ${c.fehlend.find((f) => f !== GRUND.abweichung)?.toLowerCase() ?? "Freigabe fehlt"}`, pill: { label: c.nr, ton: "rot" as Ton } })),
     ],
     wartet: req.filter((r) => !r.beantwortet).slice(0, 4),
@@ -537,9 +589,9 @@ export interface Regel {
 }
 
 export const REGELN: Regel[] = [
-  { wenn: "Wenn jemand nach einem Plan arbeitet", bedingung: ["Plan-Index", "veraltet"], anrufen: [{ kuerzel: "VA", label: "Vorarbeiter" }, { kuerzel: "BL", label: "Bauleitung" }], protokoll: "Top-Akte", arten: ["plan_veraltet"] },
-  { wenn: "Wenn eine Wand zugemacht werden soll", bedingung: ["Installation", "nicht fertig"], anrufen: [{ kuerzel: "VA", label: "Vorarbeiter" }], protokoll: "Top-Akte", arten: ["reihenfolge"] },
-  { wenn: "Wenn eine Änderung die Crew nicht erreicht", bedingung: ["Änderung", "nicht bestätigt"], anrufen: [{ kuerzel: "VA", label: "Vorarbeiter" }], protokoll: "Top-Akte", arten: ["nicht_weitergegeben", "abweichung_plan"] },
+  { wenn: "Wenn jemand nach einem Plan arbeitet", bedingung: ["Plan-Index", "veraltet"], anrufen: [{ kuerzel: "VA", label: "Vorarbeiter vor Ort" }], protokoll: "Top-Akte", arten: ["plan_veraltet"] },
+  { wenn: "Wenn eine Wand zugemacht werden soll", bedingung: ["Installation", "nicht fertig"], anrufen: [{ kuerzel: "VA", label: "Vorarbeiter des fehlenden Gewerks" }], protokoll: "Top-Akte", arten: ["reihenfolge"] },
+  { wenn: "Wenn Claude eine Abweichung im Gespräch findet", bedingung: ["Änderung", "nicht weitergegeben"], anrufen: [{ kuerzel: "VA", label: "Vorarbeiter" }], protokoll: "Top-Akte", arten: ["nicht_weitergegeben", "abweichung_plan", "sonstiges"] },
   { wenn: "Wenn eine Nachricht unklar ist", bedingung: ["Ort", "nicht eindeutig"], anrufen: [{ kuerzel: "AB", label: "Absender" }], protokoll: "Protokoll", arten: ["unklar"] },
 ];
 

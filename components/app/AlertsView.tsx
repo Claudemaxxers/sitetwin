@@ -4,7 +4,7 @@ import { useState } from "react";
 import { SIGNAL_ART_LABEL } from "@/lib/twin-model";
 import { alterLabel, alterTon, REGELN, type Regel } from "@/lib/vm";
 import type { Modell, Nav } from "./modell";
-import { anrufZeile, SignalPill } from "./Signal";
+import { anrufZeile, oeffneSignal, SignalPill } from "./Signal";
 import { Avatar, Card, I, Logo, MonoLabel, PageHead, Pill, tagKurz, tagZeit, zeit } from "./ui";
 
 /**
@@ -39,10 +39,9 @@ export function AlertsView({ m, nav }: { m: Modell; nav: Nav }) {
           <div className="pt-4 text-[15px] text-[rgba(12,10,8,.6)]">Zuletzt ausgelöst</div>
           <Card className="overflow-hidden">
             {signale.map((s) => {
-              const change = m.ch.find((c) => c.signale.some((x) => x.id === s.id));
               const p = m.pers(s.zustaendig);
               return (
-                <button key={s.id} onClick={() => (change ? nav.aenderung(change.key) : nav.zu("protokoll"))} className="block w-full border-b border-[var(--line)] px-6 py-5 text-left last:border-0 hover:bg-[var(--wash)]">
+                <button key={s.id} onClick={() => oeffneSignal(s, m, nav)} className="block w-full border-b border-[var(--line)] px-6 py-5 text-left last:border-0 hover:bg-[var(--wash)]">
                   <div className="flex items-center gap-3">
                     <SignalPill s={s} />
                     <span className="text-[13px] text-[rgba(12,10,8,.55)]">
@@ -144,6 +143,19 @@ function Morgen({ m, nav }: { m: Modell; nav: Nav }) {
           <Pill>Morgenübersicht</Pill>
         </div>
         <div className="space-y-5 px-5 py-4">
+          {g.laeuft.length > 0 && (
+            <Abschnitt titel="Läuft beim Vorarbeiter" n={g.laeuft.length}>
+              {g.laeuft.map((s) => (
+                <button key={s.id} onClick={() => oeffneSignal(s, m, nav)} className="flex w-full items-center justify-between gap-3 py-1 text-left text-[14px]">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Avatar p={m.pers(s.zustaendig)} size={20} />
+                    <span className="truncate">{s.titel}</span>
+                  </span>
+                  <SignalPill s={s} />
+                </button>
+              ))}
+            </Abschnitt>
+          )}
           <Abschnitt titel="Braucht Sie" n={g.braucht.length}>
             {g.braucht.map((b) => (
               <div key={b.text} className="flex items-center justify-between gap-3 py-1 text-[14px]">
