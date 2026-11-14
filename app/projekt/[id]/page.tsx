@@ -10,6 +10,6 @@ export default async function ProjektPage({ params, searchParams }: { params: Pr
   const daten = await getProjektDaten(decodeURIComponent(id));
   if (!daten) notFound();
   const { ansicht } = await searchParams;
-  const start = (["aenderungen", "inbox", "bautagebuch", "protokoll", "zwilling", "benachrichtigungen"] as const).find((a) => a === ansicht) as Ansicht | undefined;
+  const start = (["aenderungen", "inbox", "bautagebuch", "protokoll", "benachrichtigungen"] as const).find((a) => a === ansicht) as Ansicht | undefined;
   return <AppShell initial={daten} start={start} />;
 }

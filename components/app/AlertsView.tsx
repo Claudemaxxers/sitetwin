@@ -41,7 +41,7 @@ export function AlertsView({ m, nav }: { m: Modell; nav: Nav }) {
               const change = m.ch.find((c) => c.signale.some((x) => x.id === s.id));
               const p = m.pers(s.zustaendig);
               return (
-                <button key={s.id} onClick={() => (change ? nav.aenderung(change.key) : s.top && nav.top(s.top))} className="block w-full border-b border-[var(--line)] px-6 py-5 text-left last:border-0 hover:bg-[var(--wash)]">
+                <button key={s.id} onClick={() => (change ? nav.aenderung(change.key) : nav.zu("protokoll"))} className="block w-full border-b border-[var(--line)] px-6 py-5 text-left last:border-0 hover:bg-[var(--wash)]">
                   <div className="flex items-center gap-3">
                     <Pill ton={s.status === "geloest" ? "gruen" : s.status === "in_bearbeitung" ? "blau" : "orange"}>{s.status === "offen" ? "Offen" : s.status === "in_bearbeitung" ? "Beim Vorarbeiter" : "Gelöst"}</Pill>
                     <span className="text-[13px] text-[rgba(12,10,8,.55)]">

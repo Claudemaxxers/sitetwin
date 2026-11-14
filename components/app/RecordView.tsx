@@ -168,9 +168,6 @@ function Geprueft({ m, nav }: { m: Modell; nav: Nav }) {
           <Card key={top} className="overflow-hidden">
             <div className="flex items-center justify-between border-b border-[var(--line)] px-6 py-4">
               <span className="text-[17px]">{top} · gemeldet und geprüft</span>
-              <button onClick={() => nav.top(top)} className="text-[13px] underline underline-offset-2">
-                Im Zwilling
-              </button>
             </div>
             {warn && (
               <div className="border-b border-[var(--line)] bg-[#fff8f3] px-6 py-3 text-[13px] text-[#a4562a]">

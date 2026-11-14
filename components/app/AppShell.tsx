@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ProjektDaten } from "@/lib/twin-model";
 import type { Aenderung } from "@/lib/vm";
-import TwinView from "../TwinView";
 import { AlertsView } from "./AlertsView";
 import { AskDrawer } from "./AskDrawer";
 import { ChangesView } from "./ChangesView";
@@ -26,7 +25,6 @@ export default function AppShell({ initial, start }: { initial: ProjektDaten; st
   const [aenderung, setAenderung] = useState<string | null>(null);
   const [exposure, setExposure] = useState(false);
   const [nachricht, setNachricht] = useState<string | null>(null);
-  const [focus, setFocus] = useState<{ top: string; key: number } | null>(null);
   const [thread, setThread] = useState<string | null>(null);
   const [entwurf, setEntwurf] = useState<Aenderung | null>(null);
   const [frage, setFrage] = useState<{ q: string; key: number } | null>(null);
@@ -74,10 +72,6 @@ export default function AppShell({ initial, start }: { initial: ProjektDaten; st
       setNachricht(hash);
       setAnsicht("inbox");
     },
-    top: (top) => {
-      setFocus({ top, key: Date.now() });
-      setAnsicht("zwilling");
-    },
     thread: (hash) => setThread(hash),
     entwurf: (c) => setEntwurf(c),
     fragen: (q) => setFrage({ q: q ?? "", key: Date.now() }),
@@ -104,9 +98,6 @@ export default function AppShell({ initial, start }: { initial: ProjektDaten; st
         <Rail title="Protokoll" active={ansicht === "protokoll"} onClick={() => nav.zu("protokoll")}>
           <I.Layers />
         </Rail>
-        <Rail title="Zwilling" active={ansicht === "zwilling"} onClick={() => nav.zu("zwilling")}>
-          <I.Cube />
-        </Rail>
         <Rail title="Benachrichtigungen" active={ansicht === "benachrichtigungen"} dot={offeneSignale > 0} onClick={() => nav.zu("benachrichtigungen")}>
           <I.Bell />
         </Rail>
@@ -121,7 +112,6 @@ export default function AppShell({ initial, start }: { initial: ProjektDaten; st
         {ansicht === "inbox" && <InboxView m={m} sel={nachricht} setSel={setNachricht} nav={nav} neu={neu} />}
         {ansicht === "bautagebuch" && <DailyLogView m={m} nav={nav} />}
         {ansicht === "protokoll" && <RecordView m={m} nav={nav} neu={neu} />}
-        {ansicht === "zwilling" && <TwinView daten={daten} neu={neu} focus={focus} />}
         {ansicht === "benachrichtigungen" && <AlertsView m={m} nav={nav} />}
 
         {thread && <ThreadDrawer m={m} hash={thread} onClose={() => setThread(null)} />}
