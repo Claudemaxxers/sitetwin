@@ -39,10 +39,11 @@ SiteTwin docks onto the channels the site already uses. Nobody changes how they 
 What ran for real, and what did not:
 
 - A WhatsApp message, a photo with caption and a voice note from a real phone arrived in the database through the linked-device reader. A mail from Gmail and a file from Google Drive arrived through n8n. Each of these was a single manual run.
+- A warning for a signal was posted into the WhatsApp group from the linked account, once, as a test built from an existing signal. [After the rehearsal, state here whether a new WhatsApp message triggers signal and warning end to end, and how long it takes.]
 - The fixed rules of the Prüf-Agent ran on the test data. Its optional Claude stage is tested with fake answers only.
 - All site data is fictional (project "BV Simmering"); photos and voice files in the test data are placeholders.
 - [Phone agent: the interface exists (call text and phone number per signal, endpoint for call transcripts). State here whether a call is placed, and by what.]
-- [Learning loop: state here what is built by the freeze. The first prototype downgrades flag types the superintendent keeps approving; the Supabase chain does not have this yet.]
+- Learning loop: a thumbs up or down (or a reply) on a warning in the WhatsApp group is stored on the signal as justified or false alarm; this ran once for real. [State here whether the checking agent uses these ratings by the freeze; as of Saturday morning it does not.] The first prototype downgrades flag types the superintendent keeps approving.
 - The WhatsApp reader uses an unofficial library and is a prototype. The official route (Twilio webhook) is built and tested, but has not run against a real Twilio account.
 - Numbers in the web app for progress and extra cost are derived from reported messages and, in part, from demo estimates. They are not measurements.
 

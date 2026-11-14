@@ -65,9 +65,13 @@ Was laut Brief gut aussieht:
 - Interne Recherche-Dokumente (z. B. die Bauprozess-Recherche zu Regie und Nachtrag) gehören **nicht** ins Repo.
 - Vor dem Pushen: `git pull`, Tests des eigenen Teils grün.
 
-## Offen für die Abgabe (Stand 13.11., nachts)
+## Offen für die Abgabe (Stand 14.11., 11:30)
 
-- Root-`README.md` beschreibt noch vor allem den ersten Prototyp. Es fehlen die Gesamtkette (Ablage → Übersetzer → Prüf-Agent → Telefon-Agent → Zwilling), die Umgebung für alle Teile und ein Abschnitt Annahmen und Grenzen.
-- Demo-Video und schriftlicher Abgabetext.
+- Root-`README.md` (Gesamtkette, Umgebung, Start, Grenzen) und der Entwurf des Abgabetexts `ABGABE.md` liegen im Pull Request 9, noch nicht gemergt. Im Abgabetext sind Platzhalter zu füllen.
+- Demo-Video.
+- Die Kette ist nie als Ganzes live gelaufen: WhatsApp → Ablage ist geprüft, ab dem Übersetzer nicht. Übersetzer für die Demo mit `--projekt "BV Simmering"` starten, im Projekt „Test Santino“ liegen Testzeilen.
+- Telefon-Agent: kein Code im Repo, nur die Schnittstelle. Als Text gibt es die Warnung in die WhatsApp-Gruppe (`ablage/whatsapp-mitleser/`).
+- Lernschleife: Bewertungen aus WhatsApp landen in `signale.bewertung` (`berechtigt` oder `fehlalarm`). Der Prüf-Agent liest sie noch nicht.
+- Transkription von Sprachnachrichten liegt in der Ablage (`ablage/ablage/transkript.py`), nicht im Übersetzer. Mit echtem Schlüssel ist sie noch nicht gelaufen.
+- Die Web-App hat bereits eine Ask-Funktion (`app/api/fragen`). Nicht doppelt bauen.
 - Das Repo ist privat (geprüft 14.11.). Offen: wo es laut Organisatoren liegen soll.
-- Echte Sprachnachrichten werden noch von niemandem transkribiert.
