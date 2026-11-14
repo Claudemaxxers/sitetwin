@@ -226,6 +226,21 @@ Twilio-Webhook "When a message comes in", `POST /import/whatsapp/twilio`, `appli
 - Signatur: sind `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` gesetzt, wird `X-Twilio-Signature` geprüft (HMAC-SHA1 über URL + Parameter sortiert als Key+Value, Base64), sonst 403. Ohne beide Werte keine Prüfung.
 - Antwort: 200 mit leerem TwiML `<Response></Response>` (`text/xml`), keine Auto-Antwort. Pflichtfeld fehlt → 422, Storage-Fehler → 502.
 
+### 7.7 Gmail über n8n (`POST /import/email/gmail`, JSON)
+n8n (Cloud) holt die Mails per Gmail-OAuth und liefert sie fertig an. OAuth liegt komplett in n8n, die Ablage kennt keine Google-Zugangsdaten. Gebaut nach dem dokumentierten Gmail-Format, noch nicht gegen eine echte n8n-Instanz gelaufen.
+- Body: `{"raw": "<RFC-822-Mail, base64url wie Gmail-API format=raw>", "gmail_id": "18c0…", "projekt": "optional"}`. `raw` und `gmail_id` Pflicht (nicht leer), `projekt` fehlt → `DEFAULT_PROJEKT`.
+- `raw` wird dekodiert (fehlendes Padding wird toleriert, Standard-Alphabet ebenfalls), dann läuft `eml.aus_bytes(daten, "gmail-<gmail_id>.eml", ctx)` wie bei 7.2. Dieselbe Mail als `.eml` und über Gmail ergibt dieselben `content_hash`-Werte, also keine zweite Zeile.
+- `meta` jedes Items bekommt zusätzlich `quelle: "gmail"` und `gmail_id` (`meta` geht nicht in den Hash).
+- Nicht dekodierbar, leer oder Mail nicht lesbar → 422. Antwort: `ImportErgebnis`.
+- Token: siehe `ABLAGE_IMPORT_TOKEN` in §9.
+
+### 7.8 Drive über n8n (`POST /import/drive/datei`, Rohdaten)
+n8n lädt die Datei aus Google Drive und schickt die Bytes unverändert als Body (beliebiger Content-Type, bewusst kein multipart, damit `python-multipart` keine Dependency wird). Gebaut nach dem dokumentierten Format, noch nicht gegen eine echte n8n-Instanz gelaufen.
+- Query: `pfad` (Pflicht, relativer Pfad inkl. Dateiname, wird `original_ref`; `\` → `/`, führende `/` weg), `kanal` (Default `"Google Drive"`), `projekt` (Default `DEFAULT_PROJEKT`), `datei_id` (Drive-File-ID → `meta.drive_id`), `geaendert_am` (ISO-Zeit → `meta.mtime`).
+- Das Item entsteht in derselben Funktion wie bei 7.3 (`ordner.item_aus_bytes`): `typ = drive`, `zeitpunkt = None`, `absender = None`, `anhang` = die Datei, `.csv/.md/.txt` → Inhalt als `text`, `.pdf` → Text per pypdf, `meta.groesse`. Zusätzlich `meta.quelle = "n8n"`. Bei gleichem `projekt`, `kanal`, `pfad` und Inhalt ist der Hash identisch zu 7.3.
+- Dateien, die 7.3 ignoriert (versteckt, `~$…`, `desktop.ini`, `thumbs.db`), werden nicht gespeichert: 200 mit `gelesen = 0`.
+- Leerer Body oder fehlender `pfad` → 422. Antwort: `ImportErgebnis`.
+
 ## 8. API (`api.py`, FastAPI)
 
 | Methode | Pfad | Body | Antwort |
@@ -237,6 +252,8 @@ Twilio-Webhook "When a message comes in", `POST /import/whatsapp/twilio`, `appli
 | POST | `/import/call` | Call-JSON v1 (7.4) | `ImportErgebnis` |
 | POST | `/import/whatsapp/nachricht` | Live-Nachricht als JSON (7.5) | `ImportErgebnis` |
 | POST | `/import/whatsapp/twilio` | Twilio-Webhook, Form-encoded (7.6) | leeres TwiML, `text/xml` |
+| POST | `/import/email/gmail` | JSON `{"raw", "gmail_id", "projekt"?}` von n8n (7.7), Token | `ImportErgebnis` |
+| POST | `/import/drive/datei` | Rohdaten, Query `pfad` u. a. von n8n (7.8), Token | `ImportErgebnis` |
 | GET | `/quellen` *(optional)* | Query: `status`, `typ`, `projekt`, `limit` (≤200), `seit` | `list[QuelleOut]` sortiert nach `zeitpunkt` |
 | PATCH | `/quellen/{id}/status` *(optional)* | `{"status": "verarbeitet" \| "fehler", "fehler": "..."}` | `QuelleOut` |
 
@@ -266,9 +283,12 @@ WHATSAPP_LIVE_KANAL=
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_WEBHOOK_URL=
+ABLAGE_IMPORT_TOKEN=
 ```
 
-Die vier letzten sind optional und nur für 7.6. `TWILIO_WEBHOOK_URL` ist die öffentliche URL des Endpunkts, genau wie im Twilio-Dashboard eingetragen.
+Die vier Twilio-Werte sind optional und nur für 7.6. `TWILIO_WEBHOOK_URL` ist die öffentliche URL des Endpunkts, genau wie im Twilio-Dashboard eingetragen.
+
+`ABLAGE_IMPORT_TOKEN` ist optional. Ist er gesetzt, verlangen nur `/import/email/gmail` und `/import/drive/datei` den Header `X-Ablage-Token` mit genau diesem Wert (Vergleich mit `hmac.compare_digest`), sonst 401. Leer = keine Prüfung. Alle anderen Endpunkte bleiben unverändert (der Telefon-Agent postet weiter ohne Token an `/import/call`).
 
 ## 10. Qualität
 
@@ -287,7 +307,7 @@ Die vier letzten sind optional und nur für 7.6. `TWILIO_WEBHOOK_URL` ist die ö
 
 ## 11. Nicht-Ziele heute / Stretch
 
-Nicht heute: echte WhatsApp-Business-API, Gmail/Outlook-OAuth, Google-Drive-API, Auth, Mandantenfähigkeit.
+Nicht heute: echte WhatsApp-Business-API, Outlook-OAuth, Auth, Mandantenfähigkeit. Gmail-OAuth und Google-Drive-API-Zugriff liegen in n8n (7.7, 7.8), nicht in der Ablage: sie bekommt nur fertige Daten.
 Pitch-Satz: *„Connectors sind austauschbare Adapter. Die Demo nutzt Exporte, Produktion nutzt die APIs.“*
 
 Stretch (in dieser Reihenfolge): (1) Whisper für Sprachnachrichten ohne Sidecar, füllt dasselbe Feld `text` mit `meta.transkript_quelle = "whisper"`, (2) iOS-WhatsApp-Format, (3) `GET /quellen` + `PATCH` (Abschnitt 8), (4) Drive-Ordner beobachten (Watcher).

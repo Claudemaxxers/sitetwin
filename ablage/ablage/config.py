@@ -23,6 +23,7 @@ class Einstellungen:
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_webhook_url: str = ""
+    import_token: str = ""
 
 
 def laden() -> Einstellungen:
@@ -37,4 +38,5 @@ def laden() -> Einstellungen:
         twilio_account_sid=os.environ.get("TWILIO_ACCOUNT_SID", "").strip(),
         twilio_auth_token=os.environ.get("TWILIO_AUTH_TOKEN", "").strip(),
         twilio_webhook_url=os.environ.get("TWILIO_WEBHOOK_URL", "").strip(),
+        import_token=os.environ.get("ABLAGE_IMPORT_TOKEN", "").strip(),
     )

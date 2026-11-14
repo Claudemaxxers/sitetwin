@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hmac
 import json
 from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
@@ -9,12 +12,12 @@ from functools import lru_cache
 from urllib.parse import parse_qs
 
 import httpx
-from fastapi import Body, Depends, FastAPI, HTTPException, Request, Response
-from pydantic import ValidationError
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request, Response
+from pydantic import BaseModel, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from . import config, store
-from .adapters import call, whatsapp_live, whatsapp_twilio
+from .adapters import call, eml, ordner, whatsapp_live, whatsapp_twilio
 from .models import ImportErgebnis, ImportKontext, ParseFehler, RawItem
 
 app = FastAPI(title="SiteTwin Ablage", version="0.1.0")
@@ -110,3 +113,83 @@ async def import_whatsapp_twilio(
     )
     await run_in_threadpool(_speichern, [item], backend)
     return Response(content="<Response></Response>", media_type="text/xml")
+
+
+def token_pruefen(
+    x_ablage_token: str | None = Header(default=None),
+    cfg: config.Einstellungen = Depends(get_einstellungen),
+) -> None:
+    """Gemeinsames Token für die n8n-Endpunkte (SPEC §7.7, §7.8). Leer = keine Prüfung."""
+    if cfg.import_token and not hmac.compare_digest(
+        x_ablage_token.encode() if x_ablage_token else b"", cfg.import_token.encode()
+    ):
+        raise HTTPException(status_code=401, detail="X-Ablage-Token fehlt oder ist falsch")
+
+
+class GmailMail(BaseModel):
+    raw: str = Field(min_length=1)
+    gmail_id: str = Field(min_length=1)
+    projekt: str | None = None
+
+
+def _base64url(roh: str) -> bytes:
+    text = "".join(roh.split())
+    try:
+        daten = base64.b64decode(
+            text.replace("-", "+").replace("_", "/") + "=" * (-len(text) % 4), validate=True
+        )
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(status_code=422, detail=f"raw ist kein gültiges base64url: {e}") from e
+    if not daten:
+        raise HTTPException(status_code=422, detail="raw ist leer")
+    return daten
+
+
+@app.post("/import/email/gmail", response_model=ImportErgebnis, dependencies=[Depends(token_pruefen)])
+def import_email_gmail(
+    mail: GmailMail,
+    backend: store.Backend = Depends(get_backend),
+    ctx: ImportKontext = Depends(get_kontext),
+) -> ImportErgebnis:
+    daten = _base64url(mail.raw)
+    if mail.projekt:
+        ctx = ImportKontext(projekt=mail.projekt, tz=ctx.tz)
+    try:
+        items = list(eml.aus_bytes(daten, f"gmail-{mail.gmail_id}.eml", ctx))
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Mail nicht lesbar: {e}") from e
+    for item in items:
+        item.meta.update({"quelle": "gmail", "gmail_id": mail.gmail_id})
+    return _speichern(items, backend)
+
+
+@app.post("/import/drive/datei", response_model=ImportErgebnis, dependencies=[Depends(token_pruefen)])
+async def import_drive_datei(
+    request: Request,
+    pfad: str = "",
+    kanal: str = "Google Drive",
+    projekt: str | None = None,
+    datei_id: str | None = None,
+    geaendert_am: str | None = None,
+    backend: store.Backend = Depends(get_backend),
+    ctx: ImportKontext = Depends(get_kontext),
+) -> ImportErgebnis:
+    ref = pfad.replace("\\", "/").strip().lstrip("/")
+    if not ref or ref.endswith("/"):
+        raise HTTPException(status_code=422, detail="pfad fehlt (relativer Pfad inkl. Dateiname)")
+    daten = await request.body()
+    if not daten:
+        raise HTTPException(status_code=422, detail="Body ist leer")
+    if ordner.ignoriert(ref):
+        return ImportErgebnis()
+    try:
+        item = await run_in_threadpool(
+            ordner.item_aus_bytes, daten, ref, projekt or ctx.projekt, kanal or "Google Drive",
+            geaendert_am or None,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Datei nicht lesbar: {e}") from e
+    item.meta["quelle"] = "n8n"
+    if datei_id:
+        item.meta["drive_id"] = datei_id
+    return await run_in_threadpool(_speichern, [item], backend)

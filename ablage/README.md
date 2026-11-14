@@ -46,6 +46,8 @@ curl.exe -X POST localhost:8000/import/call -H "Content-Type: application/json" 
 | `POST /import/call` | Call-JSON v1 (SPEC §7.4) | `call_id` |
 | `POST /import/whatsapp/nachricht` | eine Live-Nachricht (SPEC §7.5) | `wa_id` |
 | `POST /import/whatsapp/twilio` | Twilio-Webhook, Form-encoded (SPEC §7.6) | `MessageSid` |
+| `POST /import/email/gmail` | Gmail-Mail als JSON von n8n (SPEC §7.7) | `Message-ID` |
+| `POST /import/drive/datei` | Drive-Datei als Rohdaten von n8n (SPEC §7.8) | Pfad + Inhalt |
 
 Antwort jeweils `{"gelesen", "neu", "duplikate", "fehler"}`, nur der Twilio-Endpunkt antwortet mit leerem TwiML. Interaktive Doku: `http://localhost:8000/docs`.
 
@@ -60,6 +62,17 @@ Gebaut nach dem dokumentierten Twilio-Format und in Tests geprüft, aber **noch 
 5. Prüfen: `.venv\Scripts\python -m ablage zeige --projekt "Test Santino"`
 
 Sprachnachrichten kommen als Datei (`<MessageSid>.ogg`) mit leerem `text` an, weil noch nichts transkribiert. Schlägt der Mediendownload fehl, bleibt die Nachricht ohne Anhang erhalten, der Grund steht in `meta.anhang_fehler`. Ohne `TWILIO_AUTH_TOKEN` und `TWILIO_WEBHOOK_URL` wird die Signatur nicht geprüft.
+
+## Gmail und Drive live über n8n
+
+Zwei Endpunkte nehmen echte Eingänge aus Gmail und Google Drive an. Die OAuth-Anmeldung bei Google liegt komplett in n8n (Cloud), die Ablage bekommt nur fertige Daten.
+
+- `POST /import/email/gmail`: JSON `{"raw": "<base64url, Gmail format=raw>", "gmail_id": "...", "projekt": "optional"}`. Läuft durch denselben Parser wie `.eml`-Dateien, dieselbe Mail ergibt keine zweite Zeile.
+- `POST /import/drive/datei`: Dateibytes als Body, Query `pfad` (Pflicht), `kanal`, `projekt`, `datei_id`, `geaendert_am`. Das Item sieht aus wie eines aus dem Drive-Ordner-Import.
+- Token: `ABLAGE_IMPORT_TOKEN` in `.env` setzen, n8n sendet ihn als Header `X-Ablage-Token`. Ohne Wert keine Prüfung. Gilt nur für diese beiden Endpunkte.
+- Einrichtung in n8n: siehe `n8n/README.md`.
+
+Gebaut nach dem dokumentierten Format und in Tests geprüft, aber **noch nicht gegen eine echte n8n-Instanz gelaufen**.
 
 ## Eigenen WhatsApp-Chat testen
 

@@ -1,0 +1,187 @@
+{
+  "name": "SiteTwin – Gmail → Ablage",
+  "nodes": [
+    {
+      "id": "4fbe664d-4fca-49e2-bf38-4ad27bf2be82",
+      "name": "Hier anpassen",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-60, -260],
+      "parameters": {
+        "content": "## Hier anpassen\n1. **Gmail: Mail mit Label** – Suchfilter `label:sitetwin` an den Namen deines Gmail-Labels anpassen.\n2. **Konfiguration** – `ablage_url` (öffentliche Tunnel-Adresse der Ablage) und `projekt` eintragen. Für Tests `Test Santino` lassen.\n3. Credentials wählen: Gmail (Trigger und „Mail im Rohformat holen“), Header Auth „Ablage Token“ (in „An Ablage senden“).",
+        "height": 220,
+        "width": 720,
+        "color": 4
+      }
+    },
+    {
+      "id": "e1689de3-aa01-4ab4-b98e-47583f2d4034",
+      "name": "Gmail: Mail mit Label",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [0, 0],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": true,
+        "maxResults": 10,
+        "filters": {
+          "q": "label:sitetwin",
+          "readStatus": "both"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail SiteTwin"
+        }
+      }
+    },
+    {
+      "id": "06b71fb0-4c8d-42ea-9e6e-89fec7a15df2",
+      "name": "Konfiguration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [240, 0],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00395705-6cec-4daa-bc81-0efacb2dabf9",
+              "name": "ablage_url",
+              "value": "https://DEINE-ADRESSE.example",
+              "type": "string"
+            },
+            {
+              "id": "84d980a4-faf1-43fe-ad4c-1f61cbd55ee4",
+              "name": "projekt",
+              "value": "Test Santino",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "bd1f8172-1bcd-4a64-95ad-7883f44fce6d",
+      "name": "Mail im Rohformat holen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://gmail.googleapis.com/gmail/v1/users/me/messages/{{ $json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "gmailOAuth2",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "format",
+              "value": "raw"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail SiteTwin"
+        }
+      }
+    },
+    {
+      "id": "ff2c86f5-327f-41b7-a015-dade4ab6c2ad",
+      "name": "An Ablage senden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Konfiguration').item.json.ablage_url.replace(/\\/+$/, '') }}/import/email/gmail",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "keypair",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "raw",
+              "value": "={{ $json.raw }}"
+            },
+            {
+              "name": "gmail_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "projekt",
+              "value": "={{ $('Konfiguration').item.json.projekt }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ablage Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Gmail: Mail mit Label": {
+      "main": [
+        [
+          {
+            "node": "Konfiguration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Konfiguration": {
+      "main": [
+        [
+          {
+            "node": "Mail im Rohformat holen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mail im Rohformat holen": {
+      "main": [
+        [
+          {
+            "node": "An Ablage senden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

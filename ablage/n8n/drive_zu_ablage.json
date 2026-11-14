@@ -1,0 +1,254 @@
+{
+  "name": "SiteTwin – Drive → Ablage",
+  "nodes": [
+    {
+      "id": "06dce58d-d179-4b17-a47c-430e6caebe4b",
+      "name": "Hier anpassen",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-60, -360],
+      "parameters": {
+        "content": "## Hier anpassen\n1. In **beiden** Drive-Triggern denselben Ordner wählen (Feld „Folder“).\n2. **Konfiguration** – `ablage_url` (öffentliche Tunnel-Adresse der Ablage), `projekt` (für Tests `Test Santino` lassen), `kanal`, optional `ordner_praefix`.\n3. Credentials wählen: Google Drive (beide Trigger und „Datei herunterladen“), Header Auth „Ablage Token“ (in „An Ablage senden“).",
+        "height": 220,
+        "width": 940,
+        "color": 4
+      }
+    },
+    {
+      "id": "53672ce1-5641-4049-99ae-e12a347e5966",
+      "name": "Drive: neue Datei",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [0, -100],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive SiteTwin"
+        }
+      }
+    },
+    {
+      "id": "5ea6ad4e-09e4-4754-a298-79f18f5c4101",
+      "name": "Drive: geänderte Datei",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [0, 100],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "event": "fileUpdated",
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive SiteTwin"
+        }
+      }
+    },
+    {
+      "id": "8cdf796d-7dc1-4dfd-8fe1-64a14627bb67",
+      "name": "Konfiguration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [260, 0],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "e9b2cabf-0e6c-4f60-b9f9-602dd9f461e2",
+              "name": "ablage_url",
+              "value": "https://DEINE-ADRESSE.example",
+              "type": "string"
+            },
+            {
+              "id": "efe5c586-ee6a-4350-a042-f37819c29649",
+              "name": "projekt",
+              "value": "Test Santino",
+              "type": "string"
+            },
+            {
+              "id": "b14eca8b-07db-48f1-9b3d-0d7fb4e100d0",
+              "name": "kanal",
+              "value": "Google Drive",
+              "type": "string"
+            },
+            {
+              "id": "6ea39713-f525-4231-b11c-f683b938d2ee",
+              "name": "ordner_praefix",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      }
+    },
+    {
+      "id": "8a2d0f58-f61d-4b74-8d79-d49778f5cc38",
+      "name": "Datei herunterladen",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [500, 0],
+      "parameters": {
+        "resource": "file",
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "binaryPropertyName": "data",
+          "googleFileConversion": {
+            "conversion": {
+              "docsToFormat": "application/pdf",
+              "drawingsToFormat": "application/pdf",
+              "slidesToFormat": "application/pdf",
+              "sheetsToFormat": "text/csv"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "",
+          "name": "Google Drive SiteTwin"
+        }
+      }
+    },
+    {
+      "id": "e1f2a3b4-5c6d-4e7f-8a9b-0c1d2e3f4a5b",
+      "name": "An Ablage senden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 0],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Konfiguration').item.json.ablage_url.replace(/\\/+$/, '') }}/import/drive/datei",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "pfad",
+              "value": "={{ ($json.ordner_praefix ? $json.ordner_praefix.replace(/\\/+$/, '') + '/' : '') + $json.name.replaceAll('/', '_') + ($json.mimeType === 'application/vnd.google-apps.document' ? '.pdf' : $json.mimeType === 'application/vnd.google-apps.spreadsheet' ? '.csv' : $json.mimeType === 'application/vnd.google-apps.presentation' ? '.pdf' : $json.mimeType === 'application/vnd.google-apps.drawing' ? '.pdf' : '') }}"
+            },
+            {
+              "name": "kanal",
+              "value": "={{ $json.kanal }}"
+            },
+            {
+              "name": "projekt",
+              "value": "={{ $json.projekt }}"
+            },
+            {
+              "name": "datei_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "geaendert_am",
+              "value": "={{ $json.modifiedTime }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Ablage Token"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Drive: neue Datei": {
+      "main": [
+        [
+          {
+            "node": "Konfiguration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: geänderte Datei": {
+      "main": [
+        [
+          {
+            "node": "Konfiguration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Konfiguration": {
+      "main": [
+        [
+          {
+            "node": "Datei herunterladen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datei herunterladen": {
+      "main": [
+        [
+          {
+            "node": "An Ablage senden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
