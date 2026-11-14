@@ -6,6 +6,7 @@ import { exposure as exposureTabelle, istAudio, istFoto, tagKey, type Aenderung 
 import { anhangUrl, type Modell, type Nav } from "./modell";
 import { Avatar, Btn, Card, eur, eurK, Feld, H2, I, Kuerzel, MonoLabel, PageHead, Pill, QuelleChip, Suche, tagKurz, tagZeit, Tabs, zeit } from "./ui";
 import { Erkennung } from "./Erkennung";
+import { Abweichungen, SignalPill, SignalSchritte } from "./Signal";
 
 type Tab = "uebersicht" | "gewerk" | "top";
 const FARBEN = ["#EE783B", "#5683D2", "#6FA77F", "#9A86C9", "#B8B2AB", "#D9B04C", "#7FB3B8"];
@@ -62,6 +63,7 @@ function Uebersicht({ m, nav }: { m: Modell; nav: Nav }) {
 
         {tab === "uebersicht" && (
           <>
+            <Abweichungen m={m} nav={nav} />
             <Card className="mt-6 px-8 py-7">
               <div className="text-[14px] text-[rgba(12,10,8,.6)]">Seit Baubeginn</div>
               <button onClick={nav.exposure} className="mt-1 flex items-center gap-1 text-[22px] tracking-[-0.01em] hover:underline">
@@ -499,27 +501,15 @@ function ChangeDetail({ c, m, nav }: { c: Aenderung; m: Modell; nav: Nav }) {
 
             {c.signale.length > 0 && <H2 className="mt-10">Klärung vor Ort</H2>}
             {c.signale.map((s) => (
-              <div key={s.id}>
-                <Card className="mt-3 p-5">
+              <Card key={s.id} className="mt-3 p-5">
+                <div className="flex items-start justify-between gap-4">
                   <div className="text-[15px]">{s.titel}</div>
-                  <div className="mt-4 flex gap-1.5">
-                    {(["offen", "in_bearbeitung", "geloest"] as const).map((k, i) => {
-                      const idx = ["offen", "in_bearbeitung", "geloest"].indexOf(s.status);
-                      return (
-                        <div key={k} className="flex-1">
-                          <div className={`h-1 rounded ${i <= idx ? "bg-[var(--accent)]" : "bg-[#ebe8e5]"}`} />
-                          <div className={`mt-1.5 text-[12px] ${i <= idx ? "" : "text-[rgba(12,10,8,.45)]"}`}>{k === "offen" ? "Erkannt" : k === "in_bearbeitung" ? "Vorarbeiter angerufen" : "Gelöst"}</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-4 flex items-center gap-2 text-[14px]">
-                    <Avatar p={m.pers(s.zustaendig)} size={24} /> {s.zustaendig ?? "–"}
-                    <span className="text-[rgba(12,10,8,.5)]">· {s.angerufen_am ? `angerufen ${tagZeit(s.angerufen_am)}` : s.status === "geloest" ? "erledigt" : "Anruf folgt"}</span>
-                  </div>
-                  {s.anruf_text && <div className="mt-3 rounded-[4px] bg-[#f4f2f0] p-3 text-[14px] italic leading-relaxed">„{s.anruf_text}“</div>}
-                </Card>
-              </div>
+                  <SignalPill s={s} />
+                </div>
+                <div className="mt-4">
+                  <SignalSchritte s={s} m={m} />
+                </div>
+              </Card>
             ))}
 
             <div className="mt-10 flex gap-2">

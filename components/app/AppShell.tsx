@@ -86,7 +86,7 @@ export default function AppShell({ initial, start }: { initial: ProjektDaten; st
         <Link href="/" title="Alle Projekte" className="mb-4 flex h-9 w-9 items-center justify-center">
           <Logo size={24} />
         </Link>
-        <Rail title="Änderungen" active={ansicht === "aenderungen"} dot={offeneAenderungen > 0} onClick={() => nav.zu("aenderungen")}>
+        <Rail title="Änderungen" active={ansicht === "aenderungen"} dot={offeneAenderungen > 0 || offeneSignale > 0} onClick={() => nav.zu("aenderungen")}>
           <I.Chart />
         </Rail>
         <Rail title="Inbox" active={ansicht === "inbox"} onClick={() => nav.zu("inbox")}>

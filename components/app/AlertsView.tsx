@@ -4,6 +4,7 @@ import { useState } from "react";
 import { SIGNAL_ART_LABEL } from "@/lib/twin-model";
 import { alterLabel, alterTon, REGELN, type Regel } from "@/lib/vm";
 import type { Modell, Nav } from "./modell";
+import { anrufZeile, SignalPill } from "./Signal";
 import { Avatar, Card, I, Logo, MonoLabel, PageHead, Pill, tagKurz, tagZeit, zeit } from "./ui";
 
 /**
@@ -43,7 +44,7 @@ export function AlertsView({ m, nav }: { m: Modell; nav: Nav }) {
               return (
                 <button key={s.id} onClick={() => (change ? nav.aenderung(change.key) : nav.zu("protokoll"))} className="block w-full border-b border-[var(--line)] px-6 py-5 text-left last:border-0 hover:bg-[var(--wash)]">
                   <div className="flex items-center gap-3">
-                    <Pill ton={s.status === "geloest" ? "gruen" : s.status === "in_bearbeitung" ? "blau" : "orange"}>{s.status === "offen" ? "Offen" : s.status === "in_bearbeitung" ? "Beim Vorarbeiter" : "Gelöst"}</Pill>
+                    <SignalPill s={s} />
                     <span className="text-[13px] text-[rgba(12,10,8,.55)]">
                       {SIGNAL_ART_LABEL[s.art]} · {s.schwere}
                     </span>
@@ -54,7 +55,7 @@ export function AlertsView({ m, nav }: { m: Modell; nav: Nav }) {
                     <I.Phone className="size-4 text-[rgba(12,10,8,.55)]" />
                     <Avatar p={p} size={22} />
                     {p.name}
-                    <span className="text-[rgba(12,10,8,.5)]">· {s.angerufen_am ? `angerufen ${tagZeit(s.angerufen_am)}` : s.status === "geloest" ? `gelöst ${s.geloest_am ? tagZeit(s.geloest_am) : ""}` : "Anruf folgt"}</span>
+                    <span className="text-[rgba(12,10,8,.5)]">· {anrufZeile(s)}</span>
                   </div>
                   {s.anruf_text && <div className="mt-3 rounded-[4px] bg-[#f4f2f0] p-3 text-[14px] italic leading-relaxed text-[rgba(12,10,8,.8)]">„{s.anruf_text}“</div>}
                 </button>
