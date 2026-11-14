@@ -8,6 +8,7 @@
     "start": "node index.js",
     "chats": "node index.js --chats",
     "warn-test": "node warn-test.js",
+    "warn-probe": "node index.js --warn-probe",
     "test": "node --test \"test/*.test.js\""
   },
   "engines": {

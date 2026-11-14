@@ -14,7 +14,7 @@ import makeWASocket, {
 import { AUTH_ORDNER, QR_DATEI, ZUSTAND_DATEI, ladeEnv } from './config.js';
 import { sende } from './forward.js';
 import { baueAnfrage, inhalt, istErlaubt, kanalName } from './mapping.js';
-import { istMelderNachricht, ladeZustand, neuerMelder, speichereZustand } from './melder.js';
+import { alleSignale, baueText, istMelderNachricht, ladeZustand, merkeGesendet, neuerMelder, speichereZustand } from './melder.js';
 
 const nurChats = process.argv.includes('--chats');
 const cfg = ladeEnv();
@@ -40,6 +40,7 @@ if (!nurChats) {
 
 // Melder (Warnungen in einen Chat): standardmaessig aus, dann bleibt der Dienst rein lesend.
 const warnAn = !nurChats && cfg.warnen.an;
+const warnProbe = process.argv.includes('--warn-probe'); // eine als TEST markierte Warnung senden, dann beenden
 let melderZustand = null;
 let melder = null;
 if (warnAn) {
@@ -61,6 +62,34 @@ function warnJid() {
   if (/@(g\.us|s\.whatsapp\.net|lid)$/.test(c)) return c;
   for (const [jid, name] of gruppen) if (name?.trim().toLowerCase() === c.toLowerCase()) return jid;
   return null;
+}
+
+// Probe (npm run warn-probe): schickt EINE als Test markierte Warnung in den Warn-Chat, gebaut aus dem
+// neuesten Signal des Projekts (egal welcher Status), und prueft, dass sie nicht in die Ablage zurueckfliesst.
+async function probe(sock) {
+  const jid = warnJid();
+  if (!jid) {
+    console.error('Probe: Warn-Chat nicht in der Gruppenliste gefunden.');
+    process.exit(1);
+  }
+  const alle = await alleSignale(cfg.supabase, cfg.projekt);
+  if (!alle.length) {
+    console.error(`Probe: keine Signale im Projekt ${cfg.projekt}.`);
+    process.exit(1);
+  }
+  const [kopf, ...rest] = baueText(alle[0]).split('\n');
+  const text = [kopf, 'TEST: kein echter Vorfall, nur eine Probe der Warnung.', ...rest].join('\n');
+  const res = await sock.sendMessage(jid, { text });
+  const id = res?.key?.id ?? null;
+  if (id) {
+    merkeGesendet(melderZustand, id);
+    speichereZustand(ZUSTAND_DATEI, melderZustand);
+  }
+  log(`Probe gesendet an "${cfg.warnen.chat}" (Nachrichten-Id ${id ? 'erhalten' : 'FEHLT'}). Warte 10 s auf die eigene Nachricht ...`);
+  setTimeout(() => {
+    log('Probe beendet.');
+    process.exit(0);
+  }, 10000);
 }
 
 function starteMelder(sock) {
@@ -145,7 +174,8 @@ async function verbinden() {
           process.exit(0);
         }
         log(`${gruppen.size} Gruppen bekannt. Warte auf neue Nachrichten (Strg+C beendet).`);
-        if (warnAn) starteMelder(sock);
+        if (warnAn && warnProbe) await probe(sock);
+        else if (warnAn) starteMelder(sock);
       } catch (e) {
         console.error(`Gruppenliste nicht abrufbar: ${e.message}`);
         if (nurChats) process.exit(1);
@@ -202,7 +232,10 @@ async function gruppenname(sock, jid) {
 async function verarbeite(sock, msg) {
   if (!msg?.key?.remoteJid || !msg.message) return;
   // Eigene Warnungen des Melders nie an die Ablage weiterreichen (keine Rueckkopplung).
-  if (melderZustand && istMelderNachricht(msg, melderZustand)) return;
+  if (melderZustand && istMelderNachricht(msg, melderZustand)) {
+    if (warnProbe) log(`Probe: eigene Warnung kam zurueck und wurde NICHT weitergereicht (per Id erkannt: ${melderZustand.gesendeteIds.includes(msg.key?.id) ? 'ja' : 'nein'}).`);
+    return;
+  }
   if (cfg.allowlist.leer) return;
   const zeit = Number(msg.messageTimestamp?.toNumber?.() ?? msg.messageTimestamp ?? 0);
   if (zeit && zeit < startSekunden - 60) return; // Verlauf, nicht live
