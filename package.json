@@ -11,7 +11,9 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "demo": "node scripts/demo.mts",
-    "db:reset": "node -e \"fetch('http://localhost:3000/api/reset',{method:'POST'}).then(r=>r.json()).then(console.log)\""
+    "db:reset": "node -e \"fetch('http://localhost:3000/api/reset',{method:'POST'}).then(r=>r.json()).then(console.log)\"",
+    "telefon": "node scripts/telefon.mts",
+    "telefon:einmal": "node scripts/telefon.mts --einmal"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
