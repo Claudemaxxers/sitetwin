@@ -43,6 +43,7 @@ uv run python -m uebersetzer lauf --mit-claude --dauerhaft 30  # für die Demo: 
 - **Ohne Claude erledigt:** gelöschte Nachrichten, Stammdaten-Dateien aus dem Drive (CSV, MD, TXT), leere Quellen.
 - **Idempotent:** Wird eine Quelle erneut verarbeitet, werden ihre Einträge ersetzt (`unique (quelle_hash, nr)`), nicht verdoppelt. Pläne werden gemergt; gültig ist der jüngste Index (Sicht `plaene_aktuell`).
 - **Fehler:** Rate Limit / Netzwerk → Quelle bleibt `neu`, nächster Lauf versucht es wieder. Sonst `status = fehler` mit Grund in `meta.fehler`.
+- **Dauerlauf (`--dauerhaft`):** Ist Supabase kurz nicht erreichbar (z. B. DNS-Aussetzer am Hotspot), bricht nur der Takt ab; der Lauf meldet `⚠ Netz/Supabase nicht erreichbar` und versucht es im nächsten Takt wieder.
 - **Modell:** `claude-haiku-5-5` mit Structured Outputs (Pydantic, `modell.py`), Effort `medium`. Umstellbar über `UEBERSETZER_MODELL`. Der stabile Teil des Prompts (Regeln + Stammdaten) wird gecacht.
 
 ## Bauteil-Register (Soll-Zustand)
