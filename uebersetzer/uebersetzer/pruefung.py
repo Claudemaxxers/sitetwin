@@ -446,7 +446,8 @@ class _Signale:
         if felder["eintrag_ids"] == list(alt.get("eintrag_ids") or []) and alt["status"] != "geloest" and "schwere" not in felder:
             return  # nichts Neues (z. B. erneute Prüfung)
         if alt["status"] == "geloest":
-            felder.update(status="offen", geloest_am=None, geloest_durch=None)
+            # Anruf-Felder leeren: der Telefon-Agent ruft nur bei status='offen' und angerufen_am null an
+            felder.update(status="offen", geloest_am=None, geloest_durch=None, angerufen_am=None, anruf_id=None)
             self.bericht.wieder_offen += 1
             log.info("⚑ wieder offen: %s", alt["titel"])
         else:

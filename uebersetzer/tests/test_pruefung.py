@@ -67,6 +67,23 @@ def test_arbeit_nach_gueltigem_index_loest_signal():
     assert s["status"] == "geloest" and s["geloest_durch"] == "2" and len(b.geloest) == 1
 
 
+def test_wieder_offenes_signal_wird_erneut_angerufen():
+    db = neue_db([
+        e("1", "2026-11-12T10:52:00+01:00", "arbeit_geplant", plan_nr="E-05", plan_index="B"),
+        e("2", "2026-11-16T12:00:00+01:00", "arbeit_erledigt", raum="Abstellraum", plan_nr="E-05", plan_index="C"),
+    ])
+    pruefe(db, None, None)
+    s = db.signale_liste[0]
+    assert s["status"] == "geloest"
+    # Der Telefon-Agent hatte vor der Lösung schon angerufen
+    db.signal_aendern(s["id"], {"angerufen_am": "2026-11-12T11:00:00+01:00", "anruf_id": "conv_1"})
+    db.eintraege.append(e("3", "2026-11-17T09:00:00+01:00", "arbeit_erledigt", plan_nr="E-05", plan_index="B"))
+    b = pruefe(db, None, None)
+    s = db.signale_liste[0]
+    assert b.wieder_offen == 1 and s["status"] == "offen"
+    assert s["angerufen_am"] is None and s["anruf_id"] is None
+
+
 def test_erneute_pruefung_erzeugt_nichts_doppelt():
     db = neue_db([e("1", "2026-11-12T10:52:00+01:00", "arbeit_geplant", plan_nr="E-05", plan_index="B")])
     pruefe(db, None, None)
