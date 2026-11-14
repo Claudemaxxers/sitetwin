@@ -122,7 +122,7 @@ Never commit secrets. Credentials come only from the `.env` files below.
 | `WHATSAPP_LIVE_KANAL` | optional | live WhatsApp rows get no channel name |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | optional, Twilio only | no media download, no signature check |
 | `TWILIO_WEBHOOK_URL` | optional, Twilio only | no signature check |
-| `ABLAGE_IMPORT_TOKEN` | optional | `/import/email/gmail` and `/import/drive/datei` are not protected; if set, they require the header `X-Ablage-Token` |
+| `ABLAGE_IMPORT_TOKEN` | optional | `/import/email/gmail`, `/import/email/gmail-felder` and `/import/drive/datei` are not protected; if set, they require the header `X-Ablage-Token` |
 | `TRANSKRIPT_API_KEY` | optional | voice messages are stored without transcript (unless a sidecar `<audio>.txt` exists) |
 | `TRANSKRIPT_BASE_URL` | optional, default `https://api.openai.com/v1` | default |
 | `TRANSKRIPT_MODELL` | optional, default `whisper-1` | default |
@@ -213,7 +213,7 @@ Start the API (needed only for the live sources and the `/import/...` endpoints,
 .venv\Scripts\python -m uvicorn ablage.api:app --port 8000
 ```
 
-`GET /health`, interactive docs at `http://localhost:8000/docs`. Endpoints are listed in [`ablage/README.md`](ablage/README.md). The API has no login except the optional token on the two n8n endpoints: run it locally or behind a tunnel only.
+`GET /health`, interactive docs at `http://localhost:8000/docs`. Endpoints are listed in [`ablage/README.md`](ablage/README.md). The API has no login except the optional token on the n8n endpoints: run it locally or behind a tunnel only.
 
 ### 3.3 Übersetzer and Prüf-Agent
 
@@ -299,7 +299,7 @@ What you will not see: an actual phone call (no phone agent in the repo) and the
 All of these are optional and none is needed for the walkthrough above. Status of each is in section 8.
 
 - **WhatsApp via Twilio sandbox**: `POST /import/whatsapp/twilio`; setup in [`ablage/README.md`](ablage/README.md), section "WhatsApp live über Twilio".
-- **Gmail and Google Drive via n8n**: `POST /import/email/gmail` and `POST /import/drive/datei`, two importable n8n flows; setup in [`ablage/n8n/README.md`](ablage/n8n/README.md). Needs a public tunnel to the Ablage API and `ABLAGE_IMPORT_TOKEN`.
+- **Gmail and Google Drive via n8n**: `POST /import/email/gmail-felder` and `POST /import/drive/datei`, two importable n8n flows; setup in [`ablage/n8n/README.md`](ablage/n8n/README.md). Needs a public tunnel to the Ablage API and `ABLAGE_IMPORT_TOKEN`.
 - **Voice-message transcription**: set `TRANSKRIPT_API_KEY` (and optionally base URL and model) in `ablage/.env`; any OpenAI-compatible transcription API; details in [`ablage/README.md`](ablage/README.md), section "Sprachnachrichten transkribieren".
 - **Own WhatsApp chat**: export a chat with media and import the `.zip` under a separate project name (`ablage/README.md`, "Eigenen WhatsApp-Chat testen").
 
@@ -347,11 +347,11 @@ Status as of the night before submission. Built beats promised: what is not list
 
 **Live inputs**
 - **Drive -> n8n Cloud -> tunnel -> Ablage -> Supabase** ran once for real on 14.11.2026, triggered by hand with a test PDF. Continuous operation (activated flow, one-minute polling) is untested.
-- **Gmail flow does not work on n8n Cloud as built.** The HTTP Request node that fetches the raw mail may not use the n8n-managed Google credential. Two ways out are documented in `ablage/n8n/README.md` and not built. Importing `.eml` files works and is tested.
+- **Gmail -> n8n Cloud -> tunnel -> Ablage -> Supabase** ran once for real on 14.11.2026, triggered by hand, with a fictional test mail without attachment (`POST /import/email/gmail-felder`, the mail as n8n's Gmail node delivers it, parsed into fields). Not checked on the live path: mails with attachments, a second run as duplicate, hash equality with the `.eml` import of the same mail, continuous operation. In tests, the six fictional mails give the same rows and hashes as the `.eml` import. The older raw-mail endpoint `POST /import/email/gmail` does not work with n8n Cloud, which does not allow its managed Google credential in an HTTP Request node. Importing `.eml` files works and is tested.
 - **Voice-message transcription** is built for an OpenAI-compatible API but was only tested against a mocked interface, never with a real key or a real WhatsApp voice message. A voice message stored without a transcript does not get one later (insert-only table; delete the row and import again).
 - The **Twilio WhatsApp endpoint** is built to Twilio's documented format and tested, but has never run against a real Twilio account.
 - The same WhatsApp message imported once live and once via export gives two rows (different identity). Two identical messages by the same person within the same minute collapse into one.
-- The Ablage API has no authentication except the optional token on the two n8n endpoints.
+- The Ablage API has no authentication except the optional token on the n8n endpoints.
 
 **Agents**
 - **No phone agent in this repository** (see section 1). The signal text for the call is produced; the call is not.
