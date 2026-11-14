@@ -241,3 +241,45 @@ def test_live_nachricht_ohne_anhang_unberuehrt():
     fake = Fake()
     transkript.ergaenze([item], fake)
     assert item.text == "Hallo" and fake.aufrufe == []
+
+
+# --- Stille: Whisper erfindet Text ("Vielen Dank."), die Ablage übernimmt ihn nicht -------------
+
+def _antwort(text, *no_speech):
+    return {"text": text, "segments": [{"text": text, "no_speech_prob": w} for w in no_speech]}
+
+
+def test_stille_ergibt_kein_transkript():
+    """Werte wie von Groq whisper-large-v3 bei 4 s Stille gemessen (14.11.2026)."""
+    item = audio_item()
+    transkript.ergaenze([item], _fabrik(lambda r: httpx.Response(200, json=_antwort(" Vielen Dank.", 0.701))))
+    assert item.text == ""
+    assert item.meta["transkript_fehler"] == "KeineSprache: keine Sprache erkannt"
+    assert "transkript_quelle" not in item.meta
+
+
+def test_sprache_bleibt_auch_mit_stiller_pause():
+    t = _fabrik(lambda r: httpx.Response(200, json=_antwort(" Ja passt.", 0.004)))
+    assert t(BYTES, "a.ogg", "audio/ogg") == "Ja passt."
+    # ein stilles Segment neben einem gesprochenen: nicht verwerfen
+    t = _fabrik(lambda r: httpx.Response(200, json=_antwort(" Top 5 ist fertig.", 0.9, 0.01)))
+    assert t(BYTES, "a.ogg", "audio/ogg") == "Top 5 ist fertig."
+
+
+@pytest.mark.parametrize("segmente", [None, [], [{}], [{"no_speech_prob": None}], "kaputt"])
+def test_ohne_brauchbare_segmente_kein_filter(segmente):
+    t = _fabrik(lambda r: httpx.Response(200, json={"text": "ok", "segments": segmente}))
+    assert t(BYTES, "a.ogg", "audio/ogg") == "ok"
+
+
+def test_fragt_segmente_an_und_faellt_bei_400_zurueck():
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.read())
+        if b"verbose_json" in bodies[-1]:
+            return httpx.Response(400, json={"error": "response_format not supported"})
+        return httpx.Response(200, json={"text": "ok"})
+
+    assert _fabrik(handler)(BYTES, "a.ogg", "audio/ogg") == "ok"
+    assert len(bodies) == 2 and b'name="response_format"' in bodies[0] and b"response_format" not in bodies[1]

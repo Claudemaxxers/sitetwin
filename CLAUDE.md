@@ -76,6 +76,6 @@ Was laut Brief gut aussieht:
 - Der WhatsApp-Melder warnt auch, wenn der Prüf-Agent ein gelöstes Signal wieder öffnet („Wieder offen:“). Getestet, nicht live gelaufen.
 - Lernschleife: Bewertungen aus WhatsApp landen in `signale.bewertung` (`berechtigt` oder `fehlalarm`), der Prüf-Agent liest sie (`uebersetzer/README.md`, Abschnitt „Lernschleife“). Getestet, nicht live gelaufen.
 - n8n: Die Abläufe für Gmail und Drive sind aktiv und hängen an einer Tunnel-Adresse, die sich bei jedem Neustart des Tunnels ändert. Eingänge landen im Projekt „Test Santino“, nicht in „BV Simmering“.
-- Transkription von Sprachnachrichten liegt in der Ablage (`ablage/ablage/transkript.py`), nicht im Übersetzer. Mit echtem Schlüssel ist sie noch nicht gelaufen.
+- Transkription von Sprachnachrichten liegt in der Ablage (`ablage/ablage/transkript.py`), nicht im Übersetzer. Am 14.11. direkt gegen Groq gelaufen (synthetische Testaufnahme, Stille wird verworfen), noch nicht mit einer echten WhatsApp-Sprachnachricht über die laufende Ablage.
 - Die Web-App hat bereits eine Ask-Funktion (`app/api/fragen`). Nicht doppelt bauen.
 - Das Repo ist privat (geprüft 14.11.). Offen: wo es laut Organisatoren liegen soll.
