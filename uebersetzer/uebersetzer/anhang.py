@@ -8,7 +8,41 @@ from pathlib import PurePosixPath
 from typing import Any
 
 BILD_TYPEN = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp", ".gif": "image/gif"}
+HEIC_ENDUNGEN = {".heic", ".heif"}
+HEIC_MARKEN = {b"heic", b"heix", b"hevc", b"hevx", b"heim", b"heis", b"mif1", b"msf1"}
+MAX_KANTE = 1568  # längste Bildkante für Claude; größere Bilder werden dort ohnehin verkleinert
 MAX_PDF_TEXT = 20_000
+
+
+class BildFehler(Exception):
+    pass
+
+
+def ist_heic(quelle: dict[str, Any], daten: bytes) -> bool:
+    """Endung oder Dateikopf (ISO-BMFF: Bytes 4..8 = 'ftyp', danach die Marke)."""
+    if endung(quelle) in HEIC_ENDUNGEN:
+        return True
+    return daten[4:8] == b"ftyp" and daten[8:12] in HEIC_MARKEN
+
+
+def heic_zu_jpeg(daten: bytes) -> bytes:
+    """HEIC/HEIF (Standard bei iPhone-Fotos) → JPEG, weil Claude HEIC nicht annimmt.
+
+    Dreht das Bild nach EXIF aufrecht und verkleinert es auf MAX_KANTE.
+    """
+    try:
+        import pillow_heif
+        from PIL import Image, ImageOps
+
+        pillow_heif.register_heif_opener()
+        with Image.open(io.BytesIO(daten)) as bild:
+            bild = ImageOps.exif_transpose(bild).convert("RGB")
+            bild.thumbnail((MAX_KANTE, MAX_KANTE))
+            aus = io.BytesIO()
+            bild.save(aus, format="JPEG", quality=85)
+            return aus.getvalue()
+    except Exception as e:  # kaputte Datei, unbekannte Variante
+        raise BildFehler(f"{type(e).__name__}: {e}") from e
 
 
 def pdf_text(daten: bytes) -> str:
@@ -31,6 +65,16 @@ def inhaltsbloecke(quelle: dict[str, Any], daten: bytes | None) -> tuple[list[di
     typ = quelle.get("anhang_typ")
     if not quelle.get("anhang_pfad") or daten is None:
         return [], None
+
+    if (typ == "image" or endung(quelle) in HEIC_ENDUNGEN) and ist_heic(quelle, daten):
+        try:
+            daten = heic_zu_jpeg(daten)
+        except BildFehler:
+            return [], f"Foto im Format {endung(quelle) or 'HEIC'} konnte nicht gelesen werden (Datei beschädigt?)."
+        return [{
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": base64.b64encode(daten).decode()},
+        }], "Die Quelle ist ein Foto von der Baustelle (oben angehängt)."
 
     if typ == "image" or endung(quelle) in BILD_TYPEN:
         media = BILD_TYPEN.get(endung(quelle))

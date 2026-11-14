@@ -10,6 +10,8 @@ dependencies = [
   "pypdf>=4.0",
   "python-dotenv>=1.0",
   "tzdata",
+  "pillow>=13.0.0",
+  "pillow-heif>=1.8.1",
 ]
 
 [dependency-groups]
