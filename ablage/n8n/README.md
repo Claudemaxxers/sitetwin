@@ -1,6 +1,8 @@
 # n8n: Gmail und Google Drive an die Ablage
 
-> **Stand 14.11.2026:** Beide Abläufe sind in eine n8n-Cloud-Instanz importiert, alle Felder kamen richtig an. Der Drive-Ablauf ist dort einmal von Hand gelaufen: Test-PDF im Ordner → Ablage meldet `neu: 1`, der PDF-Text steht in `quellen`. Der Gmail-Ablauf ist **noch nicht gelaufen**. Der Dauerbetrieb (aktiviert, Abfrage jede Minute) ist für beide ungetestet.
+> **Stand 14.11.2026:** Beide Abläufe sind in eine n8n-Cloud-Instanz importiert, alle Felder kamen richtig an. Der Drive-Ablauf ist dort einmal von Hand gelaufen: Test-PDF im Ordner → Ablage meldet `neu: 1`, der PDF-Text steht in `quellen`. Der Dauerbetrieb (aktiviert, Abfrage jede Minute) ist für beide ungetestet.
+>
+> **Der Gmail-Ablauf läuft auf n8n Cloud so nicht durch.** Der Trigger findet die Mail mit dem Label, aber der Node „Mail im Rohformat holen“ bricht ab: „This credential is configured to prevent use within an HTTP Request or GraphQL node“. Die von n8n Cloud verwaltete Google-Anmeldung („Sign in with Google“) darf nicht in HTTP-Request-Nodes benutzt werden. Zwei Auswege, beide noch nicht gebaut: (1) ein Ablage-Endpunkt, der die vom Gmail-Node zerlegte Mail (Felder und Anhänge) annimmt, dann entfällt der Rohabruf; (2) eine eigene Google-OAuth-App in der Google Cloud Console und damit eine eigene Gmail-Credential in n8n.
 
 Die zwei Dateien hier reichen echte Eingänge an die Ablage weiter, ohne dass jemand seine Arbeitsweise ändert: Mails mit einem bestimmten Gmail-Label und Dateien aus einem bestimmten Google-Drive-Ordner. Die Google-Anmeldung liegt komplett in n8n. Die Ablage bekommt nur fertige Daten über `POST /import/email/gmail` und `POST /import/drive/datei` (Vertrag: `../SPEC.md` §7.7 und §7.8) und erkennt Wiederholungen selbst.
 
