@@ -5,10 +5,13 @@ the crew, work done out of sequence, a drawing that's out of date").
 Zwei Stufen:
 1. Feste Regeln – kostenlos, deterministisch, immer aktiv:
    - plan_veraltet: Arbeit nach einem Plan-Index, obwohl zu dem Zeitpunkt schon ein neuerer ausgegeben war.
+   - reihenfolge: Wand oder Raum wird zugemacht (oder ist es), obwohl laut Plan noch Installation fehlt.
+   - bauteil_entfaellt: Arbeit an einem Bauteil, das der gültige Plan nicht mehr vorsieht.
    - unklar: Nachricht ließ sich nicht sicher zuordnen → Rückfrage statt Raten.
    Plus Lösung: Arbeit nach dem gültigen Index am selben Ort löst ein plan_veraltet-Signal.
-2. Claude-Prüfung (optional, kostet Geld): Reihenfolge, Abweichung von Plan/LV, nicht weitergegebene
-   Anweisungen – und ob ein neuer Eintrag ein offenes Signal löst.
+2. Claude-Prüfung (optional, kostet Geld): Abweichung von Plan/LV, nicht weitergegebene Anweisungen –
+   und ob ein neuer Eintrag ein offenes Signal löst. Reihenfolge-Signale kommen nur aus den festen
+   Regeln; Claude-Vorschläge dieser Art werden verworfen.
 
 Lebenszyklus (KONZEPT.md): offen → in_bearbeitung (setzt der Telefon-Agent nach dem Anruf) → geloest.
 """
