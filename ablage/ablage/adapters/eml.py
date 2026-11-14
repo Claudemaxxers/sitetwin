@@ -5,7 +5,7 @@ from __future__ import annotations
 import email
 import email.policy
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from html.parser import HTMLParser
@@ -72,8 +72,24 @@ def _body(msg: EmailMessage) -> str:
     return _html_zu_text(teil.get_content()) if teil is not None else ""
 
 
+# Ein Anhang, wie er im Mailteil steht: (Dateiname oder None, Inhalt, Content-Type)
+Teil = tuple[str | None, bytes, str | None]
+
+
 def aus_bytes(daten: bytes, dateiname: str, ctx: ImportKontext) -> Iterator[RawItem]:
     msg: EmailMessage = email.message_from_bytes(daten, policy=email.policy.default)  # type: ignore[assignment]
+    teile = (
+        (t.get_filename(), t.get_payload(decode=True) or b"", t.get_content_type())
+        for t in msg.iter_attachments()
+    )
+    yield from items(msg, _body(msg), teile, dateiname, ctx)
+
+
+def items(
+    msg: EmailMessage, body: str, anhaenge: Iterable[Teil], dateiname: str, ctx: ImportKontext
+) -> Iterator[RawItem]:
+    """Gemeinsamer Teil aller Mail-Wege (.eml, Gmail roh, Gmail-Felder): Kopfzeilen aus `msg`,
+    Body und Anhänge schon herausgelöst. Hier entstehen Zeilen und content_hash."""
     message_id = _kopf(msg, "Message-ID") or dateiname
     betreff = _kopf(msg, "Subject") or ""
     absender = _kopf(msg, "From")
@@ -86,7 +102,7 @@ def aus_bytes(daten: bytes, dateiname: str, ctx: ImportKontext) -> Iterator[RawI
         kanal=kanal,
         absender=absender,
         zeitpunkt=zeitpunkt,
-        text=f"Betreff: {betreff}\n\n{_body(msg)}".strip(),
+        text=f"Betreff: {betreff}\n\n{body}".strip(),
         original_ref=message_id,
         meta={
             "message_id": message_id,
@@ -100,10 +116,9 @@ def aus_bytes(daten: bytes, dateiname: str, ctx: ImportKontext) -> Iterator[RawI
     yield mail
     mail_hash = mail.content_hash()
 
-    for nr, teil in enumerate(msg.iter_attachments(), start=1):
-        name = PurePath((teil.get_filename() or f"anhang-{nr}").replace("\\", "/")).name
-        inhalt = teil.get_payload(decode=True) or b""
-        anhang = Anhang.aus_bytes(name, inhalt, mimetype=teil.get_content_type())
+    for nr, (roh_name, inhalt, mimetype) in enumerate(anhaenge, start=1):
+        name = PurePath((roh_name or f"anhang-{nr}").replace("\\", "/")).name
+        anhang = Anhang.aus_bytes(name, inhalt, mimetype=mimetype)
         meta: dict = {"gehoert_zu": mail_hash, "message_id": message_id, "betreff": betreff}
         text = ""
         if anhang.typ is AnhangTyp.pdf:
