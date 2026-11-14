@@ -103,6 +103,66 @@ test('Melder: Erledigt-Folgenachricht genau einmal, abschaltbar', async () => {
   assert.equal(t3.gesendet.length, 0);
 });
 
+test('Auswahl: wieder geoeffnet zaehlt, Aenderung an einem gewarnten offenen Signal nicht', () => {
+  const z = leererZustand();
+  z.gewarnt.zu = { gesendet: true, erledigt: true };
+  z.gewarnt.laeuft = { gesendet: true, erledigt: false };
+  const gestern = '2026-11-13T10:00:00Z';
+  const neu = '2026-11-14T11:00:00Z';
+  const liste = [
+    sig({ id: 'zu', aktualisiert_am: neu }), // Erledigt-Meldung kam schon, jetzt wieder offen
+    sig({ id: 'laeuft', aktualisiert_am: neu }), // gewarnt und noch offen: nur ergaenzt
+    sig({ id: 'altwieder', erstellt_am: gestern, aktualisiert_am: neu }), // vor dem Start angelegt, jetzt wieder geoeffnet
+    sig({ id: 'altstill', erstellt_am: gestern, aktualisiert_am: gestern }),
+  ];
+  assert.deepEqual(waehleNeue(liste, { ab: AB, zustand: z, projekt: 'P' }).map((s) => s.id), ['zu', 'altwieder']);
+});
+
+test('Text: wieder offen steht vor dem Titel', () => {
+  assert.match(baueText(sig(), 700, { wieder: true }), /\nWieder offen: Plan Index B veraltet\n/);
+  assert.doesNotMatch(baueText(sig()), /Wieder offen/);
+});
+
+test('Melder: wieder geoeffnetes Signal wird erneut gewarnt, genau einmal', async () => {
+  let offen = [sig()];
+  const geloest = [];
+  const t = bau({ signale: () => offen, geloest });
+  await t.m.tick(); // Warnung
+  offen = [];
+  geloest.push(sig({ status: 'geloest' }));
+  await t.m.tick(); // Erledigt
+  geloest.length = 0;
+  offen = [sig({ aktualisiert_am: '2026-11-14T11:00:00Z' })];
+  await t.m.tick(); // wieder offen
+  await t.m.tick(); // nichts Neues
+  assert.equal(t.gesendet.length, 3);
+  assert.match(t.gesendet[1], /^✅ SiteTwin: erledigt/);
+  assert.match(t.gesendet[2], /Wieder offen: Plan Index B veraltet/);
+  assert.equal(t.zustand.gewarnt['aaaaaaaa-1111'].zyklus, 1);
+  // zweite Runde: wieder geloest, wieder gemeldet
+  offen = [];
+  geloest.push(sig({ status: 'geloest' }));
+  await t.m.tick();
+  assert.equal(t.gesendet.length, 4);
+  assert.match(t.gesendet[3], /^✅ SiteTwin: erledigt/);
+});
+
+test('Melder: ohne Erledigt-Meldung warnt ein wieder geoeffnetes Signal trotzdem neu', async () => {
+  let offen = [sig()];
+  const geloest = [];
+  const t = bau({ signale: () => offen, geloest, cfgPlus: { erledigt: false } });
+  await t.m.tick();
+  offen = [];
+  geloest.push(sig({ status: 'geloest' }));
+  await t.m.tick(); // keine Nachricht, Zyklus wird geschlossen
+  assert.equal(t.gesendet.length, 1);
+  geloest.length = 0;
+  offen = [sig({ aktualisiert_am: '2026-11-14T11:00:00Z' })];
+  await t.m.tick();
+  assert.equal(t.gesendet.length, 2);
+  assert.match(t.gesendet[1], /Wieder offen/);
+});
+
 test('Melder: Fehler wird hoechstens 3 Mal wiederholt', async () => {
   let n = 0;
   const t = bau({ signale: () => [sig()], senden: async () => { n++; throw new Error('weg'); } });

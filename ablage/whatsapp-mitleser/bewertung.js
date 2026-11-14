@@ -181,7 +181,7 @@ export function neuerBewerter({ sb, zustand, bestaetigen = null, log = () => {},
       const r = await schreibeBewertung(sb, e.signalId, e.bewertung, notiz, { schlafen });
       log(`Rueckmeldung: ${kurzId(e.signalId)} | ${e.bewertung} | ${FORM[e.form]} | ${r.ok ? 'gespeichert' : `NICHT gespeichert (${r.fehler})`}`);
       if (r.ok && bestaetigen) {
-        const titel = Object.values(zustand.warnungen).find((x) => x.signal === e.signalId)?.titel ?? '';
+        const titel = Object.values(zustand.warnungen).filter((x) => x.signal === e.signalId).sort((x, y) => y.ts - x.ts)[0]?.titel ?? ''; // neueste Warnung
         try {
           await bestaetigen(baueBestaetigung(e.bewertung, titel), e.signalId);
         } catch (x) {
