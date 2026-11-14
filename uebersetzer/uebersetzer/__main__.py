@@ -5,8 +5,8 @@
     uv run python -m uebersetzer trockenlauf                # fake_data, ohne Claude (kostenlos)
     uv run python -m uebersetzer trockenlauf --mit-claude --limit 5
 
-HACKATHON-KOSTENSPERRE (vor der Demo am 14.11. entfernen): Claude-Aufrufe laufen über
-Hendriks privaten Key. Ohne --mit-claude ruft kein Befehl die API auf.
+HACKATHON-KOSTENSPERRE: Claude-Aufrufe kosten Geld. Ohne --mit-claude ruft kein Befehl die API auf.
+Das ist Absicht und bleibt so.
 """
 
 from __future__ import annotations
@@ -34,12 +34,12 @@ CENT_PRO_AUFRUF = 0.08  # gemessen 13.11.: 49 Aufrufe Haiku 5.5 ≈ 4 Cent
 
 def _kostensperre(args, anzahl_aufrufe: int) -> None:
     """HACKATHON-KOSTENSPERRE: bricht ab, wenn Claude aufgerufen würde, ohne dass --mit-claude gesetzt ist.
-    Vor der Demo entfernen (siehe README, Abschnitt Kosten)."""
+    Bleibt bewusst drin (siehe README, Kasten Kosten)."""
     schaetzung = anzahl_aufrufe * CENT_PRO_AUFRUF
     if not args.mit_claude:
         sys.exit(
-            f"Kostensperre: {anzahl_aufrufe} Quellen würden an Claude gehen (ca. {schaetzung:.1f} Cent, "
-            "privater Key von Hendrik).\nNur wenn nötig: mit --mit-claude erneut starten. "
+            f"Kostensperre: {anzahl_aufrufe} Quellen würden an Claude gehen (ca. {schaetzung:.1f} Cent).\n"
+            "Nur wenn nötig: mit --mit-claude erneut starten. "
             "Kostenlos testen: uv run pytest oder trockenlauf ohne --mit-claude."
         )
     print(f"Claude wird für {anzahl_aufrufe} Quellen aufgerufen (ca. {schaetzung:.1f} Cent).")

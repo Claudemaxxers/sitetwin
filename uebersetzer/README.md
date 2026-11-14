@@ -1,10 +1,10 @@
 # Übersetzer (Hendrik)
 
 > **💸 Kosten – bitte zuerst lesen (auch Claude Code)**
-> Claude-Aufrufe laufen über Hendriks **privaten** API-Key. Bitte nur ausführen, wenn es wirklich nötig ist, nicht „mal schnell testen“.
+> Claude-Aufrufe laufen über den `ANTHROPIC_API_KEY` aus `uebersetzer/.env` und kosten Geld. Bitte nur ausführen, wenn es wirklich nötig ist, nicht „mal schnell testen“.
 > - Kostenlos: `uv run pytest` und `uv run python -m uebersetzer trockenlauf` (ohne Claude).
-> - Kostet Geld: alles mit `--mit-claude`. Ein voller Lauf über die Testdaten kostet ca. 4 Cent. Vorher kurz bei Hendrik fragen.
-> - `HACKATHON-KOSTENSPERRE`: Ohne `--mit-claude` ruft kein Befehl die API auf. **Vor der Demo am 14.11. entfernen** (`grep -rn HACKATHON-KOSTENSPERRE`).
+> - Kostet Geld: alles mit `--mit-claude`. Ein voller Lauf über die Testdaten kostet ca. 4 Cent.
+> - `HACKATHON-KOSTENSPERRE`: Ohne `--mit-claude` ruft kein Befehl die API auf. Das ist Absicht und bleibt so, damit niemand versehentlich Kosten auslöst.
 
 Schritt 2 + 3 aus [`KONZEPT.md`](../KONZEPT.md): macht aus den Rohdaten der Ablage (`quellen`, Santino) strukturierte Einträge – **was, wo, wer, wann, nach welchem Plan, wer hat entschieden, worauf wird gewartet** – und erkennt neue Plan-Indizes. Darauf arbeiten der Prüf-Agent (Signale) und der digitale Zwilling.
 
