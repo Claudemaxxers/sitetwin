@@ -36,6 +36,37 @@ Construction runs on group chats, email threads and spreadsheets. One crew close
 - KPIs are derived, nothing is written back: progress = electrical work stages reported done per unit; extra costs = hours at the Regie rate plus extra pieces at LV unit prices.
 - Setup: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` in `.env.local` (server only). Melih's first prototype is still at `/v1`.
 
+## Telefon-Agent (ElevenLabs + Twilio)
+
+Schritt 5 aus `KONZEPT.md`: legt der Prüf-Agent ein Signal an (`signale.status = offen`), ruft SiteTwin die zuständige Person an, nennt den Konflikt und bittet, die betroffene Arbeit bis zur Klärung ruhen zu lassen. Der Sprachagent läuft bei ElevenLabs ("Construction Site checkin Agent", Twilio-Nummer), diese App übernimmt Auswahl, Anruf und Rückweg.
+
+```
+signale (offen, angerufen_am null) ─► POST /api/telefon/anrufen ─► ElevenLabs outbound-call (Twilio)
+       status = in_bearbeitung, anruf_id, angerufen_am, telefon          │
+                                                                         ▼ Gespräch
+ElevenLabs Post-Call-Webhook ─► POST /api/telefon/webhook ─► Ablage POST /import/call ─► Übersetzer ─► Prüf-Agent
+```
+
+- **Auswahl:** `status = offen` und `angerufen_am is null`. Nummer aus `signale.telefon`, sonst aus `personen` (Name oder Alias von `zustaendig`), normalisiert nach E.164.
+- **Anruf:** `POST /v1/convai/twilio/outbound-call` mit `dynamic_variables` (`anruf_modus`, `zustaendig_name`, `signal_id`, `signal_filter`, `signal_titel`, `anruf_text`, `signal_begruendung`, `signal_ort`, `projekt_name`). Der Agent liest daraus Ort und Konflikt vor; Entscheidung und Notiz schreibt er selbst über sein Tool `signal_abschliessen` (`status`, `bewertung_notiz`) in Supabase.
+- **Rückweg:** Das Transkript geht über den Post-Call-Webhook an die Ablage (`/import/call`, Vertrag v1) und läuft wie jede andere Quelle durch Übersetzer und Prüf-Agent. Nicht erreicht (`call_initiation_failure`) → Signal zurück auf `offen`, erneuter Versuch nach `TELEFON_WARTEZEIT_MIN`, höchstens `TELEFON_MAX_VERSUCHE` (gezählt über `signal_verlauf`).
+- **Sicherungen:** `TELEFON_TROCKEN=1` wählt nur aus und ruft nicht an. `TELEFON_TESTNUMMER` lenkt alle Anrufe auf eine Nummer (für Demo und Tests immer setzen, die Testdaten enthalten Platzhalternummern). `TELEFON_TOKEN` schützt den Anruf-Endpunkt, `ELEVENLABS_WEBHOOK_SECRET` prüft die Signatur des Webhooks.
+
+### Starten
+
+1. In `.env.local`: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `ELEVENLABS_API_KEY`, `ELEVENLABS_AGENT_ID`, `ELEVENLABS_PHONE_NUMBER_ID`, `TELEFON_TESTNUMMER`, dazu `ABLAGE_URL` der laufenden Ablage. Für echte Anrufe `TELEFON_TROCKEN=0`.
+2. In ElevenLabs beim Agenten den Post-Call-Webhook auf `https://<host>/api/telefon/webhook` setzen (Ereignisse `post_call_transcription` und `call_initiation_failure`), Secret nach `ELEVENLABS_WEBHOOK_SECRET`. Lokal einen Tunnel vor `npm run dev` schalten.
+3. `npm run dev`, dann in einem zweiten Terminal:
+
+```bash
+npm run telefon            # alle 30 s offene Signale anrufen
+npm run telefon:einmal     # ein Durchlauf
+```
+
+`GET /api/telefon/anrufen` zeigt den Zustand (konfiguriert, trocken, Testnummer, offene Signale). Tests: `npm test` (`tests/telefon.test.ts`, ohne Netz).
+
+**Grenzen:** Der Anruf ist nur gegen Fake-Antworten getestet, solange kein ElevenLabs-API-Key im Team liegt. Hebt niemand ab, bleibt das Signal nach den Versuchen offen und sichtbar im Zwilling; eine Eskalation ans Büro gibt es noch nicht. Der Agent entscheidet selbst, ob er das Signal löst; der Prüf-Agent setzt `geloest` zusätzlich, sobald eine Nachricht die Behebung meldet.
+
 ## Architecture
 
 ```
