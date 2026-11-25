@@ -92,12 +92,12 @@ docs/          setup guide, images, archived hackathon submission
 
 Team Claudemaxxers
 
-| | |
-|---|---|
-| Maximilian Dieringer | [LinkedIn](https://www.linkedin.com/in/maximilian-dieringer/) |
-| Santino Schrader | [LinkedIn](https://www.linkedin.com/in/santino-schrader/) |
-| Hendrik Boettcher | [LinkedIn](https://www.linkedin.com/in/hendrikboettcher/) |
-| Melih Kurtulmus | [LinkedIn](https://www.linkedin.com/in/melih-kurtulmus/) |
+<table>
+  <tr><td>Maximilian Dieringer</td><td><a href="https://www.linkedin.com/in/maximilian-dieringer/">LinkedIn</a></td></tr>
+  <tr><td>Santino Schrader</td><td><a href="https://www.linkedin.com/in/santino-schrader/">LinkedIn</a></td></tr>
+  <tr><td>Hendrik Boettcher</td><td><a href="https://www.linkedin.com/in/hendrikboettcher/">LinkedIn</a></td></tr>
+  <tr><td>Melih Kurtulmus</td><td><a href="https://www.linkedin.com/in/melih-kurtulmus/">LinkedIn</a></td></tr>
+</table>
 
 ## Rights
 
