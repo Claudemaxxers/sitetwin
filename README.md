@@ -90,7 +90,14 @@ docs/          setup guide, images, archived hackathon submission
 
 ## Team
 
-Team Claudemaxxers: Santino Schrader, Hendrik Boettcher, Melih Kurtulmus, Maximilian Dieringer.
+Team Claudemaxxers
+
+| | |
+|---|---|
+| Maximilian Dieringer | [LinkedIn](https://www.linkedin.com/in/maximilian-dieringer/) |
+| Santino Schrader | [LinkedIn](https://www.linkedin.com/in/santino-schrader/) |
+| Hendrik Boettcher | [LinkedIn](https://www.linkedin.com/in/hendrikboettcher/) |
+| Melih Kurtulmus | [LinkedIn](https://www.linkedin.com/in/melih-kurtulmus/) |
 
 ## Rights
 
