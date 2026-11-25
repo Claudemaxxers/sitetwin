@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 560" width="1280" height="560" role="img" aria-label="SiteTwin architecture: site channels flow into the ingest layer, Claude structures each message, the checking agent compares it with the valid drawing and raises a signal, which reaches the crew by WhatsApp or phone and the office in the web app. All steps share one Supabase database.">
+  <style>
+    .t  { font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; fill: #0C0A08; }
+    .h  { font-size: 17px; font-weight: 700; }
+    .c  { font-size: 13px; font-weight: 600; fill: #0C0A08; }
+    .d  { font-size: 13px; fill: #3a3634; }
+    .s  { font-size: 12px; fill: #6E6A68; }
+    .m  { font-family: ui-monospace, Consolas, 'Courier New', monospace; font-size: 12px; fill: #6E6A68; }
+    .cap{ font-size: 12px; font-weight: 700; letter-spacing: .08em; fill: #6E6A68; }
+    .box{ fill: #F4F2F0; stroke: #D2CECB; }
+    .chip{ fill: #FFFFFF; stroke: #D2CECB; }
+    .f  { stroke: #0C0A08; stroke-width: 1.6; fill: none; }
+    .db { stroke: #5683D2; stroke-width: 1.4; fill: none; }
+    .lp { stroke: #EE783B; stroke-width: 1.6; fill: none; stroke-dasharray: 6 5; }
+  </style>
+  <defs>
+    <marker id="k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0C0A08"/></marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5683D2"/></marker>
+    <marker id="o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#EE783B"/></marker>
+  </defs>
+
+  <rect width="1280" height="560" fill="#FFFFFF"/>
+
+  <!-- Title -->
+  <text x="30" y="44" class="t" style="font-size:24px;font-weight:700">How SiteTwin works</text>
+  <text x="30" y="68" class="t d">From a message on site to a warning, while someone can still act.</text>
+
+  <!-- Column captions -->
+  <text x="30"   y="150" class="t cap">1  SITE CHANNELS</text>
+  <text x="280"  y="150" class="t cap">2  INGEST</text>
+  <text x="530"  y="150" class="t cap">3  STRUCTURE</text>
+  <text x="780"  y="150" class="t cap">4  CHECK</text>
+  <text x="1030" y="150" class="t cap">5  ACT</text>
+
+  <!-- 1 Sources -->
+  <g>
+    <rect x="30" y="164" width="200" height="40" rx="3" class="chip"/>
+    <text x="42" y="181" class="t c">WhatsApp group</text><text x="42" y="197" class="t s">live reader or chat export</text>
+    <rect x="30" y="212" width="200" height="40" rx="3" class="chip"/>
+    <text x="42" y="229" class="t c">Email</text><text x="42" y="245" class="t s">Gmail via n8n, or .eml files</text>
+    <rect x="30" y="260" width="200" height="40" rx="3" class="chip"/>
+    <text x="42" y="277" class="t c">Drive folder</text><text x="42" y="293" class="t s">drawings and documents</text>
+    <rect x="30" y="308" width="200" height="40" rx="3" class="chip"/>
+    <text x="42" y="325" class="t c">Phone calls</text><text x="42" y="341" class="t s">transcripts</text>
+  </g>
+  <path d="M230,184 C255,184 255,256 276,256" class="f"/>
+  <path d="M230,232 C255,232 255,256 276,256" class="f"/>
+  <path d="M230,280 C255,280 255,256 276,256" class="f"/>
+  <path d="M230,328 C255,328 255,256 276,256" class="f" marker-end="url(#k)"/>
+
+  <!-- 2 Ablage -->
+  <rect x="280" y="164" width="200" height="184" rx="3" class="box"/>
+  <text x="294" y="192" class="t h">Ablage</text>
+  <text x="294" y="218" class="t d">Stores every message,</text>
+  <text x="294" y="235" class="t d">mail and file unchanged.</text>
+  <text x="294" y="252" class="t d">Voice notes and PDFs</text>
+  <text x="294" y="269" class="t d">become text. Duplicates</text>
+  <text x="294" y="286" class="t d">are skipped.</text>
+  <text x="294" y="334" class="m">Python · FastAPI</text>
+
+  <line x1="480" y1="256" x2="526" y2="256" class="f" marker-end="url(#k)"/>
+
+  <!-- 3 Übersetzer -->
+  <rect x="530" y="164" width="200" height="184" rx="3" class="box"/>
+  <text x="544" y="192" class="t h">Übersetzer</text>
+  <text x="544" y="218" class="t d">Claude turns each new</text>
+  <text x="544" y="235" class="t d">source into entries:</text>
+  <text x="544" y="252" class="t d">what, where, who, when,</text>
+  <text x="544" y="269" class="t d">which drawing, who</text>
+  <text x="544" y="286" class="t d">decided, who waits.</text>
+  <text x="544" y="334" class="m">Python · Claude</text>
+
+  <line x1="730" y1="256" x2="776" y2="256" class="f" marker-end="url(#k)"/>
+
+  <!-- 4 Prüf-Agent -->
+  <rect x="780" y="164" width="200" height="184" rx="3" class="box"/>
+  <text x="794" y="192" class="t h">Prüf-Agent</text>
+  <text x="794" y="218" class="t d">Checks each entry</text>
+  <text x="794" y="235" class="t d">against the valid drawing</text>
+  <text x="794" y="252" class="t d">and raises a <tspan style="font-weight:700;fill:#EE783B">signal</tspan>,</text>
+  <text x="794" y="269" class="t d">e.g. wall closed before</text>
+  <text x="794" y="286" class="t d">the pipes are in.</text>
+  <text x="794" y="334" class="m">fixed rules + Claude</text>
+
+  <!-- fan out -->
+  <path d="M980,256 C1005,256 1005,184 1026,184" class="f" marker-end="url(#k)"/>
+  <path d="M980,256 C1005,256 1005,232 1026,232" class="f" marker-end="url(#k)"/>
+
+  <!-- 5 Act -->
+  <rect x="1030" y="164" width="220" height="40" rx="3" class="chip"/>
+  <text x="1042" y="181" class="t c">Warning in the WhatsApp group</text><text x="1042" y="197" class="t s">to the crew</text>
+  <rect x="1030" y="212" width="220" height="40" rx="3" class="chip"/>
+  <text x="1042" y="229" class="t c">Phone call</text><text x="1042" y="245" class="t s">to the person responsible</text>
+  <rect x="1030" y="292" width="220" height="56" rx="3" class="chip"/>
+  <text x="1042" y="310" class="t c">Web app for the office</text>
+  <text x="1042" y="326" class="t s">live view of every project,</text>
+  <text x="1042" y="341" class="t s">"Ask" answers from the record</text>
+
+  <!-- Feedback loops -->
+  <path d="M1250,232 H1266 V100 H460 V160" class="lp" marker-end="url(#o)"/>
+  <text x="700" y="94" class="t s" style="fill:#EE783B">call transcript comes back as a new source</text>
+  <path d="M1140,164 V124 H960 V160" class="lp" marker-end="url(#o)"/>
+  <text x="972" y="118" class="t s" style="fill:#EE783B">crew rates it: justified / false alarm</text>
+
+  <!-- Supabase -->
+  <rect x="280" y="410" width="700" height="96" rx="3" fill="#E4EBF6" stroke="#5683D2"/>
+  <text x="294" y="434" class="t c" style="fill:#5683D2">Supabase · one shared database (each step picks up new rows from the one before)</text>
+  <rect x="294" y="450" width="172" height="40" rx="3" class="chip"/><text x="306" y="475" class="m" style="fill:#0C0A08">quellen + files</text>
+  <rect x="544" y="450" width="172" height="40" rx="3" class="chip"/><text x="556" y="469" class="m" style="fill:#0C0A08">eintraege</text><text x="556" y="484" class="m">plaene · elemente</text>
+  <rect x="794" y="450" width="172" height="40" rx="3" class="chip"/><text x="806" y="469" class="m" style="fill:#0C0A08">signale</text><text x="806" y="484" class="m">signal_verlauf</text>
+
+  <line x1="380" y1="348" x2="380" y2="446" class="db" marker-end="url(#b)"/>
+  <line x1="630" y1="348" x2="630" y2="446" class="db" marker-start="url(#b)" marker-end="url(#b)"/>
+  <line x1="880" y1="348" x2="880" y2="446" class="db" marker-start="url(#b)" marker-end="url(#b)"/>
+  <path d="M980,458 H1140 V352" class="db" marker-end="url(#b)"/>
+  <text x="1000" y="450" class="t s" style="fill:#5683D2">reads everything, writes nothing</text>
+
+  <!-- Legend -->
+  <line x1="30" y1="536" x2="60" y2="536" class="f"/><text x="68" y="540" class="t s">flow</text>
+  <line x1="110" y1="536" x2="140" y2="536" class="db"/><text x="148" y="540" class="t s">database read / write</text>
+  <line x1="300" y1="536" x2="330" y2="536" class="lp"/><text x="338" y="540" class="t s">feedback loop</text>
+</svg>

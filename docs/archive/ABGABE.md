@@ -58,6 +58,6 @@ What ran for real, and what did not:
 ## Links
 
 - Repository: https://github.com/Claudemaxxers/sitetwin (private, as required for the Talona track) [confirm with the organisers where it has to live]
-- Demo video: [link]
+- Demo video: https://youtu.be/edz0X3kRlAY
 - Live link: none
 - Pitch deck: [link, optional]
